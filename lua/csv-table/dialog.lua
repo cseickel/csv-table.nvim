@@ -44,11 +44,6 @@ local TEXT_CHOICES = {
   { key = "/", label = "matching a regular expression", type = "string", operator = "regex" },
 }
 
----@param message string
-local function report(message)
-  vim.notify("csv-table: " .. message, vim.log.levels.ERROR)
-end
-
 --- Draw the checklist for the value picker.
 ---@param values csv.Frequency[]
 ---@param chosen table<integer, boolean>
@@ -74,7 +69,7 @@ end
 ---@param values csv.Frequency[]
 local function pick_values(buf, column, values)
   if #values == 0 then
-    return report("no values in " .. columns.display(column))
+    return query.report("no values in " .. columns.display(column))
   end
 
   local chosen = {}
@@ -126,7 +121,7 @@ local function ask_for_value(buf, column, choice)
     if choice.type == "numeric" then
       local number = tonumber(answer)
       if not number then
-        return report(answer .. " is not a number")
+        return query.report(answer .. " is not a number")
       end
       state.add_filter(buf.state, {
         type = "numeric",
@@ -151,7 +146,7 @@ end
 function M.sheets(buf)
   local sheets = buf.state.sheets
   if #sheets == 0 then
-    return report(vim.fn.fnamemodify(buf.state.source, ":t") .. " has no sheets")
+    return query.report(vim.fn.fnamemodify(buf.state.source, ":t") .. " has no sheets")
   end
 
   local lines = {}
@@ -201,7 +196,7 @@ function M.open(buf, column)
 
   vim.keymap.set("n", "v", function()
     window.close(winid)
-    query.frequency(buf.state, column, report, function(values)
+    query.frequency(buf.state, column, query.report, function(values)
       pick_values(buf, column, values)
     end)
   end, { buffer = bufnr, nowait = true })

@@ -20,14 +20,14 @@ M.map = {
   ["ss"] = "remove_sort_key",
   ["sc"] = "clear_sort",
 
-  ["h"] = "hide_column",
+  ["|"] = "hide_column",
+  ["||"] = "show_all_columns",
   ["x"] = "cut_column",
   ["X"] = "cut_append_column",
   ["p"] = "paste_columns_after",
   ["P"] = "paste_columns_before",
   ["<"] = "move_column_left",
   [">"] = "move_column_right",
-  ["<leader>X"] = "show_all_columns",
 
   ["m"] = "toggle_mark_row",
   ["<M-m>"] = "toggle_mark_column",
@@ -54,6 +54,27 @@ M.map = {
   ["]]"] = "last_page",
   ["[["] = "first_page",
   ["<leader>ps"] = "set_page_size",
+
+  ["v"] = "select_cell",
+  ["V"] = "select_row",
+  ["<S-Space>"] = "select_row",
+  ["<C-Space>"] = "select_column",
+  ["<C-a>"] = "select_page",
+  ["<Esc>"] = "clear_selection",
+
+  ["<S-Left>"] = "extend_left",
+  ["<S-Right>"] = "extend_right",
+  ["<S-Up>"] = "extend_up",
+  ["<S-Down>"] = "extend_down",
+  ["<C-S-Left>"] = "extend_to_first_column",
+  ["<C-S-Right>"] = "extend_to_last_column",
+  ["<C-S-Up>"] = "extend_to_first_row",
+  ["<C-S-Down>"] = "extend_to_last_row",
+
+  ["y"] = "copy",
+
+  ["K"] = "show_cell",
+  ["o"] = "show_row",
 
   ["gs"] = "show_stats",
   ["gi"] = "show_info",

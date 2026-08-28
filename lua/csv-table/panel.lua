@@ -1,14 +1,15 @@
 --[[
-The read-only floats: help, file information, and column statistics.
+What the plugin says about itself: the keys, the file, and a column's figures.
 
-Help is generated from the keymap table and the descriptions on the actions, so
-a binding that changes cannot leave its documentation behind. Information and
-statistics are drawn through the filters currently applied, so they describe the
-rows on screen rather than the file on disk.
+The key list is generated from the keymap table and the descriptions on the
+actions, so a binding that changes cannot leave its documentation behind.
+Information and statistics are drawn through the filters currently applied, so
+they describe the rows on screen rather than the file on disk.
 ]]
 
 local columns = require("csv-table.columns")
 local keymaps = require("csv-table.keymaps")
+local picker = require("csv-table.picker")
 local query = require("csv-table.query")
 local selection = require("csv-table.selection")
 local window = require("csv-table.window")
@@ -20,39 +21,51 @@ local STAT_FIELDS = {
   "min", "max", "mean", "median", "stddev", "mode",
 }
 
----@param message string
-local function report(message)
-  vim.notify("csv-table: " .. message, vim.log.levels.ERROR)
-end
+---@class csv.Binding
+---@field key string
+---@field name string Names an action in `csv-table.actions`.
+---@field description string
 
---- Every binding, grouped by the action it runs, longest key first so the
---- columns line up.
----@return string[]
-function M.help_lines()
+--- Every binding, ordered by description, since the keys are mnemonic rather
+--- than sequential.
+---@return csv.Binding[]
+function M.bindings()
   local actions = require("csv-table.actions").actions
 
-  local rows = {}
-  local width = 0
+  local bound = {}
   for key, name in pairs(keymaps.map) do
     local described = actions[name]
     if described then
-      table.insert(rows, { key = key, description = described.description })
-      width = math.max(width, #key)
+      table.insert(bound, { key = key, name = name, description = described.description })
     end
   end
-  table.sort(rows, function(left, right)
+
+  table.sort(bound, function(left, right)
     return left.description < right.description
   end)
-
-  local lines = {}
-  for index, row in ipairs(rows) do
-    lines[index] = string.format("  %-" .. width .. "s   %s", row.key, row.description)
-  end
-  return lines
+  return bound
 end
 
-function M.help()
-  window.split(M.help_lines(), { title = "csv keys" })
+--- Search the bindings and run the one chosen, so a key is something to find
+--- rather than something to have memorised.
+---@param buf csv.Buffer
+function M.help(buf)
+  local actions = require("csv-table.actions").actions
+  local bound = M.bindings()
+
+  local width = 0
+  for _, binding in ipairs(bound) do
+    width = math.max(width, #binding.key)
+  end
+
+  picker.choose(bound, {
+    prompt = "csv keys",
+    format_item = function(binding)
+      return string.format("%-" .. width .. "s   %s", binding.key, binding.description)
+    end,
+  }, function(binding)
+    actions[binding.name].run(buf)
+  end)
 end
 
 --- How the current filters and sort read as sentences.
@@ -136,8 +149,8 @@ end
 --- Describe the file and the view over it.
 ---@param buf csv.Buffer
 function M.info(buf)
-  query.count(buf.state, report, function(count)
-    query.stats(buf.state, nil, report, function(stats)
+  query.count(buf.state, query.report, function(count)
+    query.stats(buf.state, nil, query.report, function(stats)
       local pages = math.max(math.ceil(count / buf.state.limit), 1)
       local lines = {
         "  " .. buf.state.source,
@@ -158,7 +171,7 @@ end
 ---@param buf csv.Buffer
 ---@param column csv.Column
 function M.stats(buf, column)
-  query.stats(buf.state, column, report, function(rows)
+  query.stats(buf.state, column, query.report, function(rows)
     local summary = rows[1]
     local lines = {}
     for _, field in ipairs(STAT_FIELDS) do

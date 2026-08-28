@@ -1,3 +1,5 @@
 .mcp-servers
 env.sh
 tmp
+.local
+.claude

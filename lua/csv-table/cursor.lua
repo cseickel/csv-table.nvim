@@ -16,6 +16,33 @@ local M = {}
 local flash_namespace = vim.api.nvim_create_namespace("csv-flash")
 local FLASH_MILLISECONDS = 250
 
+--- Where this plugin last put each buffer's cursor, so a move it did not make
+--- can be told from one it did. A selection survives the moves the plugin makes
+--- and is dropped by the ones the user makes.
+---@type table<integer, integer[]>
+local placed = {}
+
+---@param buffer csv.Buffer
+---@param window integer
+---@param position integer[] Line and byte column, as nvim reports a cursor.
+local function place(buffer, window, position)
+  vim.api.nvim_win_set_cursor(window, position)
+  placed[buffer.bufnr] = position
+end
+
+--- Whether the cursor is where this plugin last put it.
+---@param buffer csv.Buffer
+---@param window integer
+---@return boolean
+function M.is_placed(buffer, window)
+  local at = placed[buffer.bufnr]
+  if not at then
+    return false
+  end
+  local position = vim.api.nvim_win_get_cursor(window)
+  return position[1] == at[1] and position[2] == at[2]
+end
+
 --- Put the cursor in `cell` without changing which line it is on.
 ---@param buffer csv.Buffer
 ---@param window integer
@@ -29,7 +56,7 @@ function M.focus_cell(buffer, window, cell)
   local line = buffer.layout.lines[position[1]]
   local from = line and layout.cell_bounds(line, cell)
   if from then
-    vim.api.nvim_win_set_cursor(window, { position[1], from + 1 })
+    place(buffer, window, { position[1], from + 1 })
   end
 end
 
@@ -47,7 +74,7 @@ function M.focus_first_row(buffer)
     return
   end
 
-  vim.api.nvim_win_set_cursor(window, { painted.first_row, 0 })
+  place(buffer, window, { painted.first_row, 0 })
   M.focus_cell(buffer, window, 2)
 end
 
@@ -76,6 +103,87 @@ function M.flash_cell(buffer, cell)
       vim.api.nvim_buf_clear_namespace(buffer.bufnr, flash_namespace, 0, -1)
     end
   end, FLASH_MILLISECONDS)
+end
+
+--- How many cells a line of the table holds, the row id counted.
+---@param buffer csv.Buffer
+---@return integer
+local function cell_count(buffer)
+  return #selection.selected(buffer.state) + 1
+end
+
+--- Which line and cell the cursor is in, both clamped into the table, so a
+--- cursor resting on a border or the row id answers with the nearest cell it
+--- could act on.
+---@param buffer csv.Buffer
+---@param window integer
+---@return integer line
+---@return integer cell
+local function clamped(buffer, window)
+  local painted = buffer.layout
+  local position = vim.api.nvim_win_get_cursor(window)
+  local line = math.min(math.max(position[1], painted.first_row), painted.last_row)
+  local cell = layout.cell_at(painted.lines[line], position[2]) or 2
+  return line, math.min(math.max(cell, 2), cell_count(buffer))
+end
+
+--- Put the cursor on a cell named by line and cell number, both clamped, and
+--- say which cell of the table that turned out to be.
+---@param buffer csv.Buffer
+---@param window integer
+---@param line integer
+---@param cell integer
+---@return csv.CellRef|nil
+function M.move_to(buffer, window, line, cell)
+  local painted = buffer.layout
+  if not painted or painted.first_row > painted.last_row then
+    return nil
+  end
+
+  line = math.min(math.max(line, painted.first_row), painted.last_row)
+  cell = math.min(math.max(cell, 2), cell_count(buffer))
+
+  local from = layout.cell_bounds(painted.lines[line], cell)
+  if not from then
+    return nil
+  end
+
+  place(buffer, window, { line, from + 1 })
+  local rowid = painted.rowids[line]
+  if not rowid then
+    return nil
+  end
+  return { row = rowid, column = cell - 1 }
+end
+
+--- Move the cursor `rows` lines and `cells` cells from where it is.
+---@param buffer csv.Buffer
+---@param window integer
+---@param rows integer
+---@param cells integer
+---@return csv.CellRef|nil
+function M.step(buffer, window, rows, cells)
+  if not buffer.layout then
+    return nil
+  end
+  local line, cell = clamped(buffer, window)
+  return M.move_to(buffer, window, line + rows, cell + cells)
+end
+
+--- Which cell of the table the cursor is in.
+---@param buffer csv.Buffer
+---@param window integer
+---@return csv.CellRef|nil
+function M.cell_ref(buffer, window)
+  if not buffer.layout then
+    return nil
+  end
+  local line, cell = clamped(buffer, window)
+  local rowid = buffer.layout.rowids[line]
+  if not rowid then
+    return nil
+  end
+  return { row = rowid, column = cell - 1 }
 end
 
 --- The column under the cursor, or nil when the cursor is on the row id, a

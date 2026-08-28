@@ -13,6 +13,7 @@ local commands = require("csv-table.commands")
 local cursor = require("csv-table.cursor")
 local layout = require("csv-table.layout")
 local query = require("csv-table.query")
+local range = require("csv-table.range")
 local selection = require("csv-table.selection")
 local source = require("csv-table.source")
 local state = require("csv-table.state")
@@ -29,13 +30,14 @@ local buffers = {}
 
 local mark_namespace = vim.api.nvim_create_namespace("csv-marks")
 
---- Paint the marks over the text just written. Replacing every line drops all
---- extmarks, so marks have to be reapplied with each paint or they vanish on
---- the first page turn.
+-- Above the 4096 an extmark takes by default, so a selected cell paints over
+-- the row highlight it may be sitting on.
+local RANGE_PRIORITY = 4200
+
+--- Paint the marked rows and the marked columns.
 ---@param buffer csv.Buffer
 local function apply_marks(buffer)
   local painted = buffer.layout
-  vim.api.nvim_buf_clear_namespace(buffer.bufnr, mark_namespace, 0, -1)
 
   for line = painted.first_row, painted.last_row do
     local rowid = painted.rowids[line]
@@ -59,15 +61,48 @@ local function apply_marks(buffer)
   end
 end
 
+--- Paint the selected cells. The columns of a range are next to each other, so
+--- each line takes one extmark from the left edge of the first to the right
+--- edge of the last. The priority puts it over a marked row, which is the whole
+--- line and the less specific of the two.
+---@param buffer csv.Buffer
+local function apply_range(buffer)
+  local painted = buffer.layout
+  local bounds = range.bounds(buffer.state, painted)
+  if not bounds then
+    return
+  end
+
+  for line = bounds.top, bounds.bottom do
+    local cells = layout.cell_ranges(painted.lines[line])
+    local first, last = cells[bounds.left + 1], cells[bounds.right + 1]
+    if first and last then
+      vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, line - 1, first.from, {
+        end_col = last.to,
+        hl_group = "CsvSelection",
+        priority = RANGE_PRIORITY,
+      })
+    end
+  end
+end
+
+--- Paint the marks and the selection over the text already in the buffer.
+--- Marking a row and selecting a cell change nothing xan would return, so both
+--- repaint and neither asks for the page again.
+---@param buffer csv.Buffer
+function M.repaint(buffer)
+  if not buffer.layout then
+    return
+  end
+  vim.api.nvim_buf_clear_namespace(buffer.bufnr, mark_namespace, 0, -1)
+  apply_marks(buffer)
+  apply_range(buffer)
+end
+
 ---@param bufnr integer
 ---@return csv.Buffer|nil
 function M.get(bufnr)
   return buffers[bufnr]
-end
-
----@param message string
-local function report(message)
-  vim.notify("csv-table: " .. message, vim.log.levels.ERROR)
 end
 
 ---@param bufnr integer
@@ -79,22 +114,28 @@ local function replace_lines(bufnr, lines)
 end
 
 --- Run the pipeline for `buffer` and paint what it returns.
+---
+--- The selection goes. A sort changes which rows lie between its two ends, and
+--- hiding or moving a column changes which columns its two ends name, so a
+--- selection that outlived a render would mean cells the user never picked.
 ---@param buffer csv.Buffer
 ---@param on_painted fun()|nil Runs once the new text is in the buffer.
 function M.render(buffer, on_painted)
-  query.run(commands.render(buffer.state), report, function(stdout)
+  range.clear(buffer.state)
+
+  query.run(commands.render(buffer.state), query.report, function(stdout)
     if not vim.api.nvim_buf_is_valid(buffer.bufnr) then
       return
     end
 
     local parsed, err = layout.parse(vim.split(stdout, "\n", { plain = true }))
     if not parsed then
-      return report(err)
+      return query.report(err)
     end
 
     buffer.layout = parsed
     replace_lines(buffer.bufnr, parsed.lines)
-    apply_marks(buffer)
+    M.repaint(buffer)
     -- `status.get_winbar` pins this line while the buffer is scrolled past it.
     vim.b[buffer.bufnr].table_header = parsed.header
 
@@ -102,6 +143,20 @@ function M.render(buffer, on_painted)
       on_painted()
     end
   end)
+end
+
+--- How wide `column` is drawn, in characters, or nil when it is hidden or
+--- nothing has been painted yet.
+---@param buffer csv.Buffer
+---@param column csv.Column
+---@return integer|nil
+function M.column_width(buffer, column)
+  local painted = buffer.layout
+  local position = selection.position(buffer.state, column)
+  if not painted or not position then
+    return nil
+  end
+  return layout.cell_width(painted.lines[painted.header], position + 1)
 end
 
 --- Read another sheet of the same workbook. The filters, sort, marks, column
@@ -119,7 +174,7 @@ function M.open_sheet(buffer, sheet)
     M.render(buffer, function()
       cursor.focus_first_row(buffer)
     end)
-  end, report)
+  end, query.report)
 end
 
 --- The rows of the result on display, counting from one.
@@ -153,7 +208,10 @@ end
 ---@param on_ready fun(buffer: csv.Buffer)|nil
 function M.attach(bufnr, on_ready)
   -- `:edit` fires the read command again on a buffer already showing a table,
-  -- and means refresh rather than attach.
+  -- and means refresh rather than attach. Reloading the buffer frees its syntax
+  -- items, and this command replaces the whole read, so `BufRead` never fires,
+  -- filetype detection never runs, and `FileType` never re-sources the syntax
+  -- file. Setting the filetype again is what fires it.
   local attached = buffers[bufnr]
   if attached then
     vim.bo[bufnr].filetype = "csv-table"
@@ -162,7 +220,7 @@ function M.attach(bufnr, on_ready)
 
   local path = vim.api.nvim_buf_get_name(bufnr)
   if path == "" then
-    return report("buffer has no file name")
+    return query.report("buffer has no file name")
   end
 
   vim.bo[bufnr].buftype = "nowrite"
@@ -187,6 +245,21 @@ function M.attach(bufnr, on_ready)
   dress_windows()
   vim.api.nvim_create_autocmd("BufWinEnter", { buffer = bufnr, callback = dress_windows })
 
+  -- Moving off the selection drops it, the way a spreadsheet drops a selection
+  -- on an unshifted arrow. The selection keys move the cursor themselves, so a
+  -- cursor that is not where this plugin last put it was moved by the user.
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    buffer = bufnr,
+    callback = function()
+      local buffer = buffers[bufnr]
+      if not buffer or not buffer.state.range or cursor.is_placed(buffer, 0) then
+        return
+      end
+      range.clear(buffer.state)
+      M.repaint(buffer)
+    end,
+  })
+
   source.inspect(path, nil, function(inspected)
     if not vim.api.nvim_buf_is_valid(bufnr) then
       return
@@ -208,7 +281,7 @@ function M.attach(bufnr, on_ready)
     if on_ready then
       on_ready(buffer)
     end
-  end, report)
+  end, query.report)
 end
 
 return M

@@ -19,6 +19,27 @@ function M.selected(state)
   return state.columns
 end
 
+---@param list csv.Column[]
+---@param column csv.Column
+---@return integer|nil
+local function position_of(list, column)
+  for index, candidate in ipairs(list) do
+    if candidate.index == column.index then
+      return index
+    end
+  end
+  return nil
+end
+
+--- Where `column` is among the columns on display, counting from one, or nil
+--- when it is hidden.
+---@param state csv.State
+---@param column csv.Column
+---@return integer|nil
+function M.position(state, column)
+  return position_of(M.selected(state), column)
+end
+
 --- Materialise `selected` so a column can be removed from or moved within it.
 ---@param state csv.State
 local function fix_selection(state)
@@ -30,18 +51,6 @@ local function fix_selection(state)
     copy[index] = column
   end
   state.selected = copy
-end
-
----@param list csv.Column[]
----@param column csv.Column
----@return integer|nil
-local function position_of(list, column)
-  for index, candidate in ipairs(list) do
-    if candidate.index == column.index then
-      return index
-    end
-  end
-  return nil
 end
 
 ---@param state csv.State

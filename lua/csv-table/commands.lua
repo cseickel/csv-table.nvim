@@ -88,6 +88,39 @@ function M.sample(path, sheet, rename_argument)
   }, " | "))
 end
 
+--- The argv reading one whole row as a JSON object, keyed by display name.
+--- `enum` numbers rows by their position in the source before anything filters
+--- or sorts them, so a row id is the number of rows to skip. Renaming first
+--- makes every key unique, which the JSON object requires.
+---@param state csv.State
+---@param rowid integer
+---@return string[]
+function M.row(state, rowid)
+  local rename = columns.rename_argument(columns.display_names(state.columns))
+  return run(state.source, state.sheet, table.concat({
+    "rename " .. pipeline.quote(rename),
+    string.format("slice -s %d -l 1", rowid),
+    "to jsonl --strings '*'",
+  }, " | "))
+end
+
+--- The argv reading a block of the page as JSON objects, keyed by display name.
+--- The block is named by its offset among the rows on screen, because the
+--- stages before it leave exactly those rows in exactly that order.
+---@param state csv.State
+---@param opts { first: integer, count: integer, columns: csv.Column[] } `first` is 0-based within the page.
+---@return string[]
+function M.cells(state, opts)
+  local stages = pipeline.page_stages(state)
+  local names = columns.display_names(opts.columns)
+
+  table.insert(stages, string.format("slice -s %d -l %d", opts.first, opts.count))
+  table.insert(stages, "select " .. pipeline.quote(columns.selection(opts.columns)))
+  table.insert(stages, "rename " .. pipeline.quote(columns.rename_argument(names)))
+  table.insert(stages, "to jsonl --strings '*'")
+  return run(state.source, state.sheet, table.concat(stages, " | "))
+end
+
 --- The argv that lists a file's column names, one per line.
 ---@param path string
 ---@param sheet integer|nil

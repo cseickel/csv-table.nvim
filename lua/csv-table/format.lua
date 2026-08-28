@@ -18,8 +18,8 @@ local M = {}
 ---@class csv.Format
 ---@field kind "int"|"float"|"text"
 ---@field precision integer Decimals to print. Zero unless `kind` is "float".
----@field width integer The longest sampled value, and the width padding uses.
----@field align "left"|"center"|"right"|nil Set only when the user chose one.
+---@field width integer|nil Characters every value is padded to. Absent until the user asks for padding.
+---@field align "left"|"center"|"right"|nil Which side the padding goes. Absent alongside `width`.
 ---@field spec string|nil A printf specification, replacing every other rule.
 
 local MAX_PRECISION = 6
@@ -58,20 +58,12 @@ end
 --- A single unparseable value makes the column text, so a column only formats
 --- as a number when every sampled value is one.
 ---@param values string[]
----@param header_length integer Characters in the column's name.
 ---@return csv.Format
-function M.analyse_column(values, header_length)
+function M.analyse_column(values)
   local decimals = {}
-  -- The width starts where the column already sits, which is the wider of its
-  -- values and its own name, so the first press of a width key moves it.
-  local width = header_length
   local numeric = true
 
   for _, value in ipairs(values) do
-    local length = columns.text_length(value)
-    if length > width then
-      width = length
-    end
     if value ~= "" and numeric then
       local count = M.decimals(value)
       if count then
@@ -83,7 +75,7 @@ function M.analyse_column(values, header_length)
   end
 
   if not numeric or #decimals == 0 then
-    return { kind = "text", precision = 0, width = width }
+    return { kind = "text", precision = 0 }
   end
 
   table.sort(decimals)
@@ -93,9 +85,9 @@ function M.analyse_column(values, header_length)
   -- file formats to whatever its widest value needs.
   local precision = percentile(decimals, 0.99)
   if precision == 0 then
-    return { kind = "int", precision = 0, width = width }
+    return { kind = "int", precision = 0 }
   end
-  return { kind = "float", precision = math.min(precision, MAX_PRECISION), width = width }
+  return { kind = "float", precision = math.min(precision, MAX_PRECISION) }
 end
 
 --- Decide how every column reads.
@@ -114,7 +106,7 @@ function M.analyse(sample, source_columns)
       local value = row[name]
       values[index] = type(value) == "string" and value or ""
     end
-    formats[column.index] = M.analyse_column(values, columns.text_length(name))
+    formats[column.index] = M.analyse_column(values)
   end
   return formats
 end
@@ -126,7 +118,7 @@ end
 local function entry(formats, column)
   local format = formats[column.index]
   if not format then
-    format = { kind = "text", precision = 0, width = 0 }
+    format = { kind = "text", precision = 0 }
     formats[column.index] = format
   end
   return format
@@ -139,11 +131,19 @@ local function natural_align(format)
   return format.kind == "text" and "left" or "right"
 end
 
+--- The width the user is working from: the one they asked for, or the column as
+--- it is drawn when they have not asked yet. The sample this module analyses can
+--- miss the longest value in the file, and the column is drawn to fit the
+--- longest value on the page, so the drawn width is the only honest starting
+--- point. Reading it back from the format afterwards is what keeps a run of
+--- width presses stepping one at a time, since a repaint may not have landed.
 ---@param formats table<integer, csv.Format>
 ---@param column csv.Column
----@param align "left"|"center"|"right"
-function M.set_align(formats, column, align)
-  entry(formats, column).align = align
+---@param painted integer Characters the column is drawn in.
+---@return integer
+function M.working_width(formats, column, painted)
+  local format = formats[column.index]
+  return format and format.width or painted
 end
 
 --- Show more or fewer decimals. Asking for decimals on a column read as text
@@ -166,15 +166,16 @@ function M.set_spec(formats, column, spec)
   entry(formats, column).spec = spec ~= "" and spec or nil
 end
 
---- Widen or narrow the padding. Padding needs a side to pad towards, so this
---- also settles the alignment when the user has not chosen one.
+--- Pad every value of a column to `width` characters, cutting the longer ones.
+--- Padding needs a side to pad towards, so an alignment the user has not chosen
+--- settles to the side the column's kind reads on.
 ---@param formats table<integer, csv.Format>
 ---@param column csv.Column
----@param delta integer
-function M.adjust_width(formats, column, delta)
+---@param opts { width: integer, align: "left"|"center"|"right"|nil }
+function M.set_padding(formats, column, opts)
   local format = entry(formats, column)
-  format.width = math.max(1, format.width + delta)
-  format.align = format.align or natural_align(format)
+  format.width = math.max(1, opts.width)
+  format.align = opts.align or format.align or natural_align(format)
 end
 
 return M

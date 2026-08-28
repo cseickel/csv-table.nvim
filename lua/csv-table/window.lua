@@ -3,6 +3,8 @@ Floating windows.
 
 The filter dialog and the panels all want the same thing: some lines of text in
 a centred float that closes on `q` or Escape. This is that, and nothing else.
+
+A list to search rather than read goes through `csv-table.picker` instead.
 ]]
 
 local M = {}
@@ -20,9 +22,21 @@ local function longest(lines)
   return width
 end
 
+--- How many screen lines `lines` need once wrapped at `width`.
+---@param lines string[]
+---@param width integer
+---@return integer
+local function wrapped_height(lines, width)
+  local height = 0
+  for _, line in ipairs(lines) do
+    height = height + math.max(math.ceil(vim.fn.strdisplaywidth(line) / width), 1)
+  end
+  return height
+end
+
 --- Open `lines` in a centred float.
 ---@param lines string[]
----@param opts { title: string, modifiable: boolean|nil }
+---@param opts { title: string, modifiable: boolean|nil, wrap: boolean|nil }
 ---@return integer bufnr
 ---@return integer winid
 function M.open(lines, opts)
@@ -32,7 +46,8 @@ function M.open(lines, opts)
   vim.bo[bufnr].bufhidden = "wipe"
 
   local width = math.max(math.min(longest(lines) + 2, vim.o.columns - 8), #opts.title + 6)
-  local height = math.max(math.min(#lines, vim.o.lines - 8), 1)
+  local wanted = opts.wrap and wrapped_height(lines, width) or #lines
+  local height = math.max(math.min(wanted, vim.o.lines - 8), 1)
 
   local winid = vim.api.nvim_open_win(bufnr, true, {
     relative = "editor",
@@ -44,30 +59,7 @@ function M.open(lines, opts)
     border = "rounded",
     title = " " .. opts.title .. " ",
   })
-  vim.wo[winid].wrap = false
-  vim.wo[winid].cursorline = true
-
-  M.close_on(bufnr, winid, { "q", "<Esc>" })
-  return bufnr, winid
-end
-
---- Open `lines` in a horizontal split below, tall enough to hold them.
----@param lines string[]
----@param opts { title: string }
----@return integer bufnr
----@return integer winid
-function M.split(lines, opts)
-  local bufnr = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
-  vim.bo[bufnr].modifiable = false
-  vim.bo[bufnr].bufhidden = "wipe"
-  vim.api.nvim_buf_set_name(bufnr, opts.title)
-
-  vim.cmd.split()
-  local winid = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(winid, bufnr)
-  vim.api.nvim_win_set_height(winid, math.min(#lines + 1, math.floor(vim.o.lines / 2)))
-  vim.wo[winid].wrap = false
+  vim.wo[winid].wrap = opts.wrap or false
   vim.wo[winid].cursorline = true
 
   M.close_on(bufnr, winid, { "q", "<Esc>" })

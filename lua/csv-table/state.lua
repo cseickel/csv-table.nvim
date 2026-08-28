@@ -56,6 +56,7 @@ M.page_size = 1000
 ---@field clipboard csv.Column[] Cut columns waiting to be pasted.
 ---@field marked table<integer, boolean> Marked row ids.
 ---@field marked_columns table<integer, boolean> Marked column indices.
+---@field range csv.Range|nil The cells picked out, absent when none are.
 ---@field columns_filtered_to_marks boolean
 ---@field formats table<integer, csv.Format> Keyed by column index.
 ---@field page integer          0-based.
@@ -243,6 +244,7 @@ function M.reset(state)
   state.marked = {}
   state.marked_columns = {}
   state.columns_filtered_to_marks = false
+  state.range = nil
   state.page = 0
 end
 

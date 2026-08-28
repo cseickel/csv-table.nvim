@@ -10,6 +10,7 @@ moved is still the one under it.
 local buffer = require("csv-table.buffer")
 local cursor = require("csv-table.cursor")
 local format = require("csv-table.format")
+local query = require("csv-table.query")
 local selection = require("csv-table.selection")
 
 local M = {}
@@ -27,38 +28,67 @@ end
 local function on_column(buf, change)
   local column = cursor.column_at(buf, 0)
   if not column then
-    return
+    return query.report("the cursor is not on a column")
   end
   change(column)
   buffer.render(buf)
 end
 
---- Repaint, then put the cursor back on `column` and flash it, so a column that
---- moved stays under the cursor that moved it.
+--- Repaint, then put the cursor at the start of `column`, so a column that
+--- changed stays under the cursor that changed it. A narrowing column would
+--- otherwise slide out from under the cursor, and the next key would act on
+--- whichever column the cursor had been left over.
 ---@param buf csv.Buffer
 ---@param column csv.Column
-local function follow(buf, column)
-  local cell
-  for position, candidate in ipairs(selection.selected(buf.state)) do
-    if candidate.index == column.index then
-      cell = position + 1
-    end
-  end
+---@param on_focused fun(cell: integer)|nil Runs once the cursor is back on the column.
+local function follow(buf, column, on_focused)
+  local position = selection.position(buf.state, column)
 
   buffer.render(buf, function()
-    if cell then
-      cursor.focus_cell(buf, 0, cell)
-      cursor.flash_cell(buf, cell)
+    if not position then
+      return
+    end
+    cursor.focus_cell(buf, 0, position + 1)
+    if on_focused then
+      on_focused(position + 1)
     end
   end)
+end
+
+--- A column that moved is somewhere else on the line, so it flashes to be found
+--- again. A column that only changed width has not gone anywhere.
+---@param buf csv.Buffer
+---@return fun(cell: integer)
+local function flash(buf)
+  return function(cell)
+    cursor.flash_cell(buf, cell)
+  end
+end
+
+--- Change how the column under the cursor is padded, measuring the column as it
+--- is drawn so the change starts from the width on screen.
+---@param buf csv.Buffer
+---@param change fun(column: csv.Column, width: integer)
+local function on_padding(buf, change)
+  local column = cursor.column_at(buf, 0)
+  if not column then
+    return query.report("the cursor is not on a column")
+  end
+
+  local painted = buffer.column_width(buf, column)
+  if not painted then
+    return
+  end
+  change(column, format.working_width(buf.state.formats, column, painted))
+  follow(buf, column)
 end
 
 ---@param align "left"|"center"|"right"
 ---@return fun(buf: csv.Buffer)
 local function aligner(align)
   return function(buf)
-    on_column(buf, function(column)
-      format.set_align(buf.state.formats, column, align)
+    on_padding(buf, function(column, width)
+      format.set_padding(buf.state.formats, column, { width = width, align = align })
     end)
   end
 end
@@ -77,8 +107,8 @@ end
 ---@return fun(buf: csv.Buffer)
 local function width(delta)
   return function(buf)
-    on_column(buf, function(column)
-      format.adjust_width(buf.state.formats, column, delta)
+    on_padding(buf, function(column, current)
+      format.set_padding(buf.state.formats, column, { width = current + delta })
     end)
   end
 end
@@ -89,7 +119,7 @@ local function mover(delta)
   return function(buf)
     local column = cursor.column_at(buf, 0)
     if column and selection.swap_column(buf.state, column, delta) then
-      follow(buf, column)
+      follow(buf, column, flash(buf))
     end
   end
 end
@@ -101,7 +131,7 @@ local function paster(before)
     local held = buf.state.clipboard[1]
     local column = cursor.column_at(buf, 0)
     if selection.paste_columns(buf.state, column, before) then
-      follow(buf, held)
+      follow(buf, held, flash(buf))
     end
   end
 end
@@ -156,7 +186,7 @@ M.actions = {
   set_format = action("Give this column a printf format", function(buf)
     local column = cursor.column_at(buf, 0)
     if not column then
-      return
+      return query.report("the cursor is not on a column")
     end
 
     local current = buf.state.formats[column.index]

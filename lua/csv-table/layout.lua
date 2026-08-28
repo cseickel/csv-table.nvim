@@ -16,9 +16,14 @@ the theme in use draws no outer border.
 It is pure Lua and can be exercised without nvim.
 ]]
 
+local columns = require("csv-table.columns")
+
 local M = {}
 
 local SEPARATOR = "│"
+
+--- The spaces `view` puts either side of every cell.
+local CELL_PADDING = 2
 
 ---@class csv.Layout
 ---@field lines string[]    Buffer lines, borders included.
@@ -26,6 +31,7 @@ local SEPARATOR = "│"
 ---@field first_row integer Index of the first data line, past `last_row` when empty.
 ---@field last_row integer  Index of the last data line.
 ---@field rowids table<integer, integer> Source row id, keyed by line index.
+---@field lines_by_rowid table<integer, integer> Line index, keyed by source row id.
 
 ---@param value string
 ---@return string
@@ -77,6 +83,20 @@ function M.cell_bounds(line, index)
     return nil, nil
   end
   return range.from, range.to
+end
+
+--- How wide cell `index` is drawn, in characters, without the padding `view`
+--- puts around every value. Every line pads its cells to the same width, so any
+--- line of the table answers this.
+---@param line string
+---@param index integer
+---@return integer|nil
+function M.cell_width(line, index)
+  local from, to = M.cell_bounds(line, index)
+  if not from then
+    return nil
+  end
+  return columns.text_length(line:sub(from + 1, to)) - CELL_PADDING
 end
 
 --- The trimmed text of every cell on one line, cell 1 being the row id.
@@ -137,12 +157,14 @@ function M.parse(output)
     first_row = 3,
     last_row = #lines - 1,
     rowids = {},
+    lines_by_rowid = {},
   }
 
   for index = layout.first_row, layout.last_row do
     local rowid = tonumber(M.cells(lines[index])[1])
     if rowid then
       layout.rowids[index] = rowid
+      layout.lines_by_rowid[rowid] = index
     end
   end
 

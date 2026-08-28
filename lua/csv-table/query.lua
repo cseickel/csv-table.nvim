@@ -6,8 +6,8 @@ values, and summarising a column want answers. Each of those runs through the
 same filters the buffer is showing, so what comes back always describes what is
 on screen.
 
-This module also owns running a xan command at all, so every caller reports a
-failure the same way.
+This module also owns running a xan command at all, and `report`, so every
+caller reports a failure the same way.
 ]]
 
 local commands = require("csv-table.commands")
@@ -17,6 +17,12 @@ local M = {}
 ---@class csv.Frequency
 ---@field value string
 ---@field count integer
+
+--- How every failure reaches the user.
+---@param message string
+function M.report(message)
+  vim.notify("csv-table: " .. message, vim.log.levels.ERROR)
+end
 
 --- Run `argv`, handing stdout to `on_output` or the message to `on_error`.
 ---
@@ -69,6 +75,30 @@ function M.count(state, on_error, on_count)
     end
     on_count(count)
   end)
+end
+
+--- One whole row of the source, keyed by display name, with every value as it
+--- is in the file rather than as the table draws it.
+---@param state csv.State
+---@param rowid integer
+---@param on_error fun(message: string)
+---@param on_row fun(row: table<string, string>)
+function M.row(state, rowid, on_error, on_row)
+  M.run_json_lines(commands.row(state, rowid), on_error, function(rows)
+    if #rows == 0 then
+      return on_error("row " .. rowid .. " is no longer in the file")
+    end
+    on_row(rows[1])
+  end)
+end
+
+--- A block of the page, one JSON object per row, keyed by display name.
+---@param state csv.State
+---@param opts { first: integer, count: integer, columns: csv.Column[] }
+---@param on_error fun(message: string)
+---@param on_rows fun(rows: table<string, string>[])
+function M.cells(state, opts, on_error, on_rows)
+  M.run_json_lines(commands.cells(state, opts), on_error, on_rows)
 end
 
 --- The distinct values of `column`, most frequent first.

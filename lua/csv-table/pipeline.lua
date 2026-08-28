@@ -171,10 +171,13 @@ function M.narrowing_stages(state)
   return stages
 end
 
---- Build the argument for `xan run`.
+--- The stages that leave exactly the rows the buffer is showing: the filters,
+--- the sort, and the slice that takes the page. Everything after them is
+--- presentation, so a command that wants those same rows starts here and a
+--- later `slice` counts from the top of the page.
 ---@param state csv.State
----@return string
-function M.build(state)
+---@return string[]
+function M.page_stages(state)
   local stages = M.narrowing_stages(state)
 
   for _, stage in ipairs(sort_stages(state.order)) do
@@ -182,6 +185,14 @@ function M.build(state)
   end
 
   table.insert(stages, string.format("slice -s %d -l %d", state.page * state.limit, state.limit))
+  return stages
+end
+
+--- Build the argument for `xan run`.
+---@param state csv.State
+---@return string
+function M.build(state)
+  local stages = M.page_stages(state)
 
   local selected = selected_columns(state)
   local headers = header_names(selected, state.order)

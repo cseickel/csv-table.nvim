@@ -5,16 +5,19 @@ Each action carries the sentence that describes it, so the help panel is
 generated from this table and cannot drift from the bindings. An action reads
 whatever it needs from the cursor, changes the state, and asks for a repaint.
 
-The actions that act on a column live in `csv-table.column_actions` and are
-merged in here, so a key still finds every action in one table.
+The actions that act on a column live in `csv-table.column_actions` and the ones
+that select cells in `csv-table.range_actions`. Both are merged in here, so a key
+still finds every action in one table.
 ]]
 
 local buffer = require("csv-table.buffer")
 local column_actions = require("csv-table.column_actions")
 local cursor = require("csv-table.cursor")
 local dialog = require("csv-table.dialog")
+local inspect = require("csv-table.inspect")
 local panel = require("csv-table.panel")
 local query = require("csv-table.query")
+local range_actions = require("csv-table.range_actions")
 local selection = require("csv-table.selection")
 local state = require("csv-table.state")
 
@@ -24,16 +27,24 @@ local M = {}
 ---@field description string
 ---@field run fun(buf: csv.Buffer)
 
----@param message string
-local function report(message)
-  vim.notify("csv-table: " .. message, vim.log.levels.ERROR)
+--- The column under the cursor, or nothing and a word about why. The row id and
+--- the borders are not columns, so a key pressed over either has nothing to act
+--- on and says so rather than appearing dead.
+---@param buf csv.Buffer
+---@return csv.Column|nil
+local function column_under_cursor(buf)
+  local column = cursor.column_at(buf, 0)
+  if not column then
+    query.report("the cursor is not on a column")
+  end
+  return column
 end
 
 --- Run `change` against the column under the cursor, then repaint.
 ---@param buf csv.Buffer
 ---@param change fun(column: csv.Column)
 local function on_column(buf, change)
-  local column = cursor.column_at(buf, 0)
+  local column = column_under_cursor(buf)
   if not column then
     return
   end
@@ -124,7 +135,7 @@ M.actions = {
   end),
 
   filter = action("Filter on this column", function(buf)
-    local column = cursor.column_at(buf, 0)
+    local column = column_under_cursor(buf)
     if column then
       dialog.open(buf, column)
     end
@@ -159,7 +170,7 @@ M.actions = {
   end),
 
   last_page = action("Show the last page", function(buf)
-    query.count(buf.state, report, function(count)
+    query.count(buf.state, query.report, function(count)
       state.goto_page(buf.state, math.ceil(count / buf.state.limit) - 1)
       buffer.render(buf)
     end)
@@ -177,18 +188,29 @@ M.actions = {
   end),
 
   show_stats = action("Summarise this column", function(buf)
-    local column = cursor.column_at(buf, 0)
+    local column = column_under_cursor(buf)
     if column then
       panel.stats(buf, column)
     end
+  end),
+
+  show_cell = action("Show everything this cell holds", function(buf)
+    local column = column_under_cursor(buf)
+    if column then
+      inspect.cell(buf, column)
+    end
+  end),
+
+  show_row = action("Search this row and copy a value", function(buf)
+    inspect.row(buf)
   end),
 
   show_sheets = action("Choose which sheet to read", function(buf)
     dialog.sheets(buf)
   end),
 
-  show_help = action("List every key", function()
-    panel.help()
+  show_help = action("Search every key and run one", function(buf)
+    panel.help(buf)
   end),
 
   show_info = action("Describe this file and the current view", function(buf)
@@ -205,8 +227,16 @@ M.actions = {
   end),
 }
 
-for name, described in pairs(column_actions.actions) do
-  M.actions[name] = described
+-- The actions defined elsewhere, so a key finds every action in one table. A
+-- name defined twice would leave which one runs to the order of a Lua table, so
+-- it stops the plugin loading instead.
+for _, defined in ipairs({ column_actions.actions, range_actions.actions }) do
+  for name, described in pairs(defined) do
+    if M.actions[name] then
+      error("csv-table: two actions are named " .. name)
+    end
+    M.actions[name] = described
+  end
 end
 
 return M

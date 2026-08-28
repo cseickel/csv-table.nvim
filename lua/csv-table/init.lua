@@ -40,7 +40,8 @@ local function define_highlights()
   local defaults = {
     CsvMarkedRow = "DiffAdd",
     CsvMarkedColumn = "DiffText",
-    CsvFlash = "Visual",
+    CsvSelection = "Visual",
+    CsvFlash = "IncSearch",
   }
   for name, link in pairs(defaults) do
     vim.api.nvim_set_hl(0, name, { link = link, default = true })

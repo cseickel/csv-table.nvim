@@ -2,7 +2,7 @@
 
 A spreadsheet viewer for Neovim.
 
-`csv`, `tsv`, `xls`, `xlsx`, `xlsb` and `ods` files open as a bordered, paged table with sorting, filtering, and per-column formatting. All operations, including drawaing the table, are done with [`xan`](https://github.com/medialab/xan) so you can effectively view and manipulate huge files.
+`csv`, `tsv`, `xls`, `xlsx`, `xlsb` and `ods` files open as a bordered, paged table with sorting, filtering, and per-column formatting. All operations, including drawing the table, are done with [`xan`](https://github.com/medialab/xan) so you can effectively view and manipulate huge files.
 
 Buffers are read-only, but controlled, spreadsheet style editing is planned.
 
@@ -50,14 +50,14 @@ require("csv-table").setup({
     ["ss"] = "remove_sort_key",
     ["sc"] = "clear_sort",
 
-    ["h"] = "hide_column",
+    ["|"] = "hide_column",
+    ["||"] = "show_all_columns",
     ["x"] = "cut_column",
     ["X"] = "cut_append_column",
     ["p"] = "paste_columns_after",
     ["P"] = "paste_columns_before",
     ["<"] = "move_column_left",
     [">"] = "move_column_right",
-    ["<leader>X"] = "show_all_columns",
 
     ["m"] = "toggle_mark_row",
     ["<M-m>"] = "toggle_mark_column",
@@ -85,6 +85,27 @@ require("csv-table").setup({
     ["[["] = "first_page",
     ["<leader>ps"] = "set_page_size",
 
+    ["v"] = "select_cell",
+    ["V"] = "select_row",
+    ["<S-Space>"] = "select_row",
+    ["<C-Space>"] = "select_column",
+    ["<C-a>"] = "select_page",
+    ["<Esc>"] = "clear_selection",
+
+    ["<S-Left>"] = "extend_left",
+    ["<S-Right>"] = "extend_right",
+    ["<S-Up>"] = "extend_up",
+    ["<S-Down>"] = "extend_down",
+    ["<C-S-Left>"] = "extend_to_first_column",
+    ["<C-S-Right>"] = "extend_to_last_column",
+    ["<C-S-Up>"] = "extend_to_first_row",
+    ["<C-S-Down>"] = "extend_to_last_row",
+
+    ["y"] = "copy",
+
+    ["K"] = "show_cell",
+    ["o"] = "show_row",
+
     ["gs"] = "show_stats",
     ["gi"] = "show_info",
     ["gS"] = "show_sheets",
@@ -111,7 +132,7 @@ keymaps = {
 
 ## Statusline
 
-`require("csv-table").status(bufnr)` returns a one-line summary: sheet, rows on screen, active filters and marks, the sort, and the column clipboard. Other buffers return an empty string. Use this for integration with your statusline.
+`require("csv-table").status(bufnr)` returns a one-line summary: sheet, rows on screen, active filters and marks, the sort, and any cut columns being held. Other buffers return an empty string. Use this for integration with your statusline.
 
 ```lua
 _G.csv_table_status = function()
@@ -140,11 +161,12 @@ The following highlight groups are defined by the plugin:
 | `CsvDate`           | `#ffd685`         | A date or a time                  |
 | `CsvMarkedRow`      | `DiffAdd`         | A row you marked with `m`         |
 | `CsvMarkedColumn`   | `DiffText`        | A column you marked with `<M-m>`  |
-| `CsvFlash`          | `Visual`          | The brief flash on a moved column |
+| `CsvSelection`      | `Visual`          | The cells you selected with `v`   |
+| `CsvFlash`          | `IncSearch`       | The brief flash on a moved column |
 
 ## Keys
 
-All buffer-local to a table buffer. Hit `?` inside one for the same list.
+All buffer-local to a table buffer. Hit `?` inside one to search the same list and run a key.
 
 ### Moving
 
@@ -168,16 +190,16 @@ Sorted columns get an arrow in the header. Sort on several and the arrows are nu
 
 ### Columns
 
-| Key         | Action                 | Does                                       |
-|-------------|------------------------|--------------------------------------------|
-| `h`         | `hide_column`          | Hide this column                           |
-| `x`         | `cut_column`           | Cut this column, replacing the register    |
-| `X`         | `cut_append_column`    | Cut this column, appending to the register |
-| `p`         | `paste_columns_after`  | Paste the cut column(s) after this one     |
-| `P`         | `paste_columns_before` | Paste the cut columns(s) before this one   |
-| `<`         | `move_column_left`     | Move this column one place left            |
-| `>`         | `move_column_right`    | Move this column one place right           |
-| `<leader>X` | `show_all_columns`     | Show all hidden columns again              |
+| Key  | Action                 | Does                                   |
+|------|------------------------|----------------------------------------|
+| `\|` | `hide_column`          | Hide this column                       |
+| `\|\|` | `show_all_columns`   | Show all hidden columns again          |
+| `x`  | `cut_column`           | Cut this column, holding it to paste   |
+| `X`  | `cut_append_column`    | Add this column to the cut being held  |
+| `p`  | `paste_columns_after`  | Paste the held columns after this one  |
+| `P`  | `paste_columns_before` | Paste the held columns before this one |
+| `<`  | `move_column_left`     | Move this column one place left        |
+| `>`  | `move_column_right`    | Move this column one place right       |
 
 ### Marking
 
@@ -234,14 +256,44 @@ Numeric columns get a sensible number of decimals automatically, so prices dumpe
 
 `<leader>ps` sets the page size for one buffer. `page_size` sets it for all of them.
 
+### Selecting
+
+| Key             | Action                   | Does                                   |
+|-----------------|--------------------------|----------------------------------------|
+| `v`             | `select_cell`            | Select this cell                       |
+| `V`             | `select_row`             | Select this whole row                  |
+| `<S-Space>`     | `select_row`             | Select this whole row                  |
+| `<C-Space>`     | `select_column`          | Select this whole column               |
+| `<C-a>`         | `select_page`            | Select every cell on this page         |
+| `<Esc>`         | `clear_selection`        | Select nothing                         |
+| `<S-Left>`      | `extend_left`            | Take the selection one column left     |
+| `<S-Right>`     | `extend_right`           | Take the selection one column right    |
+| `<S-Up>`        | `extend_up`              | Take the selection one row up          |
+| `<S-Down>`      | `extend_down`            | Take the selection one row down        |
+| `<C-S-Left>`    | `extend_to_first_column` | Take the selection to the first column |
+| `<C-S-Right>`   | `extend_to_last_column`  | Take the selection to the last column  |
+| `<C-S-Up>`      | `extend_to_first_row`    | Take the selection to the page's top   |
+| `<C-S-Down>`    | `extend_to_last_row`     | Take the selection to the page's end   |
+| `y`             | `copy`                   | Copy the selected cells, or this one   |
+
+Extending moves the cursor with the selection, the way a spreadsheet moves the active cell, so the shifted arrows also walk the table. Moving the cursor without shift drops the selection, as in a spreadsheet. A selection stops at the page, and turning the page loses it.
+
+`y` copies the selected cells to the `+` register as tab separated text, which pastes into a spreadsheet as cells. With nothing selected it copies the cell under the cursor. The values come from the file, so a column too narrow to show its values still copies them whole.
+
+The Excel keys, `<S-Space>`, `<C-Space>` and the `<C-S-Arrow>` set, need a terminal that implements the kitty keyboard protocol, which ghostty, kitty and wezterm do.
+
 ### Panels
 
 | Key  | Action        | Does                                    |
 |------|---------------|-----------------------------------------|
+| `K`  | `show_cell`   | Show everything this cell holds         |
+| `o`  | `show_row`    | Search this row and copy a value        |
 | `gs` | `show_stats`  | Summarise this column                   |
 | `gi` | `show_info`   | Describe this file and the current view |
 | `gS` | `show_sheets` | Choose which sheet to read              |
-| `?`  | `show_help`   | List every key                          |
+| `?`  | `show_help`   | Search every key and run one            |
+
+`K` reads the value from the file, so it shows the full text even when the column draws it cut, and before any formatting. A value that is a JSON object or array is indented one value per line and highlighted as JSON, with the numbers, key order and escapes exactly as stored. `o` opens a picker over every column of the row, in file order so hidden columns are included, searchable by column name or by value. Choosing one copies its value to the `+` register. `?` opens a picker over every binding, searchable, and runs the one chosen.
 
 `gs` and `gi` respect your current filters. `gS` only applies to workbooks, and switching sheets clears your filters and formats. Panels close with `q` or `<Esc>`.
 
