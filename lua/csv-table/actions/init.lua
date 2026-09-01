@@ -1,42 +1,39 @@
-local buffer = require("csv-table.buffer")
-local column = require("csv-table.actions.column")
-local filter = require("csv-table.actions.filter")
-local info = require("csv-table.actions.info")
-local page = require("csv-table.actions.page")
-local range = require("csv-table.actions.range")
-local sort = require("csv-table.actions.sort")
-local utils = require("csv-table.actions.utils")
+--[[
+Every action a key can run.
 
+An action module registers what it defines as it loads, so this file loads the
+modules beside it and then hands out what they registered. Adding a module is
+enough to add its actions.
+
+`refresh` and `clear_all` are here because they belong to no one topic.
+]]
+
+local buffer = require("csv-table.buffer")
+local utils = require("csv-table.actions.utils")
 local state = require("csv-table.state")
 
-local M = {
-  refresh = utils.action("Read the file again", function(buf)
-    buffer.render(buf)
-  end),
+utils.register_action("refresh", "Read the file again", function(buf)
+  buffer.render(buf)
+end)
 
-  clear_all = utils.action("Clear filters, sort, marks and hidden columns", function(buf)
-    state.reset(buf.state)
-    buffer.render(buf)
-  end),
-}
+utils.register_action("clear_all", "Clear filters, sort, marks and hidden columns", function(buf)
+  state.reset(buf.state)
+  buffer.render(buf)
+end)
 
--- The actions defined elsewhere, so a key finds every action in one table. A
--- name defined twice would leave which one runs to the order of a Lua table, so
--- it stops the plugin loading instead.
-for _, defined in ipairs({
-  column,
-  filter,
-  info,
-  page,
-  range,
-  sort,
-}) do
-  for name, described in pairs(defined) do
-    if M.actions[name] then
-      error("csv-table: two actions are named " .. name)
-    end
-    M.actions[name] = described
+-- Requiring a module is what registers its actions, so nothing binds the result.
+-- The directory comes from this file's own path rather than the runtimepath, so
+-- a second copy of the plugin contributes no names.
+local directory = vim.fs.dirname(debug.getinfo(1, "S").source:sub(2))
+
+for name in vim.fs.dir(directory) do
+  local module = name:match("^(.+)%.lua$")
+  if module and module ~= "init" then
+    require("csv-table.actions." .. module)
   end
 end
 
-return M
+return {
+  get_action = utils.get_action,
+  get_all_actions = utils.get_all_actions,
+}

@@ -24,7 +24,7 @@ M.patterns = { "*.csv", "*.tsv", "*.xls", "*.xlsx", "*.xlsb", "*.ods" }
 local function apply_keymaps(buf)
   for key, name in pairs(keymaps.map) do
     if name then
-      local described = actions.actions[name]
+      local described = actions.get_action(name)
       if not described then
         error(string.format("csv-table: key %q names unknown action %q", key, name))
       end

@@ -1,13 +1,15 @@
 --[[
 The actions that select cells.
 
-Selecting changes nothing about what xan would return, so every utils.action here
+Selecting changes nothing about what xan would return, so every action here
 paints over the text already in the buffer rather than rendering the page again.
 Rendering would in any case drop the selection, which is what `buffer.render`
 does deliberately.
 
 Extending moves the cursor as well, the way a spreadsheet moves the active cell,
 so the keys that extend a selection are also the keys that walk the table.
+
+cSpell:ignore rowids
 ]]
 
 local buffer = require("csv-table.buffer")
@@ -16,9 +18,7 @@ local inspect = require("csv-table.inspect")
 local query = require("csv-table.query")
 local range = require("csv-table.range")
 local selection = require("csv-table.selection")
-local utils = require("csv-table.utils.utils.actions.utils")
-
-local M = {}
+local utils = require("csv-table.actions.utils")
 
 -- Further than any table is wide or long, so the same step function reaches an
 -- edge without a second way of naming one.
@@ -87,60 +87,54 @@ local function last_column(buf)
   return #selection.selected(buf.state)
 end
 
--- cSpell:ignore rowids
----@type table<string, csv.Action>
-M.utils.actions = {
-  select_cell = utils.action("Select this cell", function(buf)
-    local cell = cursor.cell_ref(buf, 0)
-    if not cell then
-      return query.report("the cursor is not on a cell")
-    end
-    range.set(buf.state, cell, cell)
-    buffer.repaint(buf)
-  end),
+utils.register_action("select_cell", "Select this cell", function(buf)
+  local cell = cursor.cell_ref(buf, 0)
+  if not cell then
+    return query.report("the cursor is not on a cell")
+  end
+  range.set(buf.state, cell, cell)
+  buffer.repaint(buf)
+end)
 
-  select_row = utils.action("Select this whole row", selector(function(buf, _)
-    local cell = cursor.cell_ref(buf, 0)
-    if not cell then
-      return nil, nil
-    end
-    return { row = cell.row, column = 1 }, { row = cell.row, column = last_column(buf) }
-  end)),
+utils.register_action("select_row", "Select this whole row", selector(function(buf, _)
+  local cell = cursor.cell_ref(buf, 0)
+  if not cell then
+    return nil, nil
+  end
+  return { row = cell.row, column = 1 }, { row = cell.row, column = last_column(buf) }
+end))
 
-  select_column = utils.action("Select this whole column", selector(function(buf, painted)
-    local cell = cursor.cell_ref(buf, 0)
-    if not cell then
-      return nil, nil
-    end
-    return
-      { row = painted.rowids[painted.first_row], column = cell.column },
-      { row = painted.rowids[painted.last_row], column = cell.column }
-  end)),
+utils.register_action("select_column", "Select this whole column", selector(function(buf, painted)
+  local cell = cursor.cell_ref(buf, 0)
+  if not cell then
+    return nil, nil
+  end
+  return
+    { row = painted.rowids[painted.first_row], column = cell.column },
+    { row = painted.rowids[painted.last_row], column = cell.column }
+end))
 
-  select_page = utils.action("Select every cell on this page", selector(function(buf, painted)
-    return
-      { row = painted.rowids[painted.first_row], column = 1 },
-      { row = painted.rowids[painted.last_row], column = last_column(buf) }
-  end)),
+utils.register_action("select_page", "Select every cell on this page", selector(function(buf, painted)
+  return
+    { row = painted.rowids[painted.first_row], column = 1 },
+    { row = painted.rowids[painted.last_row], column = last_column(buf) }
+end))
 
-  clear_selection = utils.action("Select nothing", function(buf)
-    range.clear(buf.state)
-    buffer.repaint(buf)
-  end),
+utils.register_action("clear_selection", "Select nothing", function(buf)
+  range.clear(buf.state)
+  buffer.repaint(buf)
+end)
 
-  extend_left = utils.action("Take the selection one column left", extender(0, -1)),
-  extend_right = utils.action("Take the selection one column right", extender(0, 1)),
-  extend_up = utils.action("Take the selection one row up", extender(-1, 0)),
-  extend_down = utils.action("Take the selection one row down", extender(1, 0)),
+utils.register_action("extend_left", "Take the selection one column left", extender(0, -1))
+utils.register_action("extend_right", "Take the selection one column right", extender(0, 1))
+utils.register_action("extend_up", "Take the selection one row up", extender(-1, 0))
+utils.register_action("extend_down", "Take the selection one row down", extender(1, 0))
 
-  extend_to_first_column = utils.action("Take the selection to the first column", extender(0, -EDGE)),
-  extend_to_last_column = utils.action("Take the selection to the last column", extender(0, EDGE)),
-  extend_to_first_row = utils.action("Take the selection to the top of the page", extender(-EDGE, 0)),
-  extend_to_last_row = utils.action("Take the selection to the bottom of the page", extender(EDGE, 0)),
+utils.register_action("extend_to_first_column", "Take the selection to the first column", extender(0, -EDGE))
+utils.register_action("extend_to_last_column", "Take the selection to the last column", extender(0, EDGE))
+utils.register_action("extend_to_first_row", "Take the selection to the top of the page", extender(-EDGE, 0))
+utils.register_action("extend_to_last_row", "Take the selection to the bottom of the page", extender(EDGE, 0))
 
-  copy = utils.action("Copy the selected cells, or this one", function(buf)
-    inspect.copy(buf)
-  end),
-}
-
-return M
+utils.register_action("copy", "Copy the selected cells, or this one", function(buf)
+  inspect.copy(buf)
+end)

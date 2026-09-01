@@ -1,45 +1,46 @@
+--[[
+The actions that narrow which rows are shown.
+
+Filters are ANDed, and each one names a column except the marked filter, which
+reads the marked set at render time so marking another row widens the view at
+once.
+]]
+
 local buffer = require("csv-table.buffer")
 local dialog = require("csv-table.dialog")
 local selection = require("csv-table.selection")
 local state = require("csv-table.state")
-local utils = require("csv-table.utils.actions.utils")
+local utils = require("csv-table.actions.utils")
 
-local M = {}
+utils.register_action("filter_to_marked_rows", "Show only marked rows, or stop doing so", function(buf)
+  state.toggle_marked_filter(buf.state)
+  buffer.render(buf)
+end)
 
----@type table<string, csv.Action>
-M.utils.actions = {
-  filter_to_marked_rows = utils.action("Show only marked rows, or stop doing so", function(buf)
-    state.toggle_marked_filter(buf.state)
-    buffer.render(buf)
-  end),
+utils.register_action("filter_to_marked_columns", "Show only marked columns, or stop doing so", function(buf)
+  selection.toggle_marked_columns(buf.state)
+  buffer.render(buf)
+end)
 
-  filter_to_marked_columns = utils.action("Show only marked columns, or stop doing so", function(buf)
-    selection.toggle_marked_columns(buf.state)
-    buffer.render(buf)
-  end),
+utils.register_action("filter_to_marked_both", "Show only marked rows and marked columns", function(buf)
+  selection.toggle_marked_columns(buf.state)
+  state.toggle_marked_filter(buf.state)
+  buffer.render(buf)
+end)
 
-  filter_to_marked_both = utils.action("Show only marked rows and marked columns", function(buf)
-    selection.toggle_marked_columns(buf.state)
-    state.toggle_marked_filter(buf.state)
-    buffer.render(buf)
-  end),
+utils.register_action("filter", "Filter on this column", function(buf)
+  local column = utils.column_under_cursor(buf)
+  if column then
+    dialog.open(buf, column)
+  end
+end)
 
-  filter = utils.action("Filter on this column", function(buf)
-    local column = utils.column_under_cursor(buf)
-    if column then
-      dialog.open(buf, column)
-    end
-  end),
+utils.register_action("pop_filter", "Drop the filter added last", function(buf)
+  state.pop_filter(buf.state)
+  buffer.render(buf)
+end)
 
-  pop_filter = utils.action("Drop the filter added last", function(buf)
-    state.pop_filter(buf.state)
-    buffer.render(buf)
-  end),
-
-  clear_filters = utils.action("Drop every filter", function(buf)
-    state.clear_filters(buf.state)
-    buffer.render(buf)
-  end),
-}
-
-return M
+utils.register_action("clear_filters", "Drop every filter", function(buf)
+  state.clear_filters(buf.state)
+  buffer.render(buf)
+end)

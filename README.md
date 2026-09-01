@@ -195,7 +195,7 @@ Sorted columns get an arrow in the header. Sort on several and the arrows are nu
 | Key  | Action                 | Does                                   |
 |------|------------------------|----------------------------------------|
 | `\|` | `hide_column`          | Hide this column                       |
-| `\|\|` | `show_all_columns`   | Show all hidden columns again          |
+| `\|\|` | `show_all_columns`   | Show every column again                |
 | `x`  | `cut_column`           | Cut this column, holding it to paste   |
 | `X`  | `cut_append_column`    | Add this column to the cut being held  |
 | `p`  | `paste_columns_after`  | Paste the held columns after this one  |
@@ -210,9 +210,9 @@ Sorted columns get an arrow in the header. Sort on several and the arrows are nu
 | `m`     | `toggle_mark_row`          | Mark or unmark this row                         |
 | `<M-m>` | `toggle_mark_column`       | Mark or unmark this column                      |
 | `M`     | `clear_marks`              | Clear every marked row and column               |
-| `fr`    | `filter_to_marked_rows`    | Toggle showing only marked **rows**             |
-| `fc`    | `filter_to_marked_columns` | Toggle showing only marked **columns**          |
-| `fm`    | `filter_to_marked_both`    | Toggle showing only marked **rows and columns** |
+| `fr`    | `filter_to_marked_rows`    | Show only marked rows, or stop doing so         |
+| `fc`    | `filter_to_marked_columns` | Show only marked columns, or stop doing so      |
+| `fm`    | `filter_to_marked_both`    | Show only marked rows and marked columns        |
 
 Marks survive filtering and sorting.
 
@@ -260,23 +260,23 @@ Numeric columns get a sensible number of decimals automatically, so prices dumpe
 
 ### Selecting
 
-| Key             | Action                   | Does                                   |
-|-----------------|--------------------------|----------------------------------------|
-| `v`             | `select_cell`            | Select this cell                       |
-| `V`             | `select_row`             | Select this whole row                  |
-| `<S-Space>`     | `select_row`             | Select this whole row                  |
-| `<C-Space>`     | `select_column`          | Select this whole column               |
-| `<C-a>`         | `select_page`            | Select every cell on this page         |
-| `<Esc>`         | `clear_selection`        | Select nothing                         |
-| `<S-Left>`      | `extend_left`            | Take the selection one column left     |
-| `<S-Right>`     | `extend_right`           | Take the selection one column right    |
-| `<S-Up>`        | `extend_up`              | Take the selection one row up          |
-| `<S-Down>`      | `extend_down`            | Take the selection one row down        |
-| `<C-S-Left>`    | `extend_to_first_column` | Take the selection to the first column |
-| `<C-S-Right>`   | `extend_to_last_column`  | Take the selection to the last column  |
-| `<C-S-Up>`      | `extend_to_first_row`    | Take the selection to the page's top   |
-| `<C-S-Down>`    | `extend_to_last_row`     | Take the selection to the page's end   |
-| `y`             | `copy`                   | Copy the selected cells, or this one   |
+| Key             | Action                   | Does                                         |
+|-----------------|--------------------------|----------------------------------------------|
+| `v`             | `select_cell`            | Select this cell                             |
+| `V`             | `select_row`             | Select this whole row                        |
+| `<S-Space>`     | `select_row`             | Select this whole row                        |
+| `<C-Space>`     | `select_column`          | Select this whole column                     |
+| `<C-a>`         | `select_page`            | Select every cell on this page               |
+| `<Esc>`         | `clear_selection`        | Select nothing                               |
+| `<S-Left>`      | `extend_left`            | Take the selection one column left           |
+| `<S-Right>`     | `extend_right`           | Take the selection one column right          |
+| `<S-Up>`        | `extend_up`              | Take the selection one row up                |
+| `<S-Down>`      | `extend_down`            | Take the selection one row down              |
+| `<C-S-Left>`    | `extend_to_first_column` | Take the selection to the first column       |
+| `<C-S-Right>`   | `extend_to_last_column`  | Take the selection to the last column        |
+| `<C-S-Up>`      | `extend_to_first_row`    | Take the selection to the top of the page    |
+| `<C-S-Down>`    | `extend_to_last_row`     | Take the selection to the bottom of the page |
+| `y`             | `copy`                   | Copy the selected cells, or this one         |
 
 Extending moves the cursor with the selection, the way a spreadsheet moves the active cell, so the shifted arrows also walk the table. Moving the cursor without shift drops the selection, as in a spreadsheet. A selection stops at the page, and turning the page loses it.
 

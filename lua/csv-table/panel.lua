@@ -30,11 +30,11 @@ local STAT_FIELDS = {
 --- than sequential.
 ---@return csv.Binding[]
 function M.bindings()
-  local actions = require("csv-table.actions").actions
+  local actions = require("csv-table.actions")
 
   local bound = {}
   for key, name in pairs(keymaps.map) do
-    local described = actions[name]
+    local described = actions.get_action(name)
     if described then
       table.insert(bound, { key = key, name = name, description = described.description })
     end
@@ -50,7 +50,7 @@ end
 --- rather than something to have memorised.
 ---@param buf csv.Buffer
 function M.help(buf)
-  local actions = require("csv-table.actions").actions
+  local actions = require("csv-table.actions")
   local bound = M.bindings()
 
   local width = 0
@@ -64,7 +64,7 @@ function M.help(buf)
       return string.format("%-" .. width .. "s   %s", binding.key, binding.description)
     end,
   }, function(binding)
-    actions[binding.name].run(buf)
+    actions.get_action(binding.name).run(buf)
   end)
 end
 
