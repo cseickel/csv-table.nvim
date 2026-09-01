@@ -164,6 +164,8 @@ The following highlight groups are defined by the plugin:
 | `CsvSelection`      | `Visual`          | The cells you selected with `v`   |
 | `CsvFlash`          | `IncSearch`       | The brief flash on a moved column |
 
+Columns are colour coded by data type. The type comes from a 600-row sample: numeric when every value parses as a number, date when every value matches a date or time, and text otherwise. In a numeric column, `CsvNumberNegative` applies to the values starting with a minus sign and `CsvNumberPositive` to the rest.
+
 ## Keys
 
 All buffer-local to a table buffer. Hit `?` inside one to search the same list and run a key.

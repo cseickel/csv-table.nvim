@@ -1,10 +1,11 @@
 --[[
-Numeric column formatting.
+What kind of value each column holds.
 
-A CSV cell is text, so nothing in the file says how a number should read. This
-module decides, from a sample of rows, which columns are numeric and how many
-decimals each one needs. `csv-table.pipeline` turns those decisions into the
-`printf` clauses that xan applies.
+A CSV cell is text, so nothing in the file says what a column means. This module
+decides, from a sample of rows, which columns hold numbers and how many decimals
+each one needs, and which hold dates. `csv-table.pipeline` turns the numeric
+decisions into the `printf` clauses that xan applies, and `csv-table.highlight`
+colours a cell from the kind of the column it is in.
 
 Precision is measured after snapping each value to seven significant digits,
 because a column printed from float32 carries noise past that point: 89% of the
@@ -16,7 +17,7 @@ local columns = require("csv-table.columns")
 local M = {}
 
 ---@class csv.Format
----@field kind "int"|"float"|"text"
+---@field kind "int"|"float"|"date"|"text"
 ---@field precision integer Decimals to print. Zero unless `kind` is "float".
 ---@field width integer|nil Characters every value is padded to. Absent until the user asks for padding.
 ---@field align "left"|"center"|"right"|nil Which side the padding goes. Absent alongside `width`.
@@ -45,6 +46,33 @@ function M.decimals(value)
   return #(fraction:gsub("0+$", ""))
 end
 
+--- What follows the opening shape of a date, which is any mixture of the
+--- characters a date, a time, an offset and a separator between them are drawn
+--- from. Anchored at both ends like `tonumber`, so `2024-01-15 not a date` is
+--- text rather than a date carrying prose the colouring would cover.
+local DATE_BODY = "[-%d:%./T Z+]*$"
+
+--- The shapes a date column's values take: an ISO date, a slashed date, and a
+--- bare time. One kind covers all three, so a column of timestamps and a column
+--- of clock times read the same.
+local DATE_PATTERNS = {
+  "^%d%d%d%d%-%d%d" .. DATE_BODY,
+  "^%d%d?/%d%d?/" .. DATE_BODY,
+  "^%d%d:%d%d" .. DATE_BODY,
+}
+
+--- Whether a value reads as a date or a time.
+---@param value string
+---@return boolean
+local function is_date(value)
+  for _, pattern in ipairs(DATE_PATTERNS) do
+    if value:match(pattern) then
+      return true
+    end
+  end
+  return false
+end
+
 --- The value at `fraction` through a sorted list.
 ---@param sorted integer[]
 ---@param fraction number
@@ -55,26 +83,39 @@ local function percentile(sorted, fraction)
 end
 
 --- Decide how one column reads from its sampled values.
---- A single unparseable value makes the column text, so a column only formats
---- as a number when every sampled value is one.
+--- A single unparseable value makes the column text, so a column only reads as
+--- a number, or as a date, when every sampled value is one. No value is both,
+--- since none of the date shapes casts to a number.
 ---@param values string[]
 ---@return csv.Format
 function M.analyse_column(values)
   local decimals = {}
   local numeric = true
+  local dated = true
+  local seen = false
 
   for _, value in ipairs(values) do
-    if value ~= "" and numeric then
-      local count = M.decimals(value)
-      if count then
-        table.insert(decimals, count)
-      else
-        numeric = false
+    if value ~= "" then
+      seen = true
+      if numeric then
+        local count = M.decimals(value)
+        if count then
+          table.insert(decimals, count)
+        else
+          numeric = false
+        end
       end
+      dated = dated and is_date(value)
     end
   end
 
-  if not numeric or #decimals == 0 then
+  if not seen then
+    return { kind = "text", precision = 0 }
+  end
+  if dated then
+    return { kind = "date", precision = 0 }
+  end
+  if not numeric then
     return { kind = "text", precision = 0 }
   end
 
@@ -124,11 +165,19 @@ local function entry(formats, column)
   return format
 end
 
+--- Whether a column holds numbers, which decides how it sorts, which side it
+--- reads on, and whether `printf` shapes it. A date is none of those things.
+---@param format csv.Format|nil
+---@return boolean
+function M.is_numeric(format)
+  return format ~= nil and (format.kind == "int" or format.kind == "float")
+end
+
 --- The side a column's values sit on when the user has not chosen one.
 ---@param format csv.Format
 ---@return "left"|"right"
 local function natural_align(format)
-  return format.kind == "text" and "left" or "right"
+  return M.is_numeric(format) and "right" or "left"
 end
 
 --- The width the user is working from: the one they asked for, or the column as
@@ -146,8 +195,8 @@ function M.working_width(formats, column, painted)
   return format and format.width or painted
 end
 
---- Show more or fewer decimals. Asking for decimals on a column read as text
---- makes it a float, since that is what the request means.
+--- Show more or fewer decimals. Asking for decimals on a column that is not a
+--- number makes it a float, since that is what the request means.
 ---@param formats table<integer, csv.Format>
 ---@param column csv.Column
 ---@param delta integer

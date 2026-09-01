@@ -7,6 +7,8 @@ called from a keymap, a command, or a test. Resolving those values from the
 cursor belongs to `csv-table.buffer`.
 ]]
 
+local format = require("csv-table.format")
+
 local M = {}
 
 --- Rows a page holds in a buffer that has not been told otherwise. `setup`
@@ -89,8 +91,7 @@ end
 ---@param column csv.Column
 ---@return boolean
 function M.is_numeric(state, column)
-  local format = state.formats[column.index]
-  return format ~= nil and format.kind ~= "text"
+  return format.is_numeric(state.formats[column.index])
 end
 
 -- Sorting -------------------------------------------------------------------

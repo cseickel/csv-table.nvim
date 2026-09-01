@@ -208,10 +208,9 @@ end
 ---@param on_ready fun(buffer: csv.Buffer)|nil
 function M.attach(bufnr, on_ready)
   -- `:edit` fires the read command again on a buffer already showing a table,
-  -- and means refresh rather than attach. Reloading the buffer frees its syntax
-  -- items, and this command replaces the whole read, so `BufRead` never fires,
-  -- filetype detection never runs, and `FileType` never re-sources the syntax
-  -- file. Setting the filetype again is what fires it.
+  -- and means refresh rather than attach. This command replaces the whole read,
+  -- so `BufRead` never fires and filetype detection never runs. Setting the
+  -- filetype announces it again to whatever the user hangs off `FileType`.
   local attached = buffers[bufnr]
   if attached then
     vim.bo[bufnr].filetype = "csv-table"
@@ -226,9 +225,6 @@ function M.attach(bufnr, on_ready)
   vim.bo[bufnr].buftype = "nowrite"
   vim.bo[bufnr].swapfile = false
   vim.bo[bufnr].modifiable = false
-  -- A rendered row runs past the 3000 column default on a wide file, and syntax
-  -- highlighting stops at that column, so the borders would fade out to the right.
-  vim.bo[bufnr].synmaxcol = 0
   vim.bo[bufnr].filetype = "csv-table"
 
   -- A table is read by scrolling sideways, so wrapping would break every row

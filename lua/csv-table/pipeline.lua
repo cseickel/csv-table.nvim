@@ -16,6 +16,10 @@ column sharing its name cannot shadow it.
 local columns = require("csv-table.columns")
 local expression = require("csv-table.expression")
 
+-- Taken as a bare function because `format` is what this file calls the value
+-- it would be checking.
+local is_numeric = require("csv-table.format").is_numeric
+
 local M = {}
 
 --- Quote one argument of the pipeline string, which xan splits with shlex.
@@ -134,7 +138,7 @@ local function right_aligned(selected, headers, formats)
   local names = {}
   for index, column in ipairs(selected) do
     local format = formats[column.index]
-    if format and format.kind ~= "text" and not format.align then
+    if is_numeric(format) and not format.align then
       table.insert(names, columns.quote_name(headers[index]))
     end
   end

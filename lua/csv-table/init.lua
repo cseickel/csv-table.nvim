@@ -12,6 +12,7 @@ file does not matter.
 local actions = require("csv-table.actions")
 local buffer = require("csv-table.buffer")
 local columns = require("csv-table.columns")
+local highlight = require("csv-table.highlight")
 local keymaps = require("csv-table.keymaps")
 local state = require("csv-table.state")
 
@@ -31,20 +32,6 @@ local function apply_keymaps(buf)
         described.run(buf)
       end, { buffer = buf.bufnr, desc = "csv-table: " .. described.description })
     end
-  end
-end
-
--- The groups extmarks apply. Everything the table is painted with by pattern
--- lives in syntax/csv-table.vim.
-local function define_highlights()
-  local defaults = {
-    CsvMarkedRow = "DiffAdd",
-    CsvMarkedColumn = "DiffText",
-    CsvSelection = "Visual",
-    CsvFlash = "IncSearch",
-  }
-  for name, link in pairs(defaults) do
-    vim.api.nvim_set_hl(0, name, { link = link, default = true })
   end
 end
 
@@ -150,7 +137,7 @@ function M.setup(opts)
     state.page_size = math.floor(opts.page_size)
   end
 
-  define_highlights()
+  highlight.setup()
 
   vim.api.nvim_create_autocmd("BufReadCmd", {
     pattern = M.patterns,
