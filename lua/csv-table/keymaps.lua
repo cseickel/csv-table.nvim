@@ -15,13 +15,13 @@ M.map = {
 
   ["sa"] = "sort_asc",
   ["sd"] = "sort_desc",
-  ["Sa"] = "add_sort_key_asc",
-  ["Sd"] = "add_sort_key_desc",
+  ["saa"] = "add_sort_key_asc",
+  ["sdd"] = "add_sort_key_desc",
   ["ss"] = "remove_sort_key",
-  ["sc"] = "clear_sort",
+  ["cs"] = "clear_sort",
 
   ["|"] = "hide_column",
-  ["||"] = "show_all_columns",
+  ["c|"] = "show_all_columns",
   ["x"] = "cut_column",
   ["X"] = "cut_append_column",
   ["p"] = "paste_columns_after",
@@ -31,14 +31,14 @@ M.map = {
 
   ["m"] = "toggle_mark_row",
   ["<M-m>"] = "toggle_mark_column",
-  ["M"] = "clear_marks",
   ["fr"] = "filter_to_marked_rows",
   ["fc"] = "filter_to_marked_columns",
   ["fm"] = "filter_to_marked_both",
+  ["cm"] = "clear_marks",
 
   ["f"] = "filter",
   ["<BS>"] = "pop_filter",
-  ["<leader>fc"] = "clear_filters",
+  ["cf"] = "clear_filters",
 
   ["al"] = "align_left",
   ["ac"] = "align_center",
@@ -53,7 +53,7 @@ M.map = {
   ["["] = "prev_page",
   ["]]"] = "last_page",
   ["[["] = "first_page",
-  ["<leader>ps"] = "set_page_size",
+  ["[]"] = "set_page_size",
 
   ["v"] = "select_cell",
   ["V"] = "select_row",
@@ -73,16 +73,16 @@ M.map = {
 
   ["y"] = "copy",
 
-  ["K"] = "show_cell",
-  ["o"] = "show_row",
+  ["r"] = "refresh",
+  ["cc"] = "clear_all",
 
-  ["gs"] = "show_stats",
-  ["gi"] = "show_info",
-  ["gS"] = "show_sheets",
+  ["<enter>"] = "show_cell",
+  ["gr"] = "show_row",
+  ["gc"] = "show_column",
+  ["gi"] = "show_file_info",
+  ["gs"] = "select_sheet",
   ["?"] = "show_help",
 
-  ["<leader>r"] = "refresh",
-  ["<leader>x"] = "clear_all",
 }
 
 return M

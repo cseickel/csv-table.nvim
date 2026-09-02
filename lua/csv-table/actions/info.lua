@@ -7,7 +7,7 @@ local inspect = require("csv-table.inspect")
 local panel = require("csv-table.panel")
 local utils = require("csv-table.actions.utils")
 
-utils.register_action("show_stats", "Summarise this column", function(buf)
+utils.register_action("show_column", "Summarize this column", function(buf)
   local column = utils.column_under_cursor(buf)
   if column then
     panel.stats(buf, column)
@@ -21,11 +21,11 @@ utils.register_action("show_cell", "Show everything this cell holds", function(b
   end
 end)
 
-utils.register_action("show_row", "Search this row and copy a value", function(buf)
+utils.register_action("show_row", "Show pivoted row values", function(buf)
   inspect.row(buf)
 end)
 
-utils.register_action("show_sheets", "Choose which sheet to read", function(buf)
+utils.register_action("select_sheet", "Choose which sheet to read", function(buf)
   dialog.sheets(buf)
 end)
 
@@ -33,6 +33,6 @@ utils.register_action("show_help", "Search every key and run one", function(buf)
   panel.help(buf)
 end)
 
-utils.register_action("show_info", "Describe this file and the current view", function(buf)
+utils.register_action("show_file_info", "Describe this file and the current view", function(buf)
   panel.info(buf)
 end)
