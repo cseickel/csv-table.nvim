@@ -50,7 +50,7 @@ local function apply_marks(buffer)
 
   for position, column in ipairs(selection.selected(buffer.state)) do
     if buffer.state.marked_columns[column.index] then
-      local from, to = layout.cell_bounds(painted.lines[painted.header], position + 1)
+      local from, to = layout.cell_bounds(painted, painted.header, position + 1)
       if from then
         vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, painted.header - 1, from, {
           end_col = to,
@@ -74,7 +74,7 @@ local function apply_range(buffer)
   end
 
   for line = bounds.top, bounds.bottom do
-    local cells = layout.cell_ranges(painted.lines[line])
+    local cells = layout.cell_ranges(painted, line)
     local first, last = cells[bounds.left + 1], cells[bounds.right + 1]
     if first and last then
       vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, line - 1, first.from, {
@@ -118,6 +118,9 @@ end
 --- The selection goes. A sort changes which rows lie between its two ends, and
 --- hiding or moving a column changes which columns its two ends name, so a
 --- selection that outlived a render would mean cells the user never picked.
+---
+--- The cursor goes back to the cell it was in, because the new text has its
+--- own column widths, and the first paint finds it at the top of the buffer.
 ---@param buffer csv.Buffer
 ---@param on_painted fun()|nil Runs once the new text is in the buffer.
 function M.render(buffer, on_painted)
@@ -139,6 +142,11 @@ function M.render(buffer, on_painted)
     -- `status.get_winbar` pins this line while the buffer is scrolled past it.
     vim.b[buffer.bufnr].table_header = parsed.header
 
+    local window = vim.fn.bufwinid(buffer.bufnr)
+    if window ~= -1 then
+      cursor.restore(buffer, window)
+    end
+
     if on_painted then
       on_painted()
     end
@@ -156,7 +164,7 @@ function M.column_width(buffer, column)
   if not painted or not position then
     return nil
   end
-  return layout.cell_width(painted.lines[painted.header], position + 1)
+  return layout.cell_width(painted, position + 1)
 end
 
 --- Read another sheet of the same workbook. The filters, sort, marks, column
@@ -171,9 +179,7 @@ function M.open_sheet(buffer, sheet)
     end
 
     buffer.state = state.new(inspected)
-    M.render(buffer, function()
-      cursor.focus_first_row(buffer)
-    end)
+    M.render(buffer)
   end, query.report)
 end
 
@@ -241,20 +247,24 @@ function M.attach(bufnr, on_ready)
   dress_windows()
   vim.api.nvim_create_autocmd("BufWinEnter", { buffer = bufnr, callback = dress_windows })
 
-  -- Moving off the selection drops it, the way a spreadsheet drops a selection
-  -- on an unshifted arrow. The selection keys move the cursor themselves, so a
-  -- cursor that is not where this plugin last put it was moved by the user.
+  -- A cursor that is not where this plugin last put it was moved by the user.
+  -- It is snapped into the nearest cell, and moving off the selection drops it,
+  -- the way a spreadsheet drops a selection on an unshifted arrow.
   vim.api.nvim_create_autocmd("CursorMoved", {
     buffer = bufnr,
     callback = function()
       local buffer = buffers[bufnr]
-      if not buffer or not buffer.state.range or cursor.is_placed(buffer, 0) then
+      if not buffer or not buffer.layout or cursor.is_placed(buffer, 0) then
         return
       end
-      range.clear(buffer.state)
-      M.repaint(buffer)
+      cursor.snap(buffer, 0)
+      if buffer.state.range then
+        range.clear(buffer.state)
+        M.repaint(buffer)
+      end
     end,
   })
+  cursor.hide(bufnr)
 
   source.inspect(path, nil, function(inspected)
     if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -268,12 +278,11 @@ function M.attach(bufnr, on_ready)
       buffer = bufnr,
       callback = function()
         buffers[bufnr] = nil
+        cursor.forget(bufnr)
       end,
     })
 
-    M.render(buffer, function()
-      cursor.focus_first_row(buffer)
-    end)
+    M.render(buffer)
     if on_ready then
       on_ready(buffer)
     end

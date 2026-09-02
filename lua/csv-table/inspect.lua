@@ -64,17 +64,18 @@ local function named_values(buf, row)
   return values
 end
 
---- Read the row the cursor is on, or say why it cannot be read. The row id goes
---- to `on_row` as well, because the cursor may have moved while xan ran.
+--- Read the row the cursor is on. The row id goes to `on_row` as well, because
+--- the cursor may have moved while xan ran. Nothing happens before the first
+--- paint, when there is no row to be on.
 ---@param buf csv.Buffer
 ---@param on_row fun(row: table<string, string>, rowid: integer)
 local function with_row(buf, on_row)
-  local rowid = cursor.rowid_at(buf, 0)
-  if not rowid then
-    return query.report("the cursor is not on a row")
+  local cell = cursor.cell_ref(buf, 0)
+  if not cell then
+    return
   end
-  query.row(buf.state, rowid, query.report, function(row)
-    on_row(row, rowid)
+  query.row(buf.state, cell.row, query.report, function(row)
+    on_row(row, cell.row)
   end)
 end
 

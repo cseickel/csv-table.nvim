@@ -10,8 +10,22 @@ local M = {}
 
 ---@type table<string, string|false>
 M.map = {
+  ["l"] = "next_column",
+  ["h"] = "prev_column",
+  ["j"] = "next_row",
+  ["k"] = "prev_row",
+  ["<Right>"] = "next_column",
+  ["<Left>"] = "prev_column",
+  ["<Down>"] = "next_row",
+  ["<Up>"] = "prev_row",
   ["<Tab>"] = "next_column",
   ["<S-Tab>"] = "prev_column",
+  ["0"] = "first_column",
+  ["$"] = "last_column",
+  ["<Home>"] = "first_column",
+  ["<End>"] = "last_column",
+  ["gg"] = "first_row",
+  ["G"] = "last_row",
 
   ["sa"] = "sort_asc",
   ["sd"] = "sort_desc",

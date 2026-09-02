@@ -27,7 +27,8 @@ local function follow(buf, column, on_focused)
     if not position then
       return
     end
-    cursor.focus_cell(buf, 0, position + 1)
+    local line = vim.api.nvim_win_get_cursor(0)[1]
+    cursor.move_to(buf, 0, line, position + 1)
     if on_focused then
       on_focused(position + 1)
     end
@@ -49,7 +50,7 @@ end
 ---@param buf csv.Buffer
 ---@param change fun(column: csv.Column, width: integer)
 local function on_padding(buf, change)
-  local column = utils.column_under_cursor(buf)
+  local column = cursor.column_at(buf, 0)
   if not column then
     return
   end
@@ -115,14 +116,6 @@ local function paster(before)
   end
 end
 
-utils.register_action("next_column", "Move to the next column", function(buf)
-  cursor.jump_column(buf, 0, 1)
-end)
-
-utils.register_action("prev_column", "Move to the previous column", function(buf)
-  cursor.jump_column(buf, 0, -1)
-end)
-
 utils.register_action("hide_column", "Hide this column", function(buf)
   utils.on_column(buf, function(column)
     selection.hide_column(buf.state, column)
@@ -161,7 +154,7 @@ utils.register_action("increase_width", "Widen this column by one", width(1))
 utils.register_action("decrease_width", "Narrow this column by one", width(-1))
 
 utils.register_action("set_format", "Give this column a printf format", function(buf)
-  local column = utils.column_under_cursor(buf)
+  local column = cursor.column_at(buf, 0)
   if not column then
     return
   end

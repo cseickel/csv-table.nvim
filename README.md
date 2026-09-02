@@ -26,7 +26,7 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ## Options
 
-This shows the default options, which are all optional. Anything you do set will merge into and override these defaults.
+These are the defaults. Anything you pass to `setup()` merges into them and overrides what it names.
 
 ```lua
 require("csv-table").setup({
@@ -35,23 +35,37 @@ require("csv-table").setup({
   -- not as optimized and not all column types are supported.
   patterns = { "*.csv", "*.tsv", "*.xls", "*.xlsx", "*.xlsb", "*.ods" },
 
-  -- How many rows a page holds. `<leader>ps` changes it for one buffer.
+  -- How many rows a page holds. `[]` changes it for one buffer.
   page_size = 1000,
 
   -- Key to action name.
   keymaps = {
+    ["l"] = "next_column",
+    ["h"] = "prev_column",
+    ["j"] = "next_row",
+    ["k"] = "prev_row",
+    ["<Right>"] = "next_column",
+    ["<Left>"] = "prev_column",
+    ["<Down>"] = "next_row",
+    ["<Up>"] = "prev_row",
     ["<Tab>"] = "next_column",
     ["<S-Tab>"] = "prev_column",
+    ["0"] = "first_column",
+    ["$"] = "last_column",
+    ["<Home>"] = "first_column",
+    ["<End>"] = "last_column",
+    ["gg"] = "first_row",
+    ["G"] = "last_row",
 
     ["sa"] = "sort_asc",
     ["sd"] = "sort_desc",
-    ["Sa"] = "add_sort_key_asc",
-    ["Sd"] = "add_sort_key_desc",
+    ["saa"] = "add_sort_key_asc",
+    ["sdd"] = "add_sort_key_desc",
     ["ss"] = "remove_sort_key",
-    ["sc"] = "clear_sort",
+    ["cs"] = "clear_sort",
 
     ["|"] = "hide_column",
-    ["||"] = "show_all_columns",
+    ["c|"] = "show_all_columns",
     ["x"] = "cut_column",
     ["X"] = "cut_append_column",
     ["p"] = "paste_columns_after",
@@ -61,14 +75,14 @@ require("csv-table").setup({
 
     ["m"] = "toggle_mark_row",
     ["<M-m>"] = "toggle_mark_column",
-    ["M"] = "clear_marks",
     ["fr"] = "filter_to_marked_rows",
     ["fc"] = "filter_to_marked_columns",
     ["fm"] = "filter_to_marked_both",
+    ["cm"] = "clear_marks",
 
     ["f"] = "filter",
     ["<BS>"] = "pop_filter",
-    ["<leader>fc"] = "clear_filters",
+    ["cf"] = "clear_filters",
 
     ["al"] = "align_left",
     ["ac"] = "align_center",
@@ -83,7 +97,7 @@ require("csv-table").setup({
     ["["] = "prev_page",
     ["]]"] = "last_page",
     ["[["] = "first_page",
-    ["<leader>ps"] = "set_page_size",
+    ["[]"] = "set_page_size",
 
     ["v"] = "select_cell",
     ["V"] = "select_row",
@@ -103,16 +117,15 @@ require("csv-table").setup({
 
     ["y"] = "copy",
 
-    ["K"] = "show_cell",
-    ["o"] = "show_row",
+    ["r"] = "refresh",
+    ["cc"] = "clear_all",
 
-    ["gs"] = "show_stats",
-    ["gi"] = "show_info",
-    ["gS"] = "show_sheets",
+    ["<enter>"] = "show_cell",
+    ["gr"] = "show_row",
+    ["gc"] = "show_column",
+    ["gi"] = "show_file_info",
+    ["gs"] = "select_sheet",
     ["?"] = "show_help",
-
-    ["<leader>r"] = "refresh",
-    ["<leader>x"] = "clear_all",
   },
 })
 ```
@@ -151,18 +164,20 @@ vim.o.statusline = "%{%v:lua.csv_table_status()%}"
 
 The following highlight groups are defined by the plugin:
 
-| Group               | Default           | Used for                          |
-| ------------------- | ----------------- | --------------------------------- |
-| `CsvHeader`         | bold `#ededed`    | The header row                    |
-| `CsvBorder`         | `#444444`         | The lines the table is drawn with |
-| `CsvRowId`          | `CsvBorder`       | The row number in column one      |
-| `CsvNumberPositive` | `#85e0b1`         | A positive number                 |
-| `CsvNumberNegative` | `#ff8066`         | A negative number                 |
-| `CsvDate`           | `#ffd685`         | A date or a time                  |
-| `CsvMarkedRow`      | `DiffAdd`         | A row you marked with `m`         |
-| `CsvMarkedColumn`   | `DiffText`        | A column you marked with `<M-m>`  |
-| `CsvSelection`      | `Visual`          | The cells you selected with `v`   |
-| `CsvFlash`          | `IncSearch`       | The brief flash on a moved column |
+| Group               | Default           | Used for                                        |
+| ------------------- | ----------------- | ----------------------------------------------- |
+| `CsvHeader`         | bold `#ededed`    | The header row                                  |
+| `CsvBorder`         | `#444444`         | The lines the table is drawn with               |
+| `CsvRowId`          | `CsvBorder`       | The row number in column one                    |
+| `CsvNumberPositive` | `#85e0b1`         | A positive number                               |
+| `CsvNumberNegative` | `#ff8066`         | A negative number                               |
+| `CsvDate`           | `#ffd685`         | A date or a time                                |
+| `CsvMarkedRow`      | `DiffAdd`         | A row you marked with `m`                       |
+| `CsvMarkedColumn`   | `DiffText`        | A column you marked with `<M-m>`                |
+| `CsvSelection`      | `Visual`          | The cells you selected with `v`                 |
+| `CsvCursorCell`     | `reverse`         | The active cell                                 |
+| `CsvFlash`          | `IncSearch`       | The brief flash on a moved column               |
+| `CsvHiddenCursor`   | `blend = 100`     | The real cursor, while a table buffer is current |
 
 Columns are colour coded by data type. The type comes from a 600-row sample: numeric when every value parses as a number, date when every value matches a date or time, and text otherwise. In a numeric column, `CsvNumberNegative` applies to the values starting with a minus sign and `CsvNumberPositive` to the rest.
 
@@ -172,57 +187,75 @@ All buffer-local to a table buffer. Hit `?` inside one to search the same list a
 
 ### Moving
 
-| Key       | Action        | Does                       |
-| --------- | ------------- | -------------------------- |
-| `<Tab>`   | `next_column` | Move to the next column     |
-| `<S-Tab>` | `prev_column` | Move to the previous column |
+| Key       | Action         | Does                           |
+| --------- | -------------- | ------------------------------ |
+| `l`       | `next_column`  | Move to the next column        |
+| `h`       | `prev_column`  | Move to the previous column    |
+| `j`       | `next_row`     | Move down a row                |
+| `k`       | `prev_row`     | Move up a row                  |
+| `<Right>` | `next_column`  | Move to the next column        |
+| `<Left>`  | `prev_column`  | Move to the previous column    |
+| `<Down>`  | `next_row`     | Move down a row                |
+| `<Up>`    | `prev_row`     | Move up a row                  |
+| `<Tab>`   | `next_column`  | Move to the next column        |
+| `<S-Tab>` | `prev_column`  | Move to the previous column    |
+| `0`       | `first_column` | Move to the first column       |
+| `$`       | `last_column`  | Move to the last column        |
+| `<Home>`  | `first_column` | Move to the first column       |
+| `<End>`   | `last_column`  | Move to the last column        |
+| `gg`      | `first_row`    | Move to the top of the page, or to row N    |
+| `G`       | `last_row`     | Move to the bottom of the page, or to row N |
+
+The table has an active cell, the way a spreadsheet does. It is drawn with `CsvCursorCell` and the real cursor is hidden while a table buffer is current, so the cursor is always in a data cell and never on a border, the row id, the header, or past the table. These keys move by whole cells, and a count moves that many cells, except that `5gg` and `5G` go to row 5 of the page. Any other motion that lands outside a cell, whether a mouse click, `/`, `w` or `%`, is snapped into the nearest one.
+
+Hiding the cursor needs `termguicolors` and a terminal that supports cursor styling. Without them the cursor shows as a block at one edge of the active cell.
 
 ### Sorting
 
-| Key  | Action              | Does                                              |
-| ---- | ------------------- | ------------------------------------------------- |
-| `sa` | `sort_asc`          | Sort by this column ascending, or clear that sort  |
-| `sd` | `sort_desc`         | Sort by this column descending, or clear that sort |
-| `Sa` | `add_sort_key_asc`  | Add this column to the sort, ascending             |
-| `Sd` | `add_sort_key_desc` | Add this column to the sort, descending            |
-| `ss` | `remove_sort_key`   | Drop this column from the sort                     |
-| `sc` | `clear_sort`        | Clear the sort entirely                            |
+| Key   | Action              | Does                                               |
+| ----- | ------------------- | -------------------------------------------------- |
+| `sa`  | `sort_asc`          | Sort by this column ascending, or clear that sort  |
+| `sd`  | `sort_desc`         | Sort by this column descending, or clear that sort |
+| `saa` | `add_sort_key_asc`  | Add this column to the sort, ascending             |
+| `sdd` | `add_sort_key_desc` | Add this column to the sort, descending            |
+| `ss`  | `remove_sort_key`   | Drop this column from the sort                     |
+| `cs`  | `clear_sort`        | Clear the sort entirely                            |
 
 Sorted columns get an arrow in the header. Sort on several and the arrows are numbered, most significant first.
 
 ### Columns
 
-| Key  | Action                 | Does                                   |
-|------|------------------------|----------------------------------------|
-| `\|` | `hide_column`          | Hide this column                       |
-| `\|\|` | `show_all_columns`   | Show every column again                |
-| `x`  | `cut_column`           | Cut this column, holding it to paste   |
-| `X`  | `cut_append_column`    | Add this column to the cut being held  |
-| `p`  | `paste_columns_after`  | Paste the held columns after this one  |
-| `P`  | `paste_columns_before` | Paste the held columns before this one |
-| `<`  | `move_column_left`     | Move this column one place left        |
-| `>`  | `move_column_right`    | Move this column one place right       |
+| Key    | Action                 | Does                                   |
+| ------ | ---------------------- | -------------------------------------- |
+| `\|`   | `hide_column`          | Hide this column                       |
+| `c\|`  | `show_all_columns`     | Show every column again                |
+| `x`    | `cut_column`           | Cut this column, holding it to paste   |
+| `X`    | `cut_append_column`    | Add this column to the cut being held  |
+| `p`    | `paste_columns_after`  | Paste the held columns after this one  |
+| `P`    | `paste_columns_before` | Paste the held columns before this one |
+| `<`    | `move_column_left`     | Move this column one place left        |
+| `>`    | `move_column_right`    | Move this column one place right       |
 
 ### Marking
 
-| Key     | Action                     | Does                                            |
-|---------|----------------------------|-------------------------------------------------|
-| `m`     | `toggle_mark_row`          | Mark or unmark this row                         |
-| `<M-m>` | `toggle_mark_column`       | Mark or unmark this column                      |
-| `M`     | `clear_marks`              | Clear every marked row and column               |
-| `fr`    | `filter_to_marked_rows`    | Show only marked rows, or stop doing so         |
-| `fc`    | `filter_to_marked_columns` | Show only marked columns, or stop doing so      |
-| `fm`    | `filter_to_marked_both`    | Show only marked rows and marked columns        |
+| Key     | Action                     | Does                                       |
+| ------- | -------------------------- | ------------------------------------------ |
+| `m`     | `toggle_mark_row`          | Mark or unmark this row                    |
+| `<M-m>` | `toggle_mark_column`       | Mark or unmark this column                 |
+| `fr`    | `filter_to_marked_rows`    | Show only marked rows, or stop doing so    |
+| `fc`    | `filter_to_marked_columns` | Show only marked columns, or stop doing so |
+| `fm`    | `filter_to_marked_both`    | Show only marked rows and marked columns   |
+| `cm`    | `clear_marks`              | Clear every marked row and column          |
 
 Marks survive filtering and sorting.
 
 ### Filtering
 
-| Key          | Action           | Does                        |
-| ------------ | ---------------- | --------------------------- |
-| `f`          | `filter`         | Filter on this column        |
-| `<BS>`       | `pop_filter`     | Drop the filter added last   |
-| `<leader>fc` | `clear_filters`  | Drop every filter            |
+| Key    | Action          | Does                       |
+| ------ | --------------- | -------------------------- |
+| `f`    | `filter`        | Filter on this column      |
+| `<BS>` | `pop_filter`    | Drop the filter added last |
+| `cf`   | `clear_filters` | Drop every filter          |
 
 `f` opens a dialog with comparisons that make sense for the column. Numeric columns get `>`, `>=`, `<`, `<=`, `==` and `!=`. Text columns get equals, not equals, contains, starts with, ends with and regex. Two more options are always available:
 
@@ -233,50 +266,50 @@ Filters are ANDed.
 
 ### Formatting
 
-| Key  | Action               | Does                                    |
-| ---- | -------------------- | --------------------------------------- |
-| `al` | `align_left`         | Align this column left                   |
-| `ac` | `align_center`       | Align this column centre                 |
-| `ar` | `align_right`        | Align this column right                  |
-| `.`  | `increase_precision` | Show one more decimal in this column     |
-| `,`  | `decrease_precision` | Show one fewer decimal in this column    |
-| `+`  | `increase_width`     | Widen this column by one                 |
-| `_`  | `decrease_width`     | Narrow this column by one                |
-| `@`  | `set_format`         | Give this column a printf format         |
+| Key  | Action               | Does                                  |
+| ---- | -------------------- | ------------------------------------- |
+| `al` | `align_left`         | Align this column left                |
+| `ac` | `align_center`       | Align this column centre              |
+| `ar` | `align_right`        | Align this column right               |
+| `.`  | `increase_precision` | Show one more decimal in this column  |
+| `,`  | `decrease_precision` | Show one fewer decimal in this column |
+| `+`  | `increase_width`     | Widen this column by one              |
+| `_`  | `decrease_width`     | Narrow this column by one             |
+| `@`  | `set_format`         | Give this column a printf format      |
 
-Numeric columns get a sensible number of decimals automatically, so prices dumped from a float32 read as `199.59` rather than `199.589996338`. These keys override that. Enter nothing at the `@` prompt to revert to the default.
+Numeric columns get a sensible number of decimals automatically, so prices dumped from a float32 read as `199.59` rather than `199.589996338`. These keys override that. An empty `@` prompt puts the column back on the automatic decimals.
 
 ### Paging
 
-| Key          | Action          | Does                                |
-| ------------ | --------------- | ----------------------------------- |
-| `]`          | `next_page`     | Show the next page                   |
-| `[`          | `prev_page`     | Show the previous page               |
-| `]]`         | `last_page`     | Show the last page                   |
-| `[[`         | `first_page`    | Show the first page                  |
-| `<leader>ps` | `set_page_size` | Choose how many rows a page holds    |
+| Key  | Action          | Does                              |
+| ---- | --------------- | --------------------------------- |
+| `]`  | `next_page`     | Show the next page                |
+| `[`  | `prev_page`     | Show the previous page            |
+| `]]` | `last_page`     | Show the last page                |
+| `[[` | `first_page`    | Show the first page               |
+| `[]` | `set_page_size` | Choose how many rows a page holds |
 
-`<leader>ps` sets the page size for one buffer. `page_size` sets it for all of them.
+`[]` sets the page size for one buffer. `page_size` sets it for all of them.
 
 ### Selecting
 
-| Key             | Action                   | Does                                         |
-|-----------------|--------------------------|----------------------------------------------|
-| `v`             | `select_cell`            | Select this cell                             |
-| `V`             | `select_row`             | Select this whole row                        |
-| `<S-Space>`     | `select_row`             | Select this whole row                        |
-| `<C-Space>`     | `select_column`          | Select this whole column                     |
-| `<C-a>`         | `select_page`            | Select every cell on this page               |
-| `<Esc>`         | `clear_selection`        | Select nothing                               |
-| `<S-Left>`      | `extend_left`            | Take the selection one column left           |
-| `<S-Right>`     | `extend_right`           | Take the selection one column right          |
-| `<S-Up>`        | `extend_up`              | Take the selection one row up                |
-| `<S-Down>`      | `extend_down`            | Take the selection one row down              |
-| `<C-S-Left>`    | `extend_to_first_column` | Take the selection to the first column       |
-| `<C-S-Right>`   | `extend_to_last_column`  | Take the selection to the last column        |
-| `<C-S-Up>`      | `extend_to_first_row`    | Take the selection to the top of the page    |
-| `<C-S-Down>`    | `extend_to_last_row`     | Take the selection to the bottom of the page |
-| `y`             | `copy`                   | Copy the selected cells, or this one         |
+| Key           | Action                   | Does                                         |
+| ------------- | ------------------------ | -------------------------------------------- |
+| `v`           | `select_cell`            | Select this cell                             |
+| `V`           | `select_row`             | Select this whole row                        |
+| `<S-Space>`   | `select_row`             | Select this whole row                        |
+| `<C-Space>`   | `select_column`          | Select this whole column                     |
+| `<C-a>`       | `select_page`            | Select every cell on this page               |
+| `<Esc>`       | `clear_selection`        | Select nothing                               |
+| `<S-Left>`    | `extend_left`            | Take the selection one column left           |
+| `<S-Right>`   | `extend_right`           | Take the selection one column right          |
+| `<S-Up>`      | `extend_up`              | Take the selection one row up                |
+| `<S-Down>`    | `extend_down`            | Take the selection one row down              |
+| `<C-S-Left>`  | `extend_to_first_column` | Take the selection to the first column       |
+| `<C-S-Right>` | `extend_to_last_column`  | Take the selection to the last column        |
+| `<C-S-Up>`    | `extend_to_first_row`    | Take the selection to the top of the page    |
+| `<C-S-Down>`  | `extend_to_last_row`     | Take the selection to the bottom of the page |
+| `y`           | `copy`                   | Copy the selected cells, or this one         |
 
 Extending moves the cursor with the selection, the way a spreadsheet moves the active cell, so the shifted arrows also walk the table. Moving the cursor without shift drops the selection, as in a spreadsheet. A selection stops at the page, and turning the page loses it.
 
@@ -286,25 +319,25 @@ The Excel keys, `<S-Space>`, `<C-Space>` and the `<C-S-Arrow>` set, need a termi
 
 ### Panels
 
-| Key  | Action        | Does                                    |
-|------|---------------|-----------------------------------------|
-| `K`  | `show_cell`   | Show everything this cell holds         |
-| `o`  | `show_row`    | Search this row and copy a value        |
-| `gs` | `show_stats`  | Summarise this column                   |
-| `gi` | `show_info`   | Describe this file and the current view |
-| `gS` | `show_sheets` | Choose which sheet to read              |
-| `?`  | `show_help`   | Search every key and run one            |
+| Key       | Action           | Does                                    |
+| --------- | ---------------- | --------------------------------------- |
+| `<enter>` | `show_cell`      | Show everything this cell holds         |
+| `gr`      | `show_row`       | Show pivoted row values                 |
+| `gc`      | `show_column`    | Summarize this column                   |
+| `gi`      | `show_file_info` | Describe this file and the current view |
+| `gs`      | `select_sheet`   | Choose which sheet to read              |
+| `?`       | `show_help`      | Search every key and run one            |
 
-`K` reads the value from the file, so it shows the full text even when the column draws it cut, and before any formatting. A value that is a JSON object or array is indented one value per line and highlighted as JSON, with the numbers, key order and escapes exactly as stored. `o` opens a picker over every column of the row, in file order so hidden columns are included, searchable by column name or by value. Choosing one copies its value to the `+` register. `?` opens a picker over every binding, searchable, and runs the one chosen.
+`<enter>` reads the value from the file, so it shows the full text even when the column draws it cut, and before any formatting. A value that is a JSON object or array is indented one value per line and highlighted as JSON, with the numbers, key order and escapes exactly as stored. `gr` opens a picker over every column of the row, in file order so hidden columns are included, searchable by column name or by value. Choosing one copies its value to the `+` register. `?` opens a picker over every binding, searchable, and runs the one chosen.
 
-`gs` and `gi` respect your current filters. `gS` only applies to workbooks, and switching sheets clears your filters and formats. Panels close with `q` or `<Esc>`.
+`gc` and `gi` respect your current filters. `gs` only applies to workbooks, and switching sheets clears your filters and formats. Panels close with `q` or `<Esc>`.
 
 ### Everything else
 
-| Key         | Action      | Does                                          |
-|-------------|-------------|-----------------------------------------------|
-| `<leader>r` | `refresh`   | Read the file again                           |
-| `<leader>x` | `clear_all` | Clear filters, sort, marks and hidden columns |
+| Key  | Action      | Does                                          |
+| ---- | ----------- | --------------------------------------------- |
+| `r`  | `refresh`   | Read the file again                           |
+| `cc` | `clear_all` | Clear filters, sort, marks and hidden columns |
 
 ## License
 

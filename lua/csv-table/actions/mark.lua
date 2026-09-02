@@ -11,11 +11,11 @@ local state = require("csv-table.state")
 local utils = require("csv-table.actions.utils")
 
 utils.register_action("toggle_mark_row", "Mark or unmark this row", function(buf)
-  local rowid = cursor.rowid_at(buf, 0)
-  if not rowid then
+  local cell = cursor.cell_ref(buf, 0)
+  if not cell then
     return
   end
-  state.toggle_mark(buf.state, rowid)
+  state.toggle_mark(buf.state, cell.row)
   buffer.render(buf)
 end)
 

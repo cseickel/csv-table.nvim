@@ -40,7 +40,10 @@ local GROUPS = {
   CsvMarkedRow = { link = "DiffAdd" },
   CsvMarkedColumn = { link = "DiffText" },
   CsvSelection = { link = "Visual" },
+  CsvCursorCell = { reverse = true },
   CsvFlash = { link = "IncSearch" },
+  -- `blend = 100` is what hides the cursor drawn in this group.
+  CsvHiddenCursor = { blend = 100 },
 }
 
 local function define_groups()
@@ -151,14 +154,13 @@ local function on_line(_, _, bufnr, row)
     return
   end
 
-  -- A horizontal rule holds nothing but border, and `cell_ranges` would read
-  -- the whole of it as one cell.
+  -- A horizontal rule holds nothing but border.
   local header = index == painted.header
   if not header and (index < painted.first_row or index > painted.last_row) then
     return paint(bufnr, row, 0, #line, "CsvBorder")
   end
 
-  local ranges = layout.cell_ranges(line)
+  local ranges = layout.cell_ranges(painted, index)
   paint_borders(bufnr, row, line, ranges)
 
   for cell, range in ipairs(ranges) do

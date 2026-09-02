@@ -20,9 +20,7 @@ local range = require("csv-table.range")
 local selection = require("csv-table.selection")
 local utils = require("csv-table.actions.utils")
 
--- Further than any table is wide or long, so the same step function reaches an
--- edge without a second way of naming one.
-local EDGE = 1000000
+local EDGE = utils.EDGE
 
 --- Take the selection out by `rows` and `cells`, walking the cursor along with
 --- it.
@@ -40,7 +38,7 @@ local function extender(rows, cells)
     local selected = buf.state.range
     local from = selected and selected.cursor or cursor.cell_ref(buf, 0)
     if not painted or not from then
-      return query.report("the cursor is not on a cell")
+      return
     end
 
     local delta = { rows = rows, columns = cells, shown = #selection.selected(buf.state) }
@@ -73,7 +71,7 @@ local function selector(corners)
 
     local anchor, far = corners(buf, painted)
     if not anchor or not far or not anchor.row or not far.row then
-      return query.report("the cursor is not on a cell")
+      return
     end
 
     range.set(buf.state, anchor, far)
@@ -90,7 +88,7 @@ end
 utils.register_action("select_cell", "Select this cell", function(buf)
   local cell = cursor.cell_ref(buf, 0)
   if not cell then
-    return query.report("the cursor is not on a cell")
+    return
   end
   range.set(buf.state, cell, cell)
   buffer.repaint(buf)
