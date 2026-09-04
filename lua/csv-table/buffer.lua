@@ -30,6 +30,11 @@ local buffers = {}
 
 local mark_namespace = vim.api.nvim_create_namespace("csv-marks")
 
+-- The autocommands a table buffer owns. Kept out of the group `setup` clears,
+-- because these belong to one buffer: nvim drops them with the buffer, and a
+-- second `setup` would take them from the tables already open.
+local buffer_group = vim.api.nvim_create_augroup("csv-table-buffer", { clear = false })
+
 -- Above the 4096 an extmark takes by default, so a selected cell paints over
 -- the row highlight it may be sitting on.
 local RANGE_PRIORITY = 4200
@@ -236,21 +241,31 @@ function M.attach(bufnr, on_ready)
   -- A table is read by scrolling sideways, so wrapping would break every row
   -- into a variable number of screen lines and unalign the columns. Line
   -- numbers go too, since the table carries the row's own id in column one.
+  --
+  -- Each is set through `vim.wo[window][0]`, which is `:setlocal`: the value
+  -- holds for this buffer in that window alone. `vim.wo[window]` is `:set`,
+  -- which also writes the value the window keeps for every buffer, and the
+  -- next buffer shown in the window would inherit it.
   local function dress_windows()
     for _, window in ipairs(vim.fn.win_findbuf(bufnr)) do
-      vim.wo[window].wrap = false
-      vim.wo[window].number = false
-      vim.wo[window].relativenumber = false
-      vim.wo[window].signcolumn = "no"
+      vim.wo[window][0].wrap = false
+      vim.wo[window][0].number = false
+      vim.wo[window][0].relativenumber = false
+      vim.wo[window][0].signcolumn = "no"
     end
   end
   dress_windows()
-  vim.api.nvim_create_autocmd("BufWinEnter", { buffer = bufnr, callback = dress_windows })
+  vim.api.nvim_create_autocmd("BufWinEnter", {
+    group = buffer_group,
+    buffer = bufnr,
+    callback = dress_windows,
+  })
 
   -- A cursor that is not where this plugin last put it was moved by the user.
   -- It is snapped into the nearest cell, and moving off the selection drops it,
   -- the way a spreadsheet drops a selection on an unshifted arrow.
   vim.api.nvim_create_autocmd("CursorMoved", {
+    group = buffer_group,
     buffer = bufnr,
     callback = function()
       local buffer = buffers[bufnr]
@@ -264,7 +279,10 @@ function M.attach(bufnr, on_ready)
       end
     end,
   })
-  cursor.hide(bufnr)
+  -- `guicursor` is global, so the buffer that decides it is the one the user is
+  -- in. A read can be for a buffer nobody is in, which is what `bufload` does,
+  -- and hiding the cursor for that one would hide it where the user is.
+  cursor.dress(vim.api.nvim_get_current_buf())
 
   source.inspect(path, nil, function(inspected)
     if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -275,6 +293,7 @@ function M.attach(bufnr, on_ready)
     buffers[bufnr] = buffer
 
     vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
+      group = buffer_group,
       buffer = bufnr,
       callback = function()
         buffers[bufnr] = nil

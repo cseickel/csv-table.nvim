@@ -12,6 +12,7 @@ file does not matter.
 local actions = require("csv-table.actions")
 local buffer = require("csv-table.buffer")
 local columns = require("csv-table.columns")
+local cursor = require("csv-table.cursor")
 local highlight = require("csv-table.highlight")
 local keymaps = require("csv-table.keymaps")
 local state = require("csv-table.state")
@@ -137,9 +138,15 @@ function M.setup(opts)
     state.page_size = math.floor(opts.page_size)
   end
 
-  highlight.setup()
+  -- One group for every autocommand that lasts the session, so a second `setup`
+  -- replaces what the first left rather than adding to it. The ones a table
+  -- buffer owns are in `csv-table-buffer`.
+  local group = vim.api.nvim_create_augroup("csv-table", { clear = true })
+  highlight.setup(group)
+  cursor.setup(group)
 
   vim.api.nvim_create_autocmd("BufReadCmd", {
+    group = group,
     pattern = M.patterns,
     callback = function(event)
       buffer.attach(event.buf, apply_keymaps)

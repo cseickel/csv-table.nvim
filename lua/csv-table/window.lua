@@ -59,8 +59,8 @@ function M.open(lines, opts)
     border = "rounded",
     title = " " .. opts.title .. " ",
   })
-  vim.wo[winid].wrap = opts.wrap or false
-  vim.wo[winid].cursorline = true
+  vim.wo[winid][0].wrap = opts.wrap or false
+  vim.wo[winid][0].cursorline = true
 
   M.close_on(bufnr, winid, { "q", "<Esc>" })
   return bufnr, winid

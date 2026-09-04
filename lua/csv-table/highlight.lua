@@ -181,11 +181,12 @@ end
 
 --- Define the groups and start colouring. One provider covers every window, so
 --- `on_win` is what decides a window is showing a table.
-function M.setup()
+---@param group integer
+function M.setup(group)
   define_groups()
   -- A colorscheme runs `highlight clear` before it defines anything, which
   -- takes every group above with it.
-  vim.api.nvim_create_autocmd("ColorScheme", { callback = define_groups })
+  vim.api.nvim_create_autocmd("ColorScheme", { group = group, callback = define_groups })
   vim.api.nvim_set_decoration_provider(namespace, { on_win = on_win, on_line = on_line })
 end
 

@@ -113,7 +113,7 @@ local function place(buffer, window, line, cell, ranges)
   end
 
   local range = ranges[cell]
-  vim.wo[window].sidescrolloff = scroll_off(buffer, cell, ranges)
+  vim.wo[window][0].sidescrolloff = scroll_off(buffer, cell, ranges)
   vim.api.nvim_win_set_cursor(window, { line, edge == "right" and range.to - 1 or range.from })
   placed[window_id(window)] = {
     bufnr = buffer.bufnr,
@@ -294,41 +294,58 @@ function M.flash_cell(buffer, cell)
   end, FLASH_MILLISECONDS)
 end
 
---- The `guicursor` in force before a table buffer hid the cursor, so leaving
---- the buffer can put it back. `guicursor` is global, so it is swapped on
---- entering and leaving rather than set once.
----@type string|nil
-local shown_cursor = nil
-
---- A later entry for a mode wins, so the hidden cursor is appended to what the
---- user has rather than replacing it, and every other mode keeps its shape.
-local function hide_cursor()
-  if not shown_cursor then
-    shown_cursor = vim.o.guicursor
+--- `guicursor` without the entry this plugin appends, which is the value it
+--- held before a table hid the cursor. The entry is dropped from the list
+--- rather than cut out of the string, because cutting it out would leave the
+--- comma beside it, and nvim rejects an empty entry.
+---@param value string
+---@return string
+local function without_hidden(value)
+  local kept = {}
+  for _, entry in ipairs(vim.split(value, ",", { plain = true })) do
+    if entry ~= HIDDEN_CURSOR then
+      kept[#kept + 1] = entry
+    end
   end
-  if shown_cursor == "" then
-    vim.o.guicursor = HIDDEN_CURSOR
-  else
-    vim.o.guicursor = shown_cursor .. "," .. HIDDEN_CURSOR
-  end
+  return table.concat(kept, ",")
 end
 
-local function show_cursor()
-  if shown_cursor then
-    vim.o.guicursor = shown_cursor
-    shown_cursor = nil
-  end
-end
-
---- Hide the real cursor while `bufnr` is the current buffer. The painted cell
---- is what shows where the cursor is.
+--- Hide the real cursor if `bufnr` holds a table and show it if it does not.
+--- The painted cell is what shows where the cursor is in a table.
+---
+--- `guicursor` is global and holds one entry per mode, the last entry for a
+--- mode winning, so hiding is appending an entry and showing is taking that
+--- entry back out. Nothing is stored between the two: taking the entry out
+--- rebuilds the value that was there before, and a value this plugin never
+--- added to comes back unchanged, so another plugin styling the cursor its own
+--- way is left alone.
 ---@param bufnr integer
-function M.hide(bufnr)
-  vim.api.nvim_create_autocmd("BufEnter", { buffer = bufnr, callback = hide_cursor })
-  vim.api.nvim_create_autocmd("BufLeave", { buffer = bufnr, callback = show_cursor })
-  if vim.api.nvim_get_current_buf() == bufnr then
-    hide_cursor()
+function M.dress(bufnr)
+  local shown = without_hidden(vim.o.guicursor)
+  local wanted = shown
+  if vim.bo[bufnr].filetype == "csv-table" then
+    wanted = shown == "" and HIDDEN_CURSOR or shown .. "," .. HIDDEN_CURSOR
   end
+  if wanted ~= vim.o.guicursor then
+    vim.o.guicursor = wanted
+  end
+end
+
+--- Follow the cursor's visibility for the rest of the session.
+---
+--- Entering a buffer is the only event that decides it. Undoing the hide on
+--- leaving instead would hold for every buffer after a leave that is missed,
+--- and a leave is missed by a buffer wiped while it is current or by a window
+--- opened with `noautocmd`. Decided on entry, a missed event lasts until the
+--- next entry rather than for the session.
+---@param group integer
+function M.setup(group)
+  vim.api.nvim_create_autocmd("BufEnter", {
+    group = group,
+    callback = function(event)
+      M.dress(event.buf)
+    end,
+  })
 end
 
 return M
