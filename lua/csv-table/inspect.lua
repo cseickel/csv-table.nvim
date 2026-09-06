@@ -141,7 +141,8 @@ end
 --- pastes as cells. The values come from the file, so a column narrow enough to
 --- have been drawn cut still copies whole.
 ---@param buf csv.Buffer
-function M.copy(buf)
+---@param excludeHeaders boolean
+function M.copy(buf, excludeHeaders)
   local bounds = block(buf)
   if not bounds then
     return query.report("there is nothing to copy")

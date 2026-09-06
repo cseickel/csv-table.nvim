@@ -130,7 +130,7 @@ require("csv-table").setup({
 })
 ```
 
-A key set to `false` will prevent the default bind without setting a new one.
+Setting a key to `false` will prevent the default bind without setting a new one.
 
 ```lua
 keymaps = {
@@ -141,11 +141,17 @@ keymaps = {
 
 ## Command
 
-`:CsvTable [path]` opens `path`, or re-opens the current buffer's file. `:edit` on a matching extension does the same thing after the plugin has loaded.
+`:CsvTable [path]` opens `path`, or re-opens the current buffer's file. `:edit` on a matching extension will do the same thing after the plugin has loaded.
 
 ## Statusline
 
-`require("csv-table").status(bufnr)` returns a one-line summary: sheet, rows on screen, active filters and marks, the sort, and any cut columns being held. Other buffers return an empty string. Use this for integration with your statusline.
+```lua
+require("csv-table").status(bufnr)
+```
+
+This is to show csv-table information in your statusline or winbar. It does not automatically work with any statusline plugin, but it should not be difficult to figure it out if you use one.
+
+`require("csv-table").status(bufnr)` returns a one-line summary for a csv-table buffer: sheet, rows on screen, active filters and marks, the sort, and any cut columns in the register. Other buffers return an empty string.
 
 ```lua
 _G.csv_table_status = function()
