@@ -104,20 +104,80 @@ function M.row(state, rowid)
   }, " | "))
 end
 
---- The argv reading a block of the page as JSON objects, keyed by display name.
---- The block is named by its offset among the rows on screen, because the
---- stages before it leave exactly those rows in exactly that order.
----@param state csv.State
----@param opts { first: integer, count: integer, columns: csv.Column[] } `first` is 0-based within the page.
----@return string[]
-function M.cells(state, opts)
-  local stages = pipeline.page_stages(state)
-  local names = columns.display_names(opts.columns)
+--- The name `map` gives the column the copy sorts on. It is never addressed by
+--- name, so a source column sharing it does no harm.
+local ORDER_COLUMN = "csv_table_order"
 
-  table.insert(stages, string.format("slice -s %d -l %d", opts.first, opts.count))
-  table.insert(stages, "select " .. pipeline.quote(columns.selection(opts.columns)))
-  table.insert(stages, "rename " .. pipeline.quote(columns.rename_argument(names)))
-  table.insert(stages, "to jsonl --strings '*'")
+--- Whether `rowids` is a run of consecutive rows already in file order, which
+--- is what an unsorted page leaves.
+---@param rowids integer[]
+---@return boolean
+local function consecutive(rowids)
+  for index = 2, #rowids do
+    if rowids[index] ~= rowids[index - 1] + 1 then
+      return false
+    end
+  end
+  return true
+end
+
+--- The stages that put the rows back in the order they are drawn in. `slice -I`
+--- returns them in file order whatever order it was asked in, so every row looks
+--- its own id up in a map of row id to screen position and the sort reads that.
+---
+--- The sort names its column by position, because `map` appends the column and a
+--- source column of the same name would otherwise be sorted on instead.
+---@param state csv.State
+---@param rowids integer[]
+---@return string[]
+local function ordering_stages(state, rowids)
+  local places = {}
+  for position, rowid in ipairs(rowids) do
+    places[position] = string.format('"%d": %d', rowid, position)
+  end
+
+  local expression = string.format(
+    "get({%s}, col(%s, 0)) as %s",
+    table.concat(places, ", "),
+    columns.string_literal(state.rowid_name),
+    ORDER_COLUMN
+  )
+  return {
+    "map " .. pipeline.quote(expression),
+    -- `enum` prepends one column and `map` appends this one, so it lands past
+    -- every source column.
+    string.format("sort -s %d -N", #state.columns + 1),
+  }
+end
+
+--- The argv copying rows as tab separated text, which is what a spreadsheet
+--- pastes as cells. Naming the rows by id is what keeps the filter and the sort
+--- from running again: they decided which rows are on screen, and the ids say
+--- which of those to read.
+---@param state csv.State
+---@param opts { rowids: integer[], columns: csv.Column[], headers: boolean } `rowids` in the order the rows are drawn.
+---@return string[]
+function M.copy(state, opts)
+  local positions = {}
+  for index, column in ipairs(opts.columns) do
+    positions[index] = column.index + 1
+  end
+
+  local stages = { "enum -c " .. pipeline.quote(state.rowid_name) }
+  if consecutive(opts.rowids) then
+    table.insert(stages, string.format("slice -s %d -l %d", opts.rowids[1], #opts.rowids))
+  else
+    table.insert(stages, "slice -I " .. table.concat(opts.rowids, ","))
+    for _, stage in ipairs(ordering_stages(state, opts.rowids)) do
+      table.insert(stages, stage)
+    end
+  end
+
+  table.insert(stages, "select " .. pipeline.quote(table.concat(positions, ",")))
+  if not opts.headers then
+    table.insert(stages, "behead")
+  end
+  table.insert(stages, "fmt --tabs")
   return run(state.source, state.sheet, table.concat(stages, " | "))
 end
 

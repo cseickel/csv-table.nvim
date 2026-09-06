@@ -32,7 +32,7 @@ local PRIORITY = 100
 
 local GROUPS = {
   CsvBorder = { fg = "#444444" },
-  CsvRowId = { link = "CsvBorder" },
+  CsvRowNumber = { link = "CsvBorder" },
   CsvHeader = { fg = "#ededed", bold = true },
   CsvNumberPositive = { fg = "#85e0b1" },
   CsvNumberNegative = { fg = "#ff8066" },
@@ -53,9 +53,9 @@ local function define_groups()
 end
 
 --- What each cell of a data row is coloured by, keyed by cell number. Cell 1 is
---- the row id, so the column shown at position `n` is cell `n + 1`. A number
---- carries its kind rather than a group, because the sign of the value decides
---- which of the two number groups it takes.
+--- the row number, so the column at display position `n` is cell `n + 1`. A
+--- number is keyed by its kind rather than by a group, because the sign of the
+--- value decides which of the two number groups it takes.
 ---@param state csv.State
 ---@return table<integer, "number"|"date">
 local function cell_kinds(state)
@@ -168,7 +168,7 @@ local function on_line(_, _, bufnr, row)
     if header then
       group = "CsvHeader"
     elseif cell == 1 then
-      group = "CsvRowId"
+      group = "CsvRowNumber"
     else
       local kind = drawing.kinds[cell]
       group = kind and group_of(kind, line:sub(range.from + 1, range.to))

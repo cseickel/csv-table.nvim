@@ -174,7 +174,7 @@ end
 
 --- Read another sheet of the same workbook. The filters, sort, marks, column
 --- selection and formats all name columns of the sheet being left, so the view
---- starts clean rather than carrying them onto columns that may not exist.
+--- starts clean rather than pointing them at columns that may not exist.
 ---@param buffer csv.Buffer
 ---@param sheet integer 0-based.
 function M.open_sheet(buffer, sheet)
@@ -193,7 +193,7 @@ end
 ---@return integer first
 ---@return integer last
 function M.row_range(buffer)
-  local first = buffer.state.page * buffer.state.limit + 1
+  local first = state.first_row_number(buffer.state)
   if not buffer.layout then
     return first, first - 1
   end
@@ -240,7 +240,7 @@ function M.attach(bufnr, on_ready)
 
   -- A table is read by scrolling sideways, so wrapping would break every row
   -- into a variable number of screen lines and unalign the columns. Line
-  -- numbers go too, since the table carries the row's own id in column one.
+  -- numbers go too, since column one of the table is the row number.
   --
   -- Each is set through `vim.wo[window][0]`, which is `:setlocal`: the value
   -- holds for this buffer in that window alone. `vim.wo[window]` is `:set`,
@@ -261,7 +261,7 @@ function M.attach(bufnr, on_ready)
     callback = dress_windows,
   })
 
-  -- A cursor that is not where this plugin last put it was moved by the user.
+  -- The user moved the cursor whenever it is not where `cursor.place` left it.
   -- It is snapped into the nearest cell, and moving off the selection drops it,
   -- the way a spreadsheet drops a selection on an unshifted arrow.
   vim.api.nvim_create_autocmd("CursorMoved", {

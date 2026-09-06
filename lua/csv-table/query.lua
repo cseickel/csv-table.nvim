@@ -26,9 +26,9 @@ end
 
 --- Run `argv`, handing stdout to `on_output` or the message to `on_error`.
 ---
---- `xan run` exits 0 even when a stage inside the pipeline fails, and lets the
---- stages after it carry on with no input, so anything on stderr is a failure
---- whatever the exit code says.
+--- `xan run` exits 0 even when a stage inside the pipeline fails, and runs the
+--- stages after it with no input, so anything on stderr is a failure whatever
+--- the exit code says.
 ---@param argv string[]
 ---@param on_error fun(message: string)
 ---@param on_output fun(stdout: string)
@@ -92,16 +92,19 @@ function M.row(state, rowid, on_error, on_row)
   end)
 end
 
---- A block of the page, one JSON object per row, keyed by display name.
+--- Rows as tab separated text, in the order they are drawn. `xan fmt` ends its
+--- output with a newline, which a spreadsheet would paste as an empty row.
 ---@param state csv.State
----@param opts { first: integer, count: integer, columns: csv.Column[] }
+---@param opts { rowids: integer[], columns: csv.Column[], headers: boolean }
 ---@param on_error fun(message: string)
----@param on_rows fun(rows: table<string, string>[])
-function M.cells(state, opts, on_error, on_rows)
-  M.run_json_lines(commands.cells(state, opts), on_error, on_rows)
+---@param on_text fun(text: string)
+function M.copy(state, opts, on_error, on_text)
+  M.run(commands.copy(state, opts), on_error, function(stdout)
+    on_text((stdout:gsub("\n$", "")))
+  end)
 end
 
---- The distinct values of `column`, most frequent first.
+--- Every value `column` holds and how many rows hold it, most frequent first.
 ---@param state csv.State
 ---@param column csv.Column
 ---@param on_error fun(message: string)
@@ -116,7 +119,8 @@ function M.frequency(state, column, on_error, on_values)
   end)
 end
 
---- Every statistic xan reports, one row per column, or for `column` alone.
+--- What xan computes about the rows on display, one row per column, or for
+--- `column` alone.
 ---@param state csv.State
 ---@param column csv.Column|nil
 ---@param on_error fun(message: string)

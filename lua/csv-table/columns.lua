@@ -2,7 +2,7 @@
 Column identity.
 
 A CSV file may repeat a header name, so a name alone does not identify a column.
-Every column is carried as a `csv.Column`, and this module owns the four
+Every column is a `csv.Column`, and this module owns the four
 renderings xan needs: the selection syntax used by `select` and `sort -s`, the
 moonblade form used inside filter expressions, the display name shown in the
 buffer, and the `rename` argument that puts those display names on the output.
@@ -80,12 +80,21 @@ local function csv_quote(value)
   return '"' .. value:gsub('"', '""') .. '"'
 end
 
---- Render a name as one token of a xan selection argument. `*`, `:`, `!`, `[`
---- and `]` are selection syntax, so a name containing any of them selects the
---- wrong column, or nothing, unless it is quoted.
+--- Render a name as one token of a xan selection argument. xan reads `*`, `:`,
+--- `!`, `[` and `]` as selection syntax, so a bare `has:colon` asks for a column
+--- named `has`, and quoting the name stops that.
+---
+--- A name holding a double quote goes bare instead. xan reads `""` inside a
+--- quoted name as two characters rather than as one, so quoting `va"l` asks for
+--- `va""l` and the run fails, while a bare double quote is not selection syntax
+--- and resolves. A name holding a double quote and a syntax character both
+--- cannot be named at all.
 ---@param name string
 ---@return string
 function M.quote_name(name)
+  if name:find('"', 1, true) then
+    return name
+  end
   return name:match("^[%w_]+$") and name or csv_quote(name)
 end
 
@@ -129,7 +138,7 @@ function M.expression(column)
   return string.format("col(%s, %d)", M.string_literal(column.name), column.nth)
 end
 
---- The name shown to the user. Only duplicated names carry the occurrence.
+--- The name shown to the user. Only a duplicated name gets its occurrence.
 ---@param column csv.Column
 ---@return string
 function M.display(column)

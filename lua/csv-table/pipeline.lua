@@ -8,9 +8,13 @@ It is the only place that knows xan's command syntax, and it can be exercised
 without nvim.
 
 The pipeline always starts with `enum`, so a row keeps its source position
-through filtering and sorting. That row id column sits at position 0 of every
-downstream stage and is always addressed as `0`, never by name, so a source
-column sharing its name cannot shadow it.
+through filtering and sorting. That position is the row id, and it is what every
+later command names a row by.
+
+A second `enum` runs after the page slice and numbers the rows the user is
+looking at, counting from one at the top of the first page. Those two columns are
+drawn ahead of the data, and `csv-table.layout` cuts the row id back out of the
+text, so the row number is the first cell anything on screen has.
 ]]
 
 local columns = require("csv-table.columns")
@@ -19,6 +23,9 @@ local expression = require("csv-table.expression")
 -- Taken as a bare function because `format` is what this file calls the value
 -- it would be checking.
 local is_numeric = require("csv-table.format").is_numeric
+
+-- Named apart from the `state` parameter every function here takes.
+local view_state = require("csv-table.state")
 
 local M = {}
 
@@ -56,9 +63,9 @@ end
 local ASCENDING = "▲"
 local DESCENDING = "▼"
 
---- The header text each column is rendered under: its display name, carrying a
---- marker when the view is sorted by it. A multi-key sort numbers its markers,
---- so the header says which key is the most significant.
+--- The header text each column is rendered under: its display name, with an
+--- arrow appended when the view is sorted by it. A multi-key sort numbers its
+--- arrows, so the header says which key is the most significant.
 ---@param selected csv.Column[]
 ---@param order csv.SortKey[]
 ---@return string[]
@@ -129,7 +136,8 @@ end
 
 --- Header names of the columns `view` should right-align. A numeric column
 --- needs this because `printf` leaves it a string, which `view` left-aligns.
---- A column the user aligned carries its own padding, so `view` must leave it be.
+--- A column the user aligned is padded by `printf` already, so `view` must leave
+--- it be.
 ---@param selected csv.Column[]
 ---@param headers string[]
 ---@param formats table<integer, csv.Format>
@@ -149,12 +157,19 @@ local function right_aligned(selected, headers, formats)
   return table.concat(names, ",")
 end
 
---- The columns the buffer shows, row id first.
+--- The columns the buffer draws: the row id, then the row number, then the
+--- source columns on display. The row id leads because `csv-table.layout` cuts
+--- the first cell away, which leaves the row number at the head of every line.
+---
+--- Neither prepended column has a source position, so both take one no source
+--- column can hold and neither finds an entry in `state.formats`.
 ---@param state csv.State
 ---@return csv.Column[]
 local function selected_columns(state)
-  local rowid = { name = state.rowid_name, nth = 0, index = -1, duplicated = false }
-  local selected = { rowid }
+  local selected = {
+    { name = state.rowid_name, nth = 0, index = -1, duplicated = false },
+    { name = state.row_number_name, nth = 0, index = -2, duplicated = false },
+  }
   local source = #state.selected > 0 and state.selected or state.columns
   for _, column in ipairs(source) do
     table.insert(selected, column)
@@ -177,11 +192,10 @@ end
 
 --- The stages that leave exactly the rows the buffer is showing: the filters,
 --- the sort, and the slice that takes the page. Everything after them is
---- presentation, so a command that wants those same rows starts here and a
---- later `slice` counts from the top of the page.
+--- presentation.
 ---@param state csv.State
 ---@return string[]
-function M.page_stages(state)
+local function page_stages(state)
   local stages = M.narrowing_stages(state)
 
   for _, stage in ipairs(sort_stages(state.order)) do
@@ -196,7 +210,15 @@ end
 ---@param state csv.State
 ---@return string
 function M.build(state)
-  local stages = M.page_stages(state)
+  local stages = page_stages(state)
+
+  -- Numbering after the slice counts the rows on the page rather than the rows
+  -- the filters left, so the start says which page these are.
+  table.insert(stages, string.format(
+    "enum -c %s -S %d",
+    shell_quote(state.row_number_name),
+    view_state.first_row_number(state)
+  ))
 
   local selected = selected_columns(state)
   local headers = header_names(selected, state.order)
@@ -205,8 +227,8 @@ function M.build(state)
 
   table.insert(stages, format_stage(selected, headers, state.formats))
 
-  -- Cutting the headers happens after `map`, which addresses each column by
-  -- name and needs those names to stay unique. Two cut headers may well match.
+  -- `map` addresses each column by header name, so the headers are cut only
+  -- after it runs. Two cut headers may well match, and `map` needs them unique.
   local shown = shown_headers(selected, headers, state.formats)
   if shown then
     table.insert(stages, "rename " .. shell_quote(columns.rename_argument(shown)))

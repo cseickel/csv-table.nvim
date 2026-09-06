@@ -86,6 +86,7 @@ M.map = {
   ["<C-S-Down>"] = "extend_to_last_row",
 
   ["y"] = "copy",
+  ["Y"] = "copy_without_headers",
 
   ["r"] = "refresh",
   ["cc"] = "clear_all",

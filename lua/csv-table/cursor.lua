@@ -11,7 +11,7 @@ Every byte offset here comes from `csv-table.layout` for the line the cursor is
 on, because a line holding a multi-byte character has its separators at
 different byte offsets than the header.
 
-Cell 1 is the row id, so the column under the cursor is cell 2 onwards.
+Cell 1 is the row number, so the column under the cursor is cell 2 onwards.
 ]]
 
 local layout = require("csv-table.layout")
@@ -63,19 +63,19 @@ local function placed_in(buffer, window)
   return nil
 end
 
---- How many cells a line of the table holds, the row id counted.
+--- How many cells a line of the table holds, the row number counted.
 ---@param buffer csv.Buffer
 ---@return integer
 local function cell_count(buffer)
   return #selection.selected(buffer.state) + 1
 end
 
---- How far past the cursor the screen is kept scrolled: the row id cell and the
---- borders either side of it, so the first column always shows the row id and
---- the table's left edge, and every other column shows that much of its
---- neighbour. The row id is digits and padding, so its bytes are its columns.
---- In the last column nothing is kept, or the screen would scroll past the
---- table's right edge into blank space.
+--- How far past the cursor the screen is kept scrolled: the row number cell and
+--- the borders either side of it, so the first column always shows the row
+--- number and the table's left edge, and every other column shows that much of
+--- its neighbour. The row number is digits and padding, so its bytes are its
+--- columns. In the last column nothing is kept, or the screen would scroll past
+--- the table's right edge into blank space.
 ---@param buffer csv.Buffer
 ---@param cell integer
 ---@param ranges csv.CellRange[]
@@ -155,8 +155,8 @@ function M.is_placed(buffer, window)
 end
 
 --- Which line and cell the cursor is in, both clamped into the table, so a
---- cursor resting on a border, the row id, or a rule answers with the nearest
---- cell it could act on.
+--- cursor resting on a border, the row number, or a rule answers with the
+--- nearest cell it could act on.
 ---@param buffer csv.Buffer
 ---@param window integer
 ---@return integer line
@@ -321,13 +321,13 @@ end
 --- way is left alone.
 ---@param bufnr integer
 function M.dress(bufnr)
-  local shown = without_hidden(vim.o.guicursor)
-  local wanted = shown
+  local visible = without_hidden(vim.o.guicursor)
+  local setting = visible
   if vim.bo[bufnr].filetype == "csv-table" then
-    wanted = shown == "" and HIDDEN_CURSOR or shown .. "," .. HIDDEN_CURSOR
+    setting = visible == "" and HIDDEN_CURSOR or visible .. "," .. HIDDEN_CURSOR
   end
-  if wanted ~= vim.o.guicursor then
-    vim.o.guicursor = wanted
+  if setting ~= vim.o.guicursor then
+    vim.o.guicursor = setting
   end
 end
 

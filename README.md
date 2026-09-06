@@ -116,6 +116,7 @@ require("csv-table").setup({
     ["<C-S-Down>"] = "extend_to_last_row",
 
     ["y"] = "copy",
+    ["Y"] = "copy_without_headers",
 
     ["r"] = "refresh",
     ["cc"] = "clear_all",
@@ -174,7 +175,7 @@ The following highlight groups are defined by the plugin:
 |---------------------|----------------|--------------------------------------------------|
 | `CsvHeader`         | bold `#ededed` | The header row                                   |
 | `CsvBorder`         | `#444444`      | The lines the table is drawn with                |
-| `CsvRowId`          | `CsvBorder`    | The row number in column one                     |
+| `CsvRowNumber`      | `CsvBorder`    | The row number in column one                     |
 | `CsvNumberPositive` | `#85e0b1`      | A positive number                                |
 | `CsvNumberNegative` | `#ff8066`      | A negative number                                |
 | `CsvDate`           | `#ffd685`      | A date or a time                                 |
@@ -184,6 +185,8 @@ The following highlight groups are defined by the plugin:
 | `CsvCursorCell`     | `reverse`      | The active cell                                  |
 | `CsvFlash`          | `IncSearch`    | The brief flash on a moved column                |
 | `CsvHiddenCursor`   | `blend = 100`  | The real cursor, while a table buffer is current |
+
+`CsvRowNumber` used to be named `CsvRowId`. A config that links `CsvRowId` has to be changed to the new name.
 
 Columns are color coded by data type. The type comes from a 600-row sample: numeric when every value parses as a number, date when every value matches a date or time, and text otherwise. In a numeric column, `CsvNumberNegative` applies to the values starting with a minus sign and `CsvNumberPositive` to the rest.
 
@@ -212,7 +215,9 @@ All mappings are buffer-local in a csv-table buffer. Hit `?` to open a list of a
 | `gg`      | `first_row`    | Move to the top of the page, or to row N    |
 | `G`       | `last_row`     | Move to the bottom of the page, or to row N |
 
-The table has an active cell, the way a spreadsheet does. It is drawn with `CsvCursorCell` and the real cursor is hidden while a table buffer is current. The cursor is constrained to always be in a data cell and never on a border, the row id, the header, or past the table. All movements are by whole cells, and a count moves that many cells, except that `5gg` and `5G` go to row 5 of the page. Any other motion that lands outside a cell, whether a mouse click, `/`, `w` or `%`, is snapped into the nearest one.
+Column one is the row number: the row's position in the table as filtered and sorted, counted from 1. It is a position in the view rather than a line of the file, so after a sort the first row on screen is row 1 whichever line of the file it came from. Numbering runs on across pages, so with a page size of 1000 the second page starts at 1001.
+
+The table has an active cell, the way a spreadsheet does. It is drawn with `CsvCursorCell` and the real cursor is hidden while a table buffer is current. The cursor is constrained to always be in a data cell and never on a border, the row number, the header, or past the table. All movements are by whole cells, and a count moves that many cells, except that `5gg` and `5G` go to the row numbered 5, which is the number drawn in column one. A number belonging to another page stops at the near end of this one. Any other motion that lands outside a cell, whether a mouse click, `/`, `w` or `%`, is snapped into the nearest one.
 
 Hiding the cursor needs `termguicolors` and a terminal that supports cursor styling. Without them the cursor shows as a block at one edge of the active cell.
 
@@ -224,7 +229,7 @@ Hiding the cursor needs `termguicolors` and a terminal that supports cursor styl
 | `<BS>` | `pop_filter`    | Drop the filter added last |
 | `cf`   | `clear_filters` | Drop every filter          |
 
-`f` opens a dialog with comparisons that make sense for the column. Numeric columns get `>`, `>=`, `<`, `<=`, `==` and `!=`. Text columns get equals, not equals, contains, starts with, ends with and regex. Two more options are always available:
+`f` opens a dialog with comparisons that make sense for the column. Numeric columns get `>`, `>=`, `<`, `<=`, `==` and `!=`. Text columns get equals, not equals, contains, starts with, ends with and regex. Every column gets `v` and `e` as well.
 
 - `v` shows the column's distinct values with counts, as a checklist. `<Space>` toggles, `<CR>` applies.
 - `e` lets you write a [moonblade](https://github.com/medialab/xan) expression by hand.
@@ -321,27 +326,28 @@ Marks survive filtering and sorting.
 
 ### Selecting
 
-| Key           | Action                   | Does                                         |
-| ------------- | ------------------------ | -------------------------------------------- |
-| `v`           | `select_cell`            | Select this cell                             |
-| `V`           | `select_row`             | Select this whole row                        |
-| `<S-Space>`   | `select_row`             | Select this whole row                        |
-| `<C-Space>`   | `select_column`          | Select this whole column                     |
-| `<C-a>`       | `select_page`            | Select every cell on this page               |
-| `<Esc>`       | `clear_selection`        | Select nothing                               |
-| `<S-Left>`    | `extend_left`            | Take the selection one column left           |
-| `<S-Right>`   | `extend_right`           | Take the selection one column right          |
-| `<S-Up>`      | `extend_up`              | Take the selection one row up                |
-| `<S-Down>`    | `extend_down`            | Take the selection one row down              |
-| `<C-S-Left>`  | `extend_to_first_column` | Take the selection to the first column       |
-| `<C-S-Right>` | `extend_to_last_column`  | Take the selection to the last column        |
-| `<C-S-Up>`    | `extend_to_first_row`    | Take the selection to the top of the page    |
-| `<C-S-Down>`  | `extend_to_last_row`     | Take the selection to the bottom of the page |
-| `y`           | `copy`                   | Copy the selected cells, or this one         |
+| Key           | Action                   | Does                                             |
+| ------------- | ------------------------ | ------------------------------------------------ |
+| `v`           | `select_cell`            | Select this cell                                 |
+| `V`           | `select_row`             | Select this whole row                            |
+| `<S-Space>`   | `select_row`             | Select this whole row                            |
+| `<C-Space>`   | `select_column`          | Select this whole column                         |
+| `<C-a>`       | `select_page`            | Select every cell on this page                   |
+| `<Esc>`       | `clear_selection`        | Select nothing                                   |
+| `<S-Left>`    | `extend_left`            | Take the selection one column left               |
+| `<S-Right>`   | `extend_right`           | Take the selection one column right              |
+| `<S-Up>`      | `extend_up`              | Take the selection one row up                    |
+| `<S-Down>`    | `extend_down`            | Take the selection one row down                  |
+| `<C-S-Left>`  | `extend_to_first_column` | Take the selection to the first column           |
+| `<C-S-Right>` | `extend_to_last_column`  | Take the selection to the last column            |
+| `<C-S-Up>`    | `extend_to_first_row`    | Take the selection to the top of the page        |
+| `<C-S-Down>`  | `extend_to_last_row`     | Take the selection to the bottom of the page     |
+| `y`           | `copy`                   | Copy the selected cells under their column names |
+| `Y`           | `copy_without_headers`   | Copy the selected cells alone                    |
 
 Extending moves the cursor with the selection, the way a spreadsheet moves the active cell, so the shifted arrows also walk the table. Moving the cursor without shift drops the selection, as in a spreadsheet. A selection stops at the page, and turning the page loses it.
 
-`y` copies the selected cells to the `+` register as tab separated text, which pastes into a spreadsheet as cells. With nothing selected it copies the cell under the cursor. The values come from the file, so a column too narrow to show its values still copies them whole.
+`y` copies the selected cells to the `+` register as tab separated text, which pastes into a spreadsheet as cells, under a header row of the column names as the file spells them. `Y` copies the same cells without that header row. With nothing selected, either key copies the cell under the cursor. The values come from the file, so a column too narrow to show its values still copies them whole, and a value holding a tab or a newline comes out quoted.
 
 The Excel keys, `<S-Space>`, `<C-Space>` and the `<C-S-Arrow>` set, need a terminal that implements the kitty keyboard protocol, which ghostty, kitty and wezterm do.
 

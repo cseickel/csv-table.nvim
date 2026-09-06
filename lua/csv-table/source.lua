@@ -17,27 +17,36 @@ local M = {}
 ---@class csv.Source
 ---@field path string
 ---@field columns csv.Column[]
+---@field row_number_name string
 ---@field rowid_name string
 ---@field formats table<string, csv.Format>
 ---@field sheet integer   0-based index of the sheet read, 0 for a source without sheets.
 ---@field sheets string[] Every sheet name, empty for a source without sheets.
 
---- A name for the row id column that no source column already holds. `enum`
---- prepends its column before `select` runs, so a collision would make a bare
---- source name select the row id instead.
+--- Names for the two columns the pipeline prepends, neither of which a source
+--- column already holds. `enum` prepends before `select` runs, so a collision
+--- would make a bare source name select a prepended column instead.
+---
+--- The row number is the one the user reads, so it takes `row` and the row id
+--- settles for whatever is left.
 ---@param names string[]
----@return string
-local function rowid_name(names)
+---@return string row_number_name
+---@return string rowid_name
+local function prepended_names(names)
   local taken = {}
   for _, name in ipairs(names) do
     taken[name] = true
   end
 
-  local candidate = "row"
-  while taken[candidate] do
-    candidate = candidate .. "_"
+  local function pick(candidate)
+    while taken[candidate] do
+      candidate = candidate .. "_"
+    end
+    taken[candidate] = true
+    return candidate
   end
-  return candidate
+
+  return pick("row"), pick("id")
 end
 
 --- The lines of `stdout`, blank ones included. A sheet may hold an empty header
@@ -69,12 +78,14 @@ local function inspect_sheet(path, sheet, sheets, on_done, on_error)
 
     local source_columns = columns.from_names(names)
     local rename = columns.rename_argument(columns.display_names(source_columns))
+    local row_number_name, rowid_name = prepended_names(names)
 
     query.run_json_lines(commands.sample(path, sheet, rename), on_error, function(sample)
       on_done({
         path = path,
         columns = source_columns,
-        rowid_name = rowid_name(names),
+        row_number_name = row_number_name,
+        rowid_name = rowid_name,
         formats = format.analyse(sample, source_columns),
         sheet = sheet,
         sheets = sheets,

@@ -5,6 +5,11 @@ Reading `xan view` output.
 column starts and which source row each line came from. This module turns that
 text into the lookups the cursor and the painting need, and holds nothing else.
 
+The row id is drawn as the first cell because the drawn table is the only way it
+reaches Lua. It answers no question the reader has, so `parse` reads it into
+`rowids` and cuts that cell from every line. What the buffer receives starts at
+the row number, and nothing on screen can be yanked or searched by row id.
+
 Every column is drawn at the same display width on every line, so one set of
 cell ranges describes the whole table in display columns. The cursor and the
 extmarks take byte offsets, and a line holding a multi-byte character has its
@@ -46,10 +51,10 @@ local function trim(value)
   return (value:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
---- The byte range of every cell on one line, cell 1 being the row id. The ends
---- of the line bound the first and last cells, and a zero width range is
---- dropped, so the count comes out the same whether or not the theme in use
---- draws the outer borders. `view` pads every cell, so no real cell is empty.
+--- The byte range of every cell on one line. The ends of the line bound the
+--- first and last cells, and a zero width range is dropped, so the count comes
+--- out the same whether or not the theme in use draws the outer borders. `view`
+--- pads every cell, so no real cell is empty.
 ---@param line string
 ---@return csv.CellRange[]
 local function scan(line)
@@ -89,7 +94,7 @@ local function same_ranges(left, right)
   return true
 end
 
---- The byte range of every cell on line `index`, cell 1 being the row id. A
+--- The byte range of every cell on line `index`, cell 1 being the row number. A
 --- rule has no cells, so `index` is the header or a data line.
 ---@param layout csv.Layout
 ---@param index integer
@@ -129,7 +134,7 @@ function M.cell_width(layout, cell)
 end
 
 --- Which cell of line `index` holds byte offset `column`, cell 1 being the row
---- id. A byte on a separator answers with the cell to its right, and a byte
+--- number. A byte on a separator answers with the cell to its right, and a byte
 --- past the last cell answers with the last cell, so every byte of the line
 --- names a cell.
 ---@param layout csv.Layout
@@ -148,15 +153,54 @@ end
 
 --- Whether `line` is one of the horizontal rules rather than a row. Every theme
 --- draws its rules from dashes and corners, and only a header or a data row
---- carries the vertical separator.
+--- holds the vertical separator.
 ---@param line string
 ---@return boolean
 local function is_rule(line)
   return line:find("─", 1, true) ~= nil and line:find(SEPARATOR, 1, true) == nil
 end
 
+--- Where character `position` starts in `line`, counting from one. A character
+--- begins at every byte that is not a UTF-8 continuation byte.
+---@param line string
+---@param position integer
+---@return integer
+local function byte_of_character(line, position)
+  local seen = 0
+  for index = 1, #line do
+    local byte = line:byte(index)
+    if byte < 0x80 or byte >= 0xC0 then
+      seen = seen + 1
+      if seen == position then
+        return index
+      end
+    end
+  end
+  return #line + 1
+end
+
+--- `line` without its first cell: the `width` characters the cell is drawn in
+--- and the separator that closes them, left where they sit behind `leading`.
+---
+--- Counting characters rather than bytes is what lets one cut serve a rule as
+--- well as a row. Every line spends the same number of characters on the cell,
+--- while a rule spends three bytes on each of them and a row of digits spends
+--- one.
+---@param line string
+---@param leading integer Characters of outer border ahead of the cell, 1 or 0.
+---@param width integer Characters the cell is drawn in, padding included.
+---@return string
+local function without_first_cell(line, leading, width)
+  local from = byte_of_character(line, leading + 1)
+  local to = byte_of_character(line, leading + width + 2)
+  return line:sub(1, from - 1) .. line:sub(to)
+end
+
 --- Read the table `xan view` drew. It pads its output with a blank line at each
 --- end, and draws a top rule, a header, a rule, the rows, and a bottom rule.
+---
+--- The row ids come out of the first cell before that cell is cut away, so
+--- every range this returns describes the text the buffer will hold.
 ---@param output string[]
 ---@return csv.Layout|nil layout
 ---@return string|nil error
@@ -174,28 +218,47 @@ function M.parse(output)
   -- Cut the top rule
   table.remove(lines, 1)
 
+  local drawn = scan(lines[1])
+  if #drawn < 2 then
+    return nil, "xan view drew no row id"
+  end
+  -- The outer border is one character where the theme draws one, and `scan`
+  -- starts the first cell past it.
+  local leading = drawn[1].from > 0 and 1 or 0
+  local id_width = drawn[1].to - drawn[1].from
+
+  local first_row, last_row = 3, #lines - 1
+  local rowids = {}
+  local lines_by_rowid = {}
+  for index = first_row, last_row do
+    local line = lines[index]
+    local id = scan(line)[1]
+    local rowid = id and tonumber(trim(line:sub(id.from + 1, id.to)))
+    if rowid then
+      rowids[index] = rowid
+      lines_by_rowid[rowid] = index
+    end
+  end
+
+  for index = 1, #lines do
+    lines[index] = without_first_cell(lines[index], leading, id_width)
+  end
+
   local layout = {
     lines = lines,
     header = 1,
-    first_row = 3,
-    last_row = #lines - 1,
-    rowids = {},
-    lines_by_rowid = {},
+    first_row = first_row,
+    last_row = last_row,
+    rowids = rowids,
+    lines_by_rowid = lines_by_rowid,
     ranges = scan(lines[1]),
     ranges_by_line = {},
   }
 
-  for index = layout.first_row, layout.last_row do
-    local line = lines[index]
-    local ranges = scan(line)
+  for index = first_row, last_row do
+    local ranges = scan(lines[index])
     if not same_ranges(ranges, layout.ranges) then
       layout.ranges_by_line[index] = ranges
-    end
-
-    local rowid = ranges[1] and tonumber(trim(line:sub(ranges[1].from + 1, ranges[1].to)))
-    if rowid then
-      layout.rowids[index] = rowid
-      layout.lines_by_rowid[rowid] = index
     end
   end
 

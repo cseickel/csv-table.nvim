@@ -133,6 +133,10 @@ utils.register_action("extend_to_last_column", "Take the selection to the last c
 utils.register_action("extend_to_first_row", "Take the selection to the top of the page", extender(-EDGE, 0))
 utils.register_action("extend_to_last_row", "Take the selection to the bottom of the page", extender(EDGE, 0))
 
-utils.register_action("copy", "Copy the selected cells, or this one", function(buf)
-  inspect.copy(buf)
+utils.register_action("copy", "Copy the selected cells under their column names", function(buf)
+  inspect.copy(buf, true)
+end)
+
+utils.register_action("copy_without_headers", "Copy the selected cells alone", function(buf)
+  inspect.copy(buf, false)
 end)

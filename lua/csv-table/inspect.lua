@@ -2,7 +2,7 @@
 The values behind the table.
 
 A value wider than its column is drawn cut, so the text on screen cannot answer
-what a cell holds. Both of these read the row from the file through
+what a cell holds. Everything here goes back to the file through
 `csv-table.query`, so every value is the one in the source, at full length and
 before any formatting.
 
@@ -18,6 +18,7 @@ local picker = require("csv-table.picker")
 local query = require("csv-table.query")
 local range = require("csv-table.range")
 local selection = require("csv-table.selection")
+local state = require("csv-table.state")
 local window = require("csv-table.window")
 
 local M = {}
@@ -64,18 +65,23 @@ local function named_values(buf, row)
   return values
 end
 
---- Read the row the cursor is on. The row id goes to `on_row` as well, because
---- the cursor may have moved while xan ran. Nothing happens before the first
---- paint, when there is no row to be on.
+--- Read the row the cursor is on. The number that row is drawn with goes to
+--- `on_row` as well, because the cursor may have moved while xan ran, and it is
+--- the number rather than the row id because the row id is not on screen to be
+--- recognised. Nothing happens before the first paint, when there is no row to
+--- be on.
 ---@param buf csv.Buffer
----@param on_row fun(row: table<string, string>, rowid: integer)
+---@param on_row fun(row: table<string, string>, number: integer)
 local function with_row(buf, on_row)
   local cell = cursor.cell_ref(buf, 0)
   if not cell then
     return
   end
+
+  local line = buf.layout.lines_by_rowid[cell.row]
+  local number = state.first_row_number(buf.state) + line - buf.layout.first_row
   query.row(buf.state, cell.row, query.report, function(row)
-    on_row(row, cell.row)
+    on_row(row, number)
   end)
 end
 
@@ -93,44 +99,31 @@ function M.cell(buf, column)
   end)
 end
 
---- Hold `text` for pasting, in the system clipboard and in the unnamed register,
---- so `p` inside nvim pastes it whether or not `clipboard` is set to follow the
---- system one.
+--- Yank `text` into the system clipboard and the unnamed register, so `p` inside
+--- nvim pastes it whether or not `clipboard` is set to follow the system one.
 ---@param text string
-local function hold(text)
+local function yank(text)
   vim.fn.setreg("+", text)
   vim.fn.setreg('"', text)
-end
-
---- One field of tab separated text. A value holding a tab or a newline would
---- otherwise read as another field or another row, so it is quoted the way a
---- spreadsheet reads it back.
----@param value string
----@return string
-local function tsv_field(value)
-  if value:find('[\t\n\r"]') then
-    return '"' .. value:gsub('"', '""') .. '"'
-  end
-  return value
 end
 
 --- What copying should take: the selected cells, or the cell under the cursor
 --- when nothing is selected.
 ---@param buf csv.Buffer
 ---@return csv.Bounds|nil
-local function block(buf)
-  local painted = buf.layout
-  if not painted then
+local function copy_bounds(buf)
+  local layout = buf.layout
+  if not layout then
     return nil
   end
 
-  local bounds = range.bounds(buf.state, painted)
+  local bounds = range.bounds(buf.state, layout)
   if bounds then
     return bounds
   end
 
   local cell = cursor.cell_ref(buf, 0)
-  local line = cell and painted.lines_by_rowid[cell.row]
+  local line = cell and layout.lines_by_rowid[cell.row]
   if not line then
     return nil
   end
@@ -138,50 +131,49 @@ local function block(buf)
 end
 
 --- Copy the selected cells as tab separated text, which is what a spreadsheet
---- pastes as cells. The values come from the file, so a column narrow enough to
---- have been drawn cut still copies whole.
+--- pastes as cells. `xan` reads the values from the file and writes the text, so
+--- a column narrow enough to have been drawn cut still copies whole and a value
+--- holding a tab or a newline comes out quoted.
 ---@param buf csv.Buffer
----@param excludeHeaders boolean
-function M.copy(buf, excludeHeaders)
-  local bounds = block(buf)
+---@param headers boolean Whether to put the column names above the cells.
+function M.copy(buf, headers)
+  local bounds = copy_bounds(buf)
   if not bounds then
     return query.report("there is nothing to copy")
   end
 
-  local shown = selection.selected(buf.state)
-  local wanted = {}
+  local displayed = selection.selected(buf.state)
+  local copied = {}
   for position = bounds.left, bounds.right do
-    local column = shown[position]
+    local column = displayed[position]
     if not column then
       return query.report("the selected columns are no longer on display")
     end
-    wanted[#wanted + 1] = column
+    copied[#copied + 1] = column
   end
 
-  local rows, across = range.size(bounds)
-  local opts = { first = bounds.top - buf.layout.first_row, count = rows, columns = wanted }
-
-  query.cells(buf.state, opts, query.report, function(fetched)
-    local lines = {}
-    for index, row in ipairs(fetched) do
-      local fields = {}
-      for position, column in ipairs(wanted) do
-        fields[position] = tsv_field(value_of(row, columns.display(column)))
-      end
-      lines[index] = table.concat(fields, "\t")
+  local rowids = {}
+  for line = bounds.top, bounds.bottom do
+    local rowid = buf.layout.rowids[line]
+    if not rowid then
+      return query.report("the selected rows are no longer on display")
     end
+    rowids[#rowids + 1] = rowid
+  end
 
-    hold(table.concat(lines, "\n"))
-    vim.notify(string.format("csv-table: copied %d rows by %d columns", #lines, across))
+  local opts = { rowids = rowids, columns = copied, headers = headers }
+  query.copy(buf.state, opts, query.report, function(text)
+    yank(text)
+    vim.notify(string.format("csv-table: copied %d rows by %d columns", #rowids, #copied))
   end)
 end
 
 --- Search the row under the cursor by column name or by value, and copy what is
 --- chosen. A row is read by searching it once a file is wide enough that the
---- column wanted is off the screen.
+--- column being read is off the screen.
 ---@param buf csv.Buffer
 function M.row(buf)
-  with_row(buf, function(row, rowid)
+  with_row(buf, function(row, number)
     local values = named_values(buf, row)
 
     local width = 0
@@ -190,13 +182,13 @@ function M.row(buf)
     end
 
     picker.choose(values, {
-      prompt = "row " .. rowid,
+      prompt = "row " .. number,
       format_item = function(named)
         local padding = string.rep(" ", width - columns.text_length(named.name))
         return named.name .. padding .. GAP .. named.value:gsub("%s+", " ")
       end,
     }, function(named)
-      hold(named.value)
+      yank(named.value)
       vim.notify("csv-table: copied " .. named.name)
     end)
   end)

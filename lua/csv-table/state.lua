@@ -51,6 +51,7 @@ M.page_size = 1000
 ---@field sheet integer         0-based sheet being read, 0 for a source without sheets.
 ---@field sheets string[]       Every sheet name, empty for a source without sheets.
 ---@field columns csv.Column[]  Every source column, in file order.
+---@field row_number_name string Name for the prepended row number, absent from `columns`.
 ---@field rowid_name string     Name for the prepended row id, absent from `columns`.
 ---@field where csv.Filter[]    ANDed together.
 ---@field order csv.SortKey[]   Most significant key first.
@@ -72,6 +73,7 @@ function M.new(source)
     sheet = source.sheet,
     sheets = source.sheets,
     columns = source.columns,
+    row_number_name = source.row_number_name,
     rowid_name = source.rowid_name,
     formats = source.formats,
     where = {},
@@ -227,6 +229,15 @@ end
 ---@param page integer
 function M.goto_page(state, page)
   state.page = math.max(0, page)
+end
+
+--- The number the first row of the page is drawn with. Numbering runs across the
+--- whole result rather than restarting on each page, so the row a user names is
+--- the row they would name in a spreadsheet.
+---@param state csv.State
+---@return integer
+function M.first_row_number(state)
+  return state.page * state.limit + 1
 end
 
 ---@param state csv.State

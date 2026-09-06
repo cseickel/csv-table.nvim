@@ -46,8 +46,8 @@ function M.open(lines, opts)
   vim.bo[bufnr].bufhidden = "wipe"
 
   local width = math.max(math.min(longest(lines) + 2, vim.o.columns - 8), #opts.title + 6)
-  local wanted = opts.wrap and wrapped_height(lines, width) or #lines
-  local height = math.max(math.min(wanted, vim.o.lines - 8), 1)
+  local content = opts.wrap and wrapped_height(lines, width) or #lines
+  local height = math.max(math.min(content, vim.o.lines - 8), 1)
 
   local winid = vim.api.nvim_open_win(bufnr, true, {
     relative = "editor",
