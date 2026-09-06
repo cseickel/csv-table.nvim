@@ -74,9 +74,9 @@ end
 --- Combine every filter into the single expression `xan filter` receives.
 ---@param state csv.State
 ---@return string
-function M.where(state)
+function M.all_filters(state)
   local parts = {}
-  for index, filter in ipairs(state.where) do
+  for index, filter in ipairs(state.filters) do
     parts[index] = M.filter(filter, state)
   end
   return table.concat(parts, " && ")
@@ -88,27 +88,27 @@ local PAD_FUNCTION = { left = "rpad", center = "pad", right = "lpad" }
 ---@param reference string A `col(...)` call naming the column.
 ---@param format csv.Format
 ---@return string
-function M.value(reference, format)
-  local written = reference
+function M.value_expression(reference, format)
+  local expr = reference
 
   if format.spec then
     local argument = format.spec:match(NUMERIC_CONVERSION) and ("float(" .. reference .. ")") or reference
-    written = string.format("printf(%s, %s)", columns.string_literal(format.spec), argument)
+    expr = string.format("printf(%s, %s)", columns.string_literal(format.spec), argument)
   elseif format.kind == "float" then
-    written = string.format('printf("%%.%df", float(%s))', format.precision, reference)
+    expr = string.format('printf("%%.%df", float(%s))', format.precision, reference)
   end
 
   if format.align then
     -- Slicing counts characters where `printf` counts bytes, so this never cuts
     -- a multi-byte character in half.
     local width = format.width
-    written = string.format(
+    expr = string.format(
       'if(len(%s) > %d, %s[0:%d] ++ "…", %s(%s, %d))',
-      written, width, written, width - 1, PAD_FUNCTION[format.align], written, width
+      expr, width, expr, width - 1, PAD_FUNCTION[format.align], expr, width
     )
   end
 
-  return written
+  return expr
 end
 
 return M

@@ -32,18 +32,18 @@ local STAT_FIELDS = {
 function M.bindings()
   local actions = require("csv-table.actions")
 
-  local bound = {}
+  local bindings = {}
   for key, name in pairs(keymaps.map) do
-    local described = actions.get_action(name)
-    if described then
-      table.insert(bound, { key = key, name = name, description = described.description })
+    local action = actions.get_action(name)
+    if action then
+      table.insert(bindings, { key = key, name = name, description = action.description })
     end
   end
 
-  table.sort(bound, function(left, right)
+  table.sort(bindings, function(left, right)
     return left.description < right.description
   end)
-  return bound
+  return bindings
 end
 
 --- Search the bindings and run the one chosen, so a key is something to find
@@ -51,14 +51,14 @@ end
 ---@param buf csv.Buffer
 function M.help(buf)
   local actions = require("csv-table.actions")
-  local bound = M.bindings()
+  local bindings = M.bindings()
 
   local width = 0
-  for _, binding in ipairs(bound) do
+  for _, binding in ipairs(bindings) do
     width = math.max(width, #binding.key)
   end
 
-  picker.choose(bound, {
+  picker.choose(bindings, {
     prompt = "csv keys",
     format_item = function(binding)
       return string.format("%-" .. width .. "s   %s", binding.key, binding.description)
@@ -74,10 +74,10 @@ end
 local function view_lines(buf)
   local lines = {}
 
-  if #buf.state.where == 0 then
+  if #buf.state.filters == 0 then
     table.insert(lines, "  no filters")
   end
-  for _, filter in ipairs(buf.state.where) do
+  for _, filter in ipairs(buf.state.filters) do
     if filter.type == "marked" then
       table.insert(lines, "  marked rows only")
     elseif filter.type == "expr" then
@@ -99,10 +99,10 @@ local function view_lines(buf)
   end
 
   table.insert(lines, "")
-  if #buf.state.order == 0 then
+  if #buf.state.sort_keys == 0 then
     table.insert(lines, "  no sort")
   end
-  for position, key in ipairs(buf.state.order) do
+  for position, key in ipairs(buf.state.sort_keys) do
     table.insert(lines, string.format(
       "  %d. %s %s",
       position,
@@ -126,7 +126,7 @@ local function column_lines(buf, stats)
     "column", "kind", "dec", "align", "min", "max", "mean", "distinct"
   ) }
 
-  for _, column in ipairs(selection.selected(buf.state)) do
+  for _, column in ipairs(selection.display_columns(buf.state)) do
     local name = columns.display(column)
     local format = buf.state.formats[column.index] or { kind = "text", precision = 0 }
     local summary = stats[column.index + 2] or {}

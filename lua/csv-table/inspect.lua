@@ -68,7 +68,7 @@ end
 --- Read the row the cursor is on. The number that row is drawn with goes to
 --- `on_row` as well, because the cursor may have moved while xan ran, and it is
 --- the number rather than the row id because the row id is not on screen to be
---- recognised. Nothing happens before the first paint, when there is no row to
+--- recognized. Nothing happens before the first render, when there is no row to
 --- be on.
 ---@param buf csv.Buffer
 ---@param on_row fun(row: table<string, string>, number: integer)
@@ -142,7 +142,7 @@ function M.copy(buf, headers)
     return query.report("there is nothing to copy")
   end
 
-  local displayed = selection.selected(buf.state)
+  local displayed = selection.display_columns(buf.state)
   local copied = {}
   for position = bounds.left, bounds.right do
     local column = displayed[position]
@@ -177,19 +177,19 @@ function M.row(buf)
     local values = named_values(buf, row)
 
     local width = 0
-    for _, named in ipairs(values) do
-      width = math.max(width, columns.text_length(named.name))
+    for _, field in ipairs(values) do
+      width = math.max(width, columns.text_length(field.name))
     end
 
     picker.choose(values, {
       prompt = "row " .. number,
-      format_item = function(named)
-        local padding = string.rep(" ", width - columns.text_length(named.name))
-        return named.name .. padding .. GAP .. named.value:gsub("%s+", " ")
+      format_item = function(field)
+        local padding = string.rep(" ", width - columns.text_length(field.name))
+        return field.name .. padding .. GAP .. field.value:gsub("%s+", " ")
       end,
-    }, function(named)
-      yank(named.value)
-      vim.notify("csv-table: copied " .. named.name)
+    }, function(field)
+      yank(field.value)
+      vim.notify("csv-table: copied " .. field.name)
     end)
   end)
 end

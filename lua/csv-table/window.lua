@@ -2,7 +2,7 @@
 Floating windows.
 
 The filter dialog and the panels all want the same thing: some lines of text in
-a centred float that closes on `q` or Escape. This is that, and nothing else.
+a centered float that closes on `q` or Escape. This is that, and nothing else.
 
 A list to search rather than read goes through `csv-table.picker` instead.
 ]]
@@ -11,12 +11,12 @@ local M = {}
 
 ---@param lines string[]
 ---@return integer
-local function longest(lines)
+local function max_line_width(lines)
   local width = 0
   for _, line in ipairs(lines) do
-    local measured = vim.fn.strdisplaywidth(line)
-    if measured > width then
-      width = measured
+    local line_width = vim.fn.strdisplaywidth(line)
+    if line_width > width then
+      width = line_width
     end
   end
   return width
@@ -34,7 +34,7 @@ local function wrapped_height(lines, width)
   return height
 end
 
---- Open `lines` in a centred float.
+--- Open `lines` in a centered float.
 ---@param lines string[]
 ---@param opts { title: string, modifiable: boolean|nil, wrap: boolean|nil }
 ---@return integer bufnr
@@ -45,9 +45,9 @@ function M.open(lines, opts)
   vim.bo[bufnr].modifiable = opts.modifiable or false
   vim.bo[bufnr].bufhidden = "wipe"
 
-  local width = math.max(math.min(longest(lines) + 2, vim.o.columns - 8), #opts.title + 6)
-  local content = opts.wrap and wrapped_height(lines, width) or #lines
-  local height = math.max(math.min(content, vim.o.lines - 8), 1)
+  local width = math.max(math.min(max_line_width(lines) + 2, vim.o.columns - 8), #opts.title + 6)
+  local content_height = opts.wrap and wrapped_height(lines, width) or #lines
+  local height = math.max(math.min(content_height, vim.o.lines - 8), 1)
 
   local winid = vim.api.nvim_open_win(bufnr, true, {
     relative = "editor",

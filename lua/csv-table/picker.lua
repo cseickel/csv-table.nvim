@@ -17,9 +17,9 @@ local M = {}
 ---@param opts { prompt: string, format_item: fun(item: T): string }
 ---@param on_choice fun(item: T)
 function M.choose(items, opts, on_choice)
-  vim.ui.select(items, opts, function(chosen)
-    if chosen then
-      on_choice(chosen)
+  vim.ui.select(items, opts, function(item)
+    if item then
+      on_choice(item)
     end
   end)
 end

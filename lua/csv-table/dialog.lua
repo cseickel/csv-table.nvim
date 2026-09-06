@@ -46,14 +46,14 @@ local TEXT_CHOICES = {
 
 --- Draw the checklist for the value picker.
 ---@param values csv.Frequency[]
----@param chosen table<integer, boolean>
+---@param checked table<integer, boolean>
 ---@return string[]
-local function checklist(values, chosen)
+local function checklist(values, checked)
   local lines = {}
   for index, entry in ipairs(values) do
     lines[index] = string.format(
       "  [%s] %-40s %s",
-      chosen[index] and "x" or " ",
+      checked[index] and "x" or " ",
       entry.value,
       entry.count
     )
@@ -72,38 +72,38 @@ local function pick_values(buf, column, values)
     return query.report("no values in " .. columns.display(column))
   end
 
-  local chosen = {}
-  local bufnr, winid = window.open(checklist(values, chosen), {
+  local checked = {}
+  local bufnr, winid = window.open(checklist(values, checked), {
     title = columns.display(column) .. "  (space toggles, enter applies)",
     modifiable = true,
   })
 
   local function redraw()
     vim.bo[bufnr].modifiable = true
-    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, checklist(values, chosen))
+    vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, checklist(values, checked))
     vim.bo[bufnr].modifiable = false
   end
   redraw()
 
   vim.keymap.set("n", "<Space>", function()
     local line = vim.api.nvim_win_get_cursor(winid)[1]
-    chosen[line] = not chosen[line] or nil
+    checked[line] = not checked[line] or nil
     redraw()
     vim.api.nvim_win_set_cursor(winid, { line, 0 })
   end, { buffer = bufnr, nowait = true })
 
   vim.keymap.set("n", "<CR>", function()
-    local picked = {}
-    for index in pairs(chosen) do
-      table.insert(picked, values[index].value)
+    local filter_values = {}
+    for index in pairs(checked) do
+      table.insert(filter_values, values[index].value)
     end
     window.close(winid)
 
-    if #picked == 0 then
+    if #filter_values == 0 then
       return
     end
-    table.sort(picked)
-    state.add_filter(buf.state, { type = "in", column = column, values = picked })
+    table.sort(filter_values)
+    state.add_filter(buf.state, { type = "in", column = column, values = filter_values })
     buffer.render(buf)
   end, { buffer = bufnr, nowait = true })
 end
@@ -163,10 +163,10 @@ function M.sheets(buf)
   vim.api.nvim_win_set_cursor(winid, { buf.state.sheet + 1, 0 })
 
   vim.keymap.set("n", "<CR>", function()
-    local chosen = vim.api.nvim_win_get_cursor(winid)[1] - 1
+    local sheet = vim.api.nvim_win_get_cursor(winid)[1] - 1
     window.close(winid)
-    if chosen ~= buf.state.sheet then
-      buffer.open_sheet(buf, chosen)
+    if sheet ~= buf.state.sheet then
+      buffer.open_sheet(buf, sheet)
     end
   end, { buffer = bufnr, nowait = true })
 end

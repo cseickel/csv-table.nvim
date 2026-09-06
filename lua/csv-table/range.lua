@@ -3,7 +3,7 @@ The block of cells the user has picked out.
 
 A range is an anchor cell, a cursor cell, and everything between them. Both are
 held as a source row id and a position among the columns on display, so a
-repaint that moves a row up or down the page keeps the same cells selected.
+render that moves a row up or down the page keeps the same cells selected.
 
 Row ids do not order the range, because a sort puts them on the page in any
 order, so the lines they are drawn on say which rows lie between the two ends.
@@ -94,7 +94,7 @@ end
 --- reach past the cell the user is looking at.
 ---@param cell csv.CellRef
 ---@param layout csv.Layout
----@param delta { rows: integer, columns: integer, shown: integer } `shown` is how many columns are on display.
+---@param delta { rows: integer, columns: integer, column_count: integer } `column_count` is how many columns are on display.
 ---@return csv.CellRef|nil
 function M.step(cell, layout, delta)
   local line = layout.lines_by_rowid[cell.row]
@@ -102,15 +102,15 @@ function M.step(cell, layout, delta)
     return nil
   end
 
-  local landed = math.min(math.max(line + delta.rows, layout.first_row), layout.last_row)
-  local row = layout.rowids[landed]
+  local target_line = math.min(math.max(line + delta.rows, layout.first_row), layout.last_row)
+  local row = layout.rowids[target_line]
   if not row then
     return nil
   end
 
   return {
     row = row,
-    column = math.min(math.max(cell.column + delta.columns, 1), delta.shown),
+    column = math.min(math.max(cell.column + delta.columns, 1), delta.column_count),
   }
 end
 

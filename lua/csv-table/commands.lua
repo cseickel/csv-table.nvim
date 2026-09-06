@@ -14,12 +14,12 @@ local pipeline = require("csv-table.pipeline")
 local M = {}
 
 --- Formats `xan from` reads that hold more than one table.
-local SHEETED = { xls = true, xlsx = true, xlsb = true, ods = true }
+local WORKBOOK_FORMATS = { xls = true, xlsx = true, xlsb = true, ods = true }
 
 local SAMPLE_ROWS = 600
 -- `sample` reads whatever it is given, so the sample is drawn from the head of
 -- the file rather than from all of it.
-local SAMPLE_WINDOW = 60000
+local SAMPLE_HEAD_ROWS = 60000
 
 ---@param path string
 ---@return string
@@ -32,7 +32,7 @@ end
 ---@param path string
 ---@return boolean
 function M.has_sheets(path)
-  return SHEETED[extension(path)] == true
+  return WORKBOOK_FORMATS[extension(path)] == true
 end
 
 --- The stage that turns a source into CSV, absent when it already is one.
@@ -81,7 +81,7 @@ end
 ---@return string[]
 function M.sample(path, sheet, rename_argument)
   return run(path, sheet, table.concat({
-    string.format("slice -l %d", SAMPLE_WINDOW),
+    string.format("slice -l %d", SAMPLE_HEAD_ROWS),
     string.format("sample %d", SAMPLE_ROWS),
     "rename " .. pipeline.quote(rename_argument),
     "to jsonl --strings '*'",
@@ -131,14 +131,14 @@ end
 ---@param rowids integer[]
 ---@return string[]
 local function ordering_stages(state, rowids)
-  local places = {}
+  local positions = {}
   for position, rowid in ipairs(rowids) do
-    places[position] = string.format('"%d": %d', rowid, position)
+    positions[position] = string.format('"%d": %d', rowid, position)
   end
 
   local expression = string.format(
     "get({%s}, col(%s, 0)) as %s",
-    table.concat(places, ", "),
+    table.concat(positions, ", "),
     columns.string_literal(state.rowid_name),
     ORDER_COLUMN
   )
@@ -199,7 +199,7 @@ end
 ---@param state csv.State
 ---@param stage string
 ---@return string[]
-local function narrowed(state, stage)
+local function narrowed_argv(state, stage)
   local stages = pipeline.narrowing_stages(state)
   table.insert(stages, stage)
   return run(state.source, state.sheet, table.concat(stages, " | "))
@@ -209,7 +209,7 @@ end
 ---@param state csv.State
 ---@return string[]
 function M.count(state)
-  return narrowed(state, "count")
+  return narrowed_argv(state, "count")
 end
 
 --- The argv listing the distinct values of `column` among the rows the current
@@ -219,10 +219,10 @@ end
 ---@return string[]
 function M.frequency(state, column)
   local selector = pipeline.quote(columns.selector(column))
-  return narrowed(state, "frequency -s " .. selector .. " -A | to jsonl --strings '*'")
+  return narrowed_argv(state, "frequency -s " .. selector .. " -A | to jsonl --strings '*'")
 end
 
---- The argv summarising the rows the current filters leave, one JSON object per
+--- The argv summarizing the rows the current filters leave, one JSON object per
 --- column, or per every column when `column` is absent.
 ---@param state csv.State
 ---@param column csv.Column|nil
@@ -232,7 +232,7 @@ function M.stats(state, column)
   if column then
     stage = stage .. " -s " .. pipeline.quote(columns.selector(column))
   end
-  return narrowed(state, stage .. " | to jsonl --strings '*'")
+  return narrowed_argv(state, stage .. " | to jsonl --strings '*'")
 end
 
 return M

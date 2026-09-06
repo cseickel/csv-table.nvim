@@ -26,14 +26,14 @@ end
 --- to another page clamps to the near end of this one.
 ---@param edge "first_row"|"last_row"
 ---@return fun(buf: csv.Buffer)
-local function row_goer(edge)
+local function row_jump_action(edge)
   return function(buf)
     local layout = buf.layout
     if not layout then
       return
     end
-    local at = cursor.cell_ref(buf, 0)
-    if not at then
+    local cell = cursor.cell_ref(buf, 0)
+    if not cell then
       return
     end
 
@@ -41,7 +41,7 @@ local function row_goer(edge)
     if vim.v.count > 0 then
       line = layout.first_row + vim.v.count - state.first_row_number(buf.state)
     end
-    cursor.move_to(buf, 0, line, at.column + 1)
+    cursor.move_to(buf, 0, line, cell.column + 1)
   end
 end
 
@@ -52,5 +52,5 @@ utils.register_action("prev_row", "Move up a row", stepper(-1, 0))
 
 utils.register_action("first_column", "Move to the first column", stepper(0, -utils.EDGE))
 utils.register_action("last_column", "Move to the last column", stepper(0, utils.EDGE))
-utils.register_action("first_row", "Move to the top of the page, or to row N", row_goer("first_row"))
-utils.register_action("last_row", "Move to the bottom of the page, or to row N", row_goer("last_row"))
+utils.register_action("first_row", "Move to the top of the page, or to row N", row_jump_action("first_row"))
+utils.register_action("last_row", "Move to the bottom of the page, or to row N", row_jump_action("last_row"))

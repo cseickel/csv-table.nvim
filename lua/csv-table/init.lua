@@ -2,7 +2,7 @@
 Entry point.
 
 A spreadsheet file is intercepted before nvim reads it. The buffer shows `xan
-view` output, repainted from view state on every change, so the size of the
+view` output, rendered from view state on every change, so the size of the
 file does not matter.
 
 `setup` merges `keymaps` over the default bindings and replaces `patterns` and
@@ -25,13 +25,13 @@ M.patterns = { "*.csv", "*.tsv", "*.xls", "*.xlsx", "*.xlsb", "*.ods" }
 local function apply_keymaps(buf)
   for key, name in pairs(keymaps.map) do
     if name then
-      local described = actions.get_action(name)
-      if not described then
+      local action = actions.get_action(name)
+      if not action then
         error(string.format("csv-table: key %q names unknown action %q", key, name))
       end
       vim.keymap.set("n", key, function()
-        described.run(buf)
-      end, { buffer = buf.bufnr, desc = "csv-table: " .. described.description })
+        action.run(buf)
+      end, { buffer = buf.bufnr, desc = "csv-table: " .. action.description })
     end
   end
 end
@@ -61,12 +61,12 @@ end
 ---@param buf csv.Buffer
 ---@return string|nil
 local function sort_summary(buf)
-  if #buf.state.order == 0 then
+  if #buf.state.sort_keys == 0 then
     return nil
   end
 
   local parts = {}
-  for index, key in ipairs(buf.state.order) do
+  for index, key in ipairs(buf.state.sort_keys) do
     parts[index] = columns.display(key.column) .. (key.direction == "asc" and "▲" or "▼")
   end
   return "sort " .. table.concat(parts, " ")
@@ -107,13 +107,13 @@ function M.status(bufnr)
     table.insert(parts, string.format("rows %d-%d", first, last))
   end
 
-  if #buf.state.where > 0 then
-    table.insert(parts, #buf.state.where == 1 and "1 filter" or (#buf.state.where .. " filters"))
+  if #buf.state.filters > 0 then
+    table.insert(parts, #buf.state.filters == 1 and "1 filter" or (#buf.state.filters .. " filters"))
   end
 
-  local marked = vim.tbl_count(buf.state.marked)
-  if marked > 0 then
-    table.insert(parts, marked .. " marked")
+  local marked_count = vim.tbl_count(buf.state.marked)
+  if marked_count > 0 then
+    table.insert(parts, marked_count .. " marked")
   end
 
   table.insert(parts, sort_summary(buf))

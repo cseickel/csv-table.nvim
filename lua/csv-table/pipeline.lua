@@ -100,12 +100,12 @@ local function format_stage(selected, headers, formats)
     local literal = columns.string_literal(headers[index])
     local reference = string.format("col(%s)", literal)
     local format = formats[column.index]
-    local written = format and expression.value(reference, format) or reference
+    local expr = format and expression.value_expression(reference, format) or reference
 
-    if written == reference then
+    if expr == reference then
       clauses[index] = string.format('%s || " " as %s', reference, literal)
     else
-      clauses[index] = string.format('try(%s) || %s || " " as %s', written, reference, literal)
+      clauses[index] = string.format('try(%s) || %s || " " as %s', expr, reference, literal)
     end
   end
 
@@ -120,18 +120,18 @@ end
 ---@param headers string[]
 ---@param formats table<integer, csv.Format>
 ---@return string[]|nil nil when no header needs cutting.
-local function shown_headers(selected, headers, formats)
-  local shown = {}
+local function truncated_headers(selected, headers, formats)
+  local truncated = {}
   local cut = false
   for index, column in ipairs(selected) do
     local format = formats[column.index]
-    shown[index] = headers[index]
+    truncated[index] = headers[index]
     if format and format.align and columns.text_length(headers[index]) > format.width then
-      shown[index] = columns.truncate(headers[index], format.width)
+      truncated[index] = columns.truncate(headers[index], format.width)
       cut = true
     end
   end
-  return cut and shown or nil
+  return cut and truncated or nil
 end
 
 --- Header names of the columns `view` should right-align. A numeric column
@@ -142,7 +142,7 @@ end
 ---@param headers string[]
 ---@param formats table<integer, csv.Format>
 ---@return string|nil
-local function right_aligned(selected, headers, formats)
+local function right_aligned_names(selected, headers, formats)
   local names = {}
   for index, column in ipairs(selected) do
     local format = formats[column.index]
@@ -170,7 +170,7 @@ local function selected_columns(state)
     { name = state.rowid_name, nth = 0, index = -1, duplicated = false },
     { name = state.row_number_name, nth = 0, index = -2, duplicated = false },
   }
-  local source = #state.selected > 0 and state.selected or state.columns
+  local source = #state.column_order > 0 and state.column_order or state.columns
   for _, column in ipairs(source) do
     table.insert(selected, column)
   end
@@ -178,14 +178,14 @@ local function selected_columns(state)
 end
 
 --- The stages that narrow the file to the rows on display, without paging,
---- column selection or formatting. Shared with the counting and summarising
+--- column selection or formatting. Shared with the counting and summarizing
 --- commands, so those see exactly the rows the buffer is showing.
 ---@param state csv.State
 ---@return string[]
 function M.narrowing_stages(state)
   local stages = { "enum -c " .. shell_quote(state.rowid_name) }
-  if #state.where > 0 then
-    table.insert(stages, "filter " .. shell_quote(expression.where(state)))
+  if #state.filters > 0 then
+    table.insert(stages, "filter " .. shell_quote(expression.all_filters(state)))
   end
   return stages
 end
@@ -198,7 +198,7 @@ end
 local function page_stages(state)
   local stages = M.narrowing_stages(state)
 
-  for _, stage in ipairs(sort_stages(state.order)) do
+  for _, stage in ipairs(sort_stages(state.sort_keys)) do
     table.insert(stages, stage)
   end
 
@@ -221,7 +221,7 @@ function M.build(state)
   ))
 
   local selected = selected_columns(state)
-  local headers = header_names(selected, state.order)
+  local headers = header_names(selected, state.sort_keys)
   table.insert(stages, "select " .. shell_quote(columns.selection(selected)))
   table.insert(stages, "rename " .. shell_quote(columns.rename_argument(headers)))
 
@@ -229,9 +229,9 @@ function M.build(state)
 
   -- `map` addresses each column by header name, so the headers are cut only
   -- after it runs. Two cut headers may well match, and `map` needs them unique.
-  local shown = shown_headers(selected, headers, state.formats)
-  if shown then
-    table.insert(stages, "rename " .. shell_quote(columns.rename_argument(shown)))
+  local truncated = truncated_headers(selected, headers, state.formats)
+  if truncated then
+    table.insert(stages, "rename " .. shell_quote(columns.rename_argument(truncated)))
   end
 
   -- `-M` hides the meta info
@@ -240,9 +240,9 @@ function M.build(state)
   -- `-t table` is named rather than left to default, since `XAN_VIEW_ARGS` can
   -- change the default theme and the syntax file is written for this one
   local view = "view --color never -M -I --repeat-headers never -e -A -t table"
-  local aligned = right_aligned(selected, headers, state.formats)
-  if aligned then
-    view = view .. " -r " .. shell_quote(aligned)
+  local right_aligned = right_aligned_names(selected, headers, state.formats)
+  if right_aligned then
+    view = view .. " -r " .. shell_quote(right_aligned)
   end
   table.insert(stages, view)
 

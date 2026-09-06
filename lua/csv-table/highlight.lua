@@ -1,8 +1,8 @@
 --[[
-Colour.
+Color.
 
-Every group this plugin paints with is defined here, and the table's own colours
-are painted here too. A colour follows from where a cell is and what its column
+Every group this plugin draws with is defined here, and the table's own colors
+are drawn here too. A color follows from where a cell is and what its column
 holds, both of which `csv-table.layout` and `csv-table.format` already know, so
 nothing here searches the text.
 
@@ -10,10 +10,10 @@ The decoration provider runs only for the lines nvim is drawing, and its marks
 are ephemeral, so nothing is stored between redraws and a render that replaces
 every line has nothing to reapply.
 
-A cell holding text is left unpainted so it reads in the normal foreground, so
-the border is painted as the gaps between the cells rather than as a layer under
-them. Every group painted here sets a foreground alone, which leaves the
-background to the row marks and the selection.
+A cell holding text gets no group at all, so it reads in the normal foreground,
+and the border is drawn as the gaps between the cells rather than as a layer
+under them. Every group here sets a foreground alone, which leaves the background
+to the row marks and the selection.
 ]]
 
 local buffer = require("csv-table.buffer")
@@ -26,8 +26,8 @@ local M = {}
 local namespace = vim.api.nvim_create_namespace("csv-syntax")
 
 -- Under the 4096 an extmark takes by default, so the marks and the selection
--- both paint over the colouring rather than under it. Nothing painted here
--- overlaps anything else painted here, so one priority covers all of it.
+-- both draw over the coloring rather than under it. Nothing here overlaps
+-- anything else here, so one priority covers all of it.
 local PRIORITY = 100
 
 local GROUPS = {
@@ -52,7 +52,7 @@ local function define_groups()
   end
 end
 
---- What each cell of a data row is coloured by, keyed by cell number. Cell 1 is
+--- What each cell of a data row is colored by, keyed by cell number. Cell 1 is
 --- the row number, so the column at display position `n` is cell `n + 1`. A
 --- number is keyed by its kind rather than by a group, because the sign of the
 --- value decides which of the two number groups it takes.
@@ -60,7 +60,7 @@ end
 ---@return table<integer, "number"|"date">
 local function cell_kinds(state)
   local kinds = {}
-  for position, column in ipairs(selection.selected(state)) do
+  for position, column in ipairs(selection.display_columns(state)) do
     local column_format = state.formats[column.index]
     if format.is_numeric(column_format) then
       kinds[position + 1] = "number"
@@ -92,7 +92,7 @@ end
 ---@param from integer
 ---@param to integer
 ---@param group string
-local function paint(bufnr, row, from, to, group)
+local function draw(bufnr, row, from, to, group)
   vim.api.nvim_buf_set_extmark(bufnr, namespace, row, from, {
     end_col = to,
     hl_group = group,
@@ -101,67 +101,66 @@ local function paint(bufnr, row, from, to, group)
   })
 end
 
---- Paint the separators of one line: the gap between each pair of cells, and
---- the run at either end where the theme in use draws an outer border.
+--- Draw the separators of one line: the gap between each pair of cells, and the
+--- run at either end where the theme in use draws an outer border.
 ---@param bufnr integer
 ---@param row integer
 ---@param line string
 ---@param ranges csv.CellRange[]
-local function paint_borders(bufnr, row, line, ranges)
+local function draw_borders(bufnr, row, line, ranges)
   local from = 0
   for _, range in ipairs(ranges) do
     if range.from > from then
-      paint(bufnr, row, from, range.from, "CsvBorder")
+      draw(bufnr, row, from, range.from, "CsvBorder")
     end
     from = range.to
   end
   if #line > from then
-    paint(bufnr, row, from, #line, "CsvBorder")
+    draw(bufnr, row, from, #line, "CsvBorder")
   end
 end
 
---- The layout and the cell kinds for the window being drawn, read once per
+--- The layout and the cell kinds for the window nvim is drawing, read once per
 --- window rather than once per line.
 ---@type { layout: csv.Layout, kinds: table<integer, "number"|"date"> }|nil
-local drawing = nil
+local current_window = nil
 
 ---@param bufnr integer
----@return boolean whether this window holds a table to colour.
+---@return boolean whether this window holds a table to color.
 local function on_win(_, _, bufnr)
   local buf = buffer.get(bufnr)
   if not buf or not buf.layout then
-    drawing = nil
+    current_window = nil
     return false
   end
-  drawing = { layout = buf.layout, kinds = cell_kinds(buf.state) }
+  current_window = { layout = buf.layout, kinds = cell_kinds(buf.state) }
   return true
 end
 
 ---@param bufnr integer
 ---@param row integer 0-based.
 local function on_line(_, _, bufnr, row)
-  -- `on_win` decided this window has a table to colour, so `drawing` is set.
-  -- Reading it unguarded would end every buffer's colouring for the session,
+  -- `on_win` decided this window has a table to color, so `current_window` is
+  -- set. Reading it unguarded would end every buffer's coloring for the session,
   -- because nvim drops a provider that raises.
-  if not drawing then
+  if not current_window then
     return
   end
 
-  local painted = drawing.layout
   local index = row + 1
-  local line = painted.lines[index]
+  local line = current_window.layout.lines[index]
   if not line then
     return
   end
 
   -- A horizontal rule holds nothing but border.
-  local header = index == painted.header
-  if not header and (index < painted.first_row or index > painted.last_row) then
-    return paint(bufnr, row, 0, #line, "CsvBorder")
+  local header = index == current_window.layout.header
+  if not header and (index < current_window.layout.first_row or index > current_window.layout.last_row) then
+    return draw(bufnr, row, 0, #line, "CsvBorder")
   end
 
-  local ranges = layout.cell_ranges(painted, index)
-  paint_borders(bufnr, row, line, ranges)
+  local ranges = layout.cell_ranges(current_window.layout, index)
+  draw_borders(bufnr, row, line, ranges)
 
   for cell, range in ipairs(ranges) do
     local group
@@ -170,16 +169,16 @@ local function on_line(_, _, bufnr, row)
     elseif cell == 1 then
       group = "CsvRowNumber"
     else
-      local kind = drawing.kinds[cell]
+      local kind = current_window.kinds[cell]
       group = kind and group_of(kind, line:sub(range.from + 1, range.to))
     end
     if group then
-      paint(bufnr, row, range.from, range.to, group)
+      draw(bufnr, row, range.from, range.to, group)
     end
   end
 end
 
---- Define the groups and start colouring. One provider covers every window, so
+--- Define the groups and start coloring. One provider covers every window, so
 --- `on_win` is what decides a window is showing a table.
 ---@param group integer
 function M.setup(group)

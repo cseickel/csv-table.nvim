@@ -3,7 +3,8 @@ Reading `xan view` output.
 
 `view` draws a bordered table, so the rendered text already says where every
 column starts and which source row each line came from. This module turns that
-text into the lookups the cursor and the painting need, and holds nothing else.
+text into the lookups the cursor and the highlighting need, and holds nothing
+else.
 
 The row id is drawn as the first cell because the drawn table is the only way it
 reaches Lua. It answers no question the reader has, so `parse` reads it into
@@ -141,7 +142,7 @@ end
 ---@param index integer
 ---@param column integer 0-based byte offset, as nvim reports the cursor.
 ---@return integer
-function M.cell_near(layout, index, column)
+function M.cell_at(layout, index, column)
   local ranges = M.cell_ranges(layout, index)
   for cell, range in ipairs(ranges) do
     if column < range.to then
@@ -166,12 +167,12 @@ end
 ---@param position integer
 ---@return integer
 local function byte_of_character(line, position)
-  local seen = 0
+  local characters = 0
   for index = 1, #line do
     local byte = line:byte(index)
     if byte < 0x80 or byte >= 0xC0 then
-      seen = seen + 1
-      if seen == position then
+      characters = characters + 1
+      if characters == position then
         return index
       end
     end
@@ -187,12 +188,12 @@ end
 --- while a rule spends three bytes on each of them and a row of digits spends
 --- one.
 ---@param line string
----@param leading integer Characters of outer border ahead of the cell, 1 or 0.
+---@param border_width integer Characters of outer border ahead of the cell, 1 or 0.
 ---@param width integer Characters the cell is drawn in, padding included.
 ---@return string
-local function without_first_cell(line, leading, width)
-  local from = byte_of_character(line, leading + 1)
-  local to = byte_of_character(line, leading + width + 2)
+local function without_first_cell(line, border_width, width)
+  local from = byte_of_character(line, border_width + 1)
+  local to = byte_of_character(line, border_width + width + 2)
   return line:sub(1, from - 1) .. line:sub(to)
 end
 
@@ -218,14 +219,14 @@ function M.parse(output)
   -- Cut the top rule
   table.remove(lines, 1)
 
-  local drawn = scan(lines[1])
-  if #drawn < 2 then
+  local header_ranges = scan(lines[1])
+  if #header_ranges < 2 then
     return nil, "xan view drew no row id"
   end
   -- The outer border is one character where the theme draws one, and `scan`
   -- starts the first cell past it.
-  local leading = drawn[1].from > 0 and 1 or 0
-  local id_width = drawn[1].to - drawn[1].from
+  local border_width = header_ranges[1].from > 0 and 1 or 0
+  local id_width = header_ranges[1].to - header_ranges[1].from
 
   local first_row, last_row = 3, #lines - 1
   local rowids = {}
@@ -241,7 +242,7 @@ function M.parse(output)
   end
 
   for index = 1, #lines do
-    lines[index] = without_first_cell(lines[index], leading, id_width)
+    lines[index] = without_first_cell(lines[index], border_width, id_width)
   end
 
   local layout = {

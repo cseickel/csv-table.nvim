@@ -2,7 +2,7 @@
 Asking xan about the data rather than for it.
 
 Rendering wants a page of rows. Counting the result, listing a column's distinct
-values, and summarising a column want answers. Each of those runs through the
+values, and summarizing a column want answers. Each of those runs through the
 same filters the buffer is showing, so what comes back always describes what is
 on screen.
 

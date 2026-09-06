@@ -2,8 +2,8 @@
 The buffer a CSV is shown in.
 
 Owns one record per buffer, holding the state the user is building and the
-layout of what is currently painted. Rendering runs the pipeline and replaces
-every line, so the layout is rebuilt on each paint and nothing derived from it
+layout of what is currently on screen. Rendering runs the pipeline and replaces
+every line, so the layout is rebuilt on each render and nothing derived from it
 outlives the text it describes.
 
 The buffer stays nomodifiable. Its text is xan's output, not a document.
@@ -23,7 +23,7 @@ local M = {}
 ---@class csv.Buffer
 ---@field bufnr integer
 ---@field state csv.State
----@field layout csv.Layout|nil Absent until the first paint succeeds.
+---@field layout csv.Layout|nil Absent until the first render succeeds.
 
 ---@type table<integer, csv.Buffer>
 local buffers = {}
@@ -35,17 +35,15 @@ local mark_namespace = vim.api.nvim_create_namespace("csv-marks")
 -- second `setup` would take them from the tables already open.
 local buffer_group = vim.api.nvim_create_augroup("csv-table-buffer", { clear = false })
 
--- Above the 4096 an extmark takes by default, so a selected cell paints over
--- the row highlight it may be sitting on.
+-- Above the 4096 an extmark takes by default, so a selected cell draws over the
+-- row highlight it may be sitting on.
 local RANGE_PRIORITY = 4200
 
---- Paint the marked rows and the marked columns.
+--- Draw the marked rows and the marked columns.
 ---@param buffer csv.Buffer
-local function apply_marks(buffer)
-  local painted = buffer.layout
-
-  for line = painted.first_row, painted.last_row do
-    local rowid = painted.rowids[line]
+local function draw_marks(buffer)
+  for line = buffer.layout.first_row, buffer.layout.last_row do
+    local rowid = buffer.layout.rowids[line]
     if rowid and buffer.state.marked[rowid] then
       vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, line - 1, 0, {
         line_hl_group = "CsvMarkedRow",
@@ -53,11 +51,12 @@ local function apply_marks(buffer)
     end
   end
 
-  for position, column in ipairs(selection.selected(buffer.state)) do
+  local header = buffer.layout.header
+  for position, column in ipairs(selection.display_columns(buffer.state)) do
     if buffer.state.marked_columns[column.index] then
-      local from, to = layout.cell_bounds(painted, painted.header, position + 1)
+      local from, to = layout.cell_bounds(buffer.layout, header, position + 1)
       if from then
-        vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, painted.header - 1, from, {
+        vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, header - 1, from, {
           end_col = to,
           hl_group = "CsvMarkedColumn",
         })
@@ -66,20 +65,19 @@ local function apply_marks(buffer)
   end
 end
 
---- Paint the selected cells. The columns of a range are next to each other, so
+--- Draw the selected cells. The columns of a range are next to each other, so
 --- each line takes one extmark from the left edge of the first to the right
 --- edge of the last. The priority puts it over a marked row, which is the whole
 --- line and the less specific of the two.
 ---@param buffer csv.Buffer
-local function apply_range(buffer)
-  local painted = buffer.layout
-  local bounds = range.bounds(buffer.state, painted)
+local function draw_range(buffer)
+  local bounds = range.bounds(buffer.state, buffer.layout)
   if not bounds then
     return
   end
 
   for line = bounds.top, bounds.bottom do
-    local cells = layout.cell_ranges(painted, line)
+    local cells = layout.cell_ranges(buffer.layout, line)
     local first, last = cells[bounds.left + 1], cells[bounds.right + 1]
     if first and last then
       vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, line - 1, first.from, {
@@ -91,17 +89,17 @@ local function apply_range(buffer)
   end
 end
 
---- Paint the marks and the selection over the text already in the buffer.
+--- Draw the marks and the selection over the text already in the buffer.
 --- Marking a row and selecting a cell change nothing xan would return, so both
---- repaint and neither asks for the page again.
+--- redraw and neither asks for the page again.
 ---@param buffer csv.Buffer
-function M.repaint(buffer)
+function M.redraw(buffer)
   if not buffer.layout then
     return
   end
   vim.api.nvim_buf_clear_namespace(buffer.bufnr, mark_namespace, 0, -1)
-  apply_marks(buffer)
-  apply_range(buffer)
+  draw_marks(buffer)
+  draw_range(buffer)
 end
 
 ---@param bufnr integer
@@ -118,17 +116,17 @@ local function replace_lines(bufnr, lines)
   vim.bo[bufnr].modifiable = false
 end
 
---- Run the pipeline for `buffer` and paint what it returns.
+--- Run the pipeline for `buffer` and draw what it returns.
 ---
 --- The selection goes. A sort changes which rows lie between its two ends, and
 --- hiding or moving a column changes which columns its two ends name, so a
 --- selection that outlived a render would mean cells the user never picked.
 ---
 --- The cursor goes back to the cell it was in, because the new text has its
---- own column widths, and the first paint finds it at the top of the buffer.
+--- own column widths, and the first render finds it at the top of the buffer.
 ---@param buffer csv.Buffer
----@param on_painted fun()|nil Runs once the new text is in the buffer.
-function M.render(buffer, on_painted)
+---@param on_rendered fun()|nil Runs once the new text is in the buffer.
+function M.render(buffer, on_rendered)
   range.clear(buffer.state)
 
   query.run(commands.render(buffer.state), query.report, function(stdout)
@@ -143,7 +141,7 @@ function M.render(buffer, on_painted)
 
     buffer.layout = parsed
     replace_lines(buffer.bufnr, parsed.lines)
-    M.repaint(buffer)
+    M.redraw(buffer)
     -- `status.get_winbar` pins this line while the buffer is scrolled past it.
     vim.b[buffer.bufnr].table_header = parsed.header
 
@@ -152,24 +150,23 @@ function M.render(buffer, on_painted)
       cursor.restore(buffer, window)
     end
 
-    if on_painted then
-      on_painted()
+    if on_rendered then
+      on_rendered()
     end
   end)
 end
 
 --- How wide `column` is drawn, in characters, or nil when it is hidden or
---- nothing has been painted yet.
+--- nothing has been rendered yet.
 ---@param buffer csv.Buffer
 ---@param column csv.Column
 ---@return integer|nil
 function M.column_width(buffer, column)
-  local painted = buffer.layout
   local position = selection.position(buffer.state, column)
-  if not painted or not position then
+  if not buffer.layout or not position then
     return nil
   end
-  return layout.cell_width(painted, position + 1)
+  return layout.cell_width(buffer.layout, position + 1)
 end
 
 --- Read another sheet of the same workbook. The filters, sort, marks, column
@@ -178,12 +175,12 @@ end
 ---@param buffer csv.Buffer
 ---@param sheet integer 0-based.
 function M.open_sheet(buffer, sheet)
-  source.inspect(buffer.state.source, sheet, function(inspected)
+  source.inspect(buffer.state.source, sheet, function(source_info)
     if not vim.api.nvim_buf_is_valid(buffer.bufnr) then
       return
     end
 
-    buffer.state = state.new(inspected)
+    buffer.state = state.new(source_info)
     M.render(buffer)
   end, query.report)
 end
@@ -200,7 +197,7 @@ function M.row_range(buffer)
   return first, first + layout.row_count(buffer.layout) - 1
 end
 
---- Whether the painted page is the last one, which is true when it came back
+--- Whether the rendered page is the last one, which is true when it came back
 --- short. Nothing counts the rows a filter matches, so a short page is the only
 --- signal that paging further would show an empty table.
 ---@param buffer csv.Buffer
@@ -225,6 +222,9 @@ function M.attach(bufnr, on_ready)
   local attached = buffers[bufnr]
   if attached then
     vim.bo[bufnr].filetype = "csv-table"
+    -- nvim has already emptied the buffer, so the layout describes text that is
+    -- gone and the next render is a whole xan run away.
+    attached.layout = nil
     return M.render(attached)
   end
 
@@ -246,7 +246,7 @@ function M.attach(bufnr, on_ready)
   -- holds for this buffer in that window alone. `vim.wo[window]` is `:set`,
   -- which also writes the value the window keeps for every buffer, and the
   -- next buffer shown in the window would inherit it.
-  local function dress_windows()
+  local function set_window_options()
     for _, window in ipairs(vim.fn.win_findbuf(bufnr)) do
       vim.wo[window][0].wrap = false
       vim.wo[window][0].number = false
@@ -254,14 +254,14 @@ function M.attach(bufnr, on_ready)
       vim.wo[window][0].signcolumn = "no"
     end
   end
-  dress_windows()
+  set_window_options()
   vim.api.nvim_create_autocmd("BufWinEnter", {
     group = buffer_group,
     buffer = bufnr,
-    callback = dress_windows,
+    callback = set_window_options,
   })
 
-  -- The user moved the cursor whenever it is not where `cursor.place` left it.
+  -- The user moved the cursor whenever `cursor.is_ours` says this plugin did not.
   -- It is snapped into the nearest cell, and moving off the selection drops it,
   -- the way a spreadsheet drops a selection on an unshifted arrow.
   vim.api.nvim_create_autocmd("CursorMoved", {
@@ -269,27 +269,27 @@ function M.attach(bufnr, on_ready)
     buffer = bufnr,
     callback = function()
       local buffer = buffers[bufnr]
-      if not buffer or not buffer.layout or cursor.is_placed(buffer, 0) then
+      if not buffer or not buffer.layout or cursor.is_ours(buffer, 0) then
         return
       end
       cursor.snap(buffer, 0)
       if buffer.state.range then
         range.clear(buffer.state)
-        M.repaint(buffer)
+        M.redraw(buffer)
       end
     end,
   })
   -- `guicursor` is global, so the buffer that decides it is the one the user is
   -- in. A read can be for a buffer nobody is in, which is what `bufload` does,
   -- and hiding the cursor for that one would hide it where the user is.
-  cursor.dress(vim.api.nvim_get_current_buf())
+  cursor.update_guicursor(vim.api.nvim_get_current_buf())
 
-  source.inspect(path, nil, function(inspected)
+  source.inspect(path, nil, function(source_info)
     if not vim.api.nvim_buf_is_valid(bufnr) then
       return
     end
 
-    local buffer = { bufnr = bufnr, state = state.new(inspected), layout = nil }
+    local buffer = { bufnr = bufnr, state = state.new(source_info), layout = nil }
     buffers[bufnr] = buffer
 
     vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {

@@ -2,7 +2,7 @@
 The actions that select cells.
 
 Selecting changes nothing about what xan would return, so every action here
-paints over the text already in the buffer rather than rendering the page again.
+draws over the text already in the buffer rather than rendering the page again.
 Rendering would in any case drop the selection, which is what `buffer.render`
 does deliberately.
 
@@ -34,55 +34,57 @@ local EDGE = utils.EDGE
 ---@return fun(buf: csv.Buffer)
 local function extender(rows, cells)
   return function(buf)
-    local painted = buf.layout
-    local selected = buf.state.range
-    local from = selected and selected.cursor or cursor.cell_ref(buf, 0)
-    if not painted or not from then
+    local current_range = buf.state.range
+    local start_cell = current_range and current_range.cursor or cursor.cell_ref(buf, 0)
+    if not buf.layout or not start_cell then
       return
     end
 
-    local delta = { rows = rows, columns = cells, shown = #selection.selected(buf.state) }
-    local taken = range.step(from, painted, delta)
-    if not taken then
+    local delta = {
+      rows = rows,
+      columns = cells,
+      column_count = #selection.display_columns(buf.state),
+    }
+    local new_end = range.step(start_cell, buf.layout, delta)
+    if not new_end then
       return query.report("the selection is not on this page")
     end
 
     cursor.step(buf, 0, rows, cells)
-    if selected then
-      range.extend(buf.state, taken)
+    if current_range then
+      range.extend(buf.state, new_end)
     else
-      range.set(buf.state, from, taken)
+      range.set(buf.state, start_cell, new_end)
     end
-    buffer.repaint(buf)
+    buffer.redraw(buf)
   end
 end
 
 --- Select the rectangle `corners` names, which is how a whole row, a whole
 --- column and the whole page are selected in one press. The cursor stays where
 --- it is, since the user is reading the cell it is on.
----@param corners fun(buf: csv.Buffer, painted: csv.Layout): csv.CellRef|nil, csv.CellRef|nil
+---@param corners fun(buf: csv.Buffer, layout: csv.Layout): csv.CellRef|nil, csv.CellRef|nil
 ---@return fun(buf: csv.Buffer)
 local function selector(corners)
   return function(buf)
-    local painted = buf.layout
-    if not painted or painted.first_row > painted.last_row then
+    if not buf.layout or buf.layout.first_row > buf.layout.last_row then
       return query.report("there is nothing to select")
     end
 
-    local anchor, far = corners(buf, painted)
-    if not anchor or not far or not anchor.row or not far.row then
+    local anchor, end_cell = corners(buf, buf.layout)
+    if not anchor or not end_cell or not anchor.row or not end_cell.row then
       return
     end
 
-    range.set(buf.state, anchor, far)
-    buffer.repaint(buf)
+    range.set(buf.state, anchor, end_cell)
+    buffer.redraw(buf)
   end
 end
 
 ---@param buf csv.Buffer
 ---@return integer
 local function last_column(buf)
-  return #selection.selected(buf.state)
+  return #selection.display_columns(buf.state)
 end
 
 utils.register_action("select_cell", "Select this cell", function(buf)
@@ -91,7 +93,7 @@ utils.register_action("select_cell", "Select this cell", function(buf)
     return
   end
   range.set(buf.state, cell, cell)
-  buffer.repaint(buf)
+  buffer.redraw(buf)
 end)
 
 utils.register_action("select_row", "Select this whole row", selector(function(buf, _)
@@ -102,25 +104,25 @@ utils.register_action("select_row", "Select this whole row", selector(function(b
   return { row = cell.row, column = 1 }, { row = cell.row, column = last_column(buf) }
 end))
 
-utils.register_action("select_column", "Select this whole column", selector(function(buf, painted)
+utils.register_action("select_column", "Select this whole column", selector(function(buf, layout)
   local cell = cursor.cell_ref(buf, 0)
   if not cell then
     return nil, nil
   end
   return
-    { row = painted.rowids[painted.first_row], column = cell.column },
-    { row = painted.rowids[painted.last_row], column = cell.column }
+    { row = layout.rowids[layout.first_row], column = cell.column },
+    { row = layout.rowids[layout.last_row], column = cell.column }
 end))
 
-utils.register_action("select_page", "Select every cell on this page", selector(function(buf, painted)
+utils.register_action("select_page", "Select every cell on this page", selector(function(buf, layout)
   return
-    { row = painted.rowids[painted.first_row], column = 1 },
-    { row = painted.rowids[painted.last_row], column = last_column(buf) }
+    { row = layout.rowids[layout.first_row], column = 1 },
+    { row = layout.rowids[layout.last_row], column = last_column(buf) }
 end))
 
 utils.register_action("clear_selection", "Select nothing", function(buf)
   range.clear(buf.state)
-  buffer.repaint(buf)
+  buffer.redraw(buf)
 end)
 
 utils.register_action("extend_left", "Take the selection one column left", extender(0, -1))

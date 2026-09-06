@@ -53,9 +53,9 @@ M.page_size = 1000
 ---@field columns csv.Column[]  Every source column, in file order.
 ---@field row_number_name string Name for the prepended row number, absent from `columns`.
 ---@field rowid_name string     Name for the prepended row id, absent from `columns`.
----@field where csv.Filter[]    ANDed together.
----@field order csv.SortKey[]   Most significant key first.
----@field selected csv.Column[] Display order. Empty means every source column.
+---@field filters csv.Filter[]  ANDed together.
+---@field sort_keys csv.SortKey[] Most significant key first.
+---@field column_order csv.Column[] Display order. Empty means every source column.
 ---@field clipboard csv.Column[] Cut columns waiting to be pasted.
 ---@field marked table<integer, boolean> Marked row ids.
 ---@field marked_columns table<integer, boolean> Marked column indices.
@@ -76,9 +76,9 @@ function M.new(source)
     row_number_name = source.row_number_name,
     rowid_name = source.rowid_name,
     formats = source.formats,
-    where = {},
-    order = {},
-    selected = {},
+    filters = {},
+    sort_keys = {},
+    column_order = {},
     clipboard = {},
     marked = {},
     marked_columns = {},
@@ -104,11 +104,11 @@ end
 ---@param column csv.Column
 ---@param direction "asc"|"desc"
 function M.sort_by(state, column, direction)
-  local only = #state.order == 1 and state.order[1]
+  local only = #state.sort_keys == 1 and state.sort_keys[1]
   if only and only.column.index == column.index and only.direction == direction then
-    state.order = {}
+    state.sort_keys = {}
   else
-    state.order = {
+    state.sort_keys = {
       { column = column, direction = direction, numeric = M.is_numeric(state, column) },
     }
   end
@@ -121,10 +121,10 @@ end
 ---@param column csv.Column
 ---@param direction "asc"|"desc"
 function M.add_sort_key(state, column, direction)
-  for index, key in ipairs(state.order) do
+  for index, key in ipairs(state.sort_keys) do
     if key.column.index == column.index then
       if key.direction == direction then
-        table.remove(state.order, index)
+        table.remove(state.sort_keys, index)
       else
         key.direction = direction
       end
@@ -133,7 +133,7 @@ function M.add_sort_key(state, column, direction)
     end
   end
 
-  table.insert(state.order, {
+  table.insert(state.sort_keys, {
     column = column,
     direction = direction,
     numeric = M.is_numeric(state, column),
@@ -144,9 +144,9 @@ end
 ---@param state csv.State
 ---@param column csv.Column
 function M.remove_sort_key(state, column)
-  for index, key in ipairs(state.order) do
+  for index, key in ipairs(state.sort_keys) do
     if key.column.index == column.index then
-      table.remove(state.order, index)
+      table.remove(state.sort_keys, index)
       state.page = 0
       return
     end
@@ -155,7 +155,7 @@ end
 
 ---@param state csv.State
 function M.clear_sort(state)
-  state.order = {}
+  state.sort_keys = {}
   state.page = 0
 end
 
@@ -164,19 +164,19 @@ end
 ---@param state csv.State
 ---@param filter csv.Filter
 function M.add_filter(state, filter)
-  table.insert(state.where, filter)
+  table.insert(state.filters, filter)
   state.page = 0
 end
 
 ---@param state csv.State
 function M.pop_filter(state)
-  table.remove(state.where)
+  table.remove(state.filters)
   state.page = 0
 end
 
 ---@param state csv.State
 function M.clear_filters(state)
-  state.where = {}
+  state.filters = {}
   state.page = 0
 end
 
@@ -207,9 +207,9 @@ end
 --- Turn the marked-rows filter on, or off if it is already on.
 ---@param state csv.State
 function M.toggle_marked_filter(state)
-  for index, filter in ipairs(state.where) do
+  for index, filter in ipairs(state.filters) do
     if filter.type == "marked" then
-      table.remove(state.where, index)
+      table.remove(state.filters, index)
       state.page = 0
       return
     end
@@ -249,9 +249,9 @@ end
 
 ---@param state csv.State
 function M.reset(state)
-  state.where = {}
-  state.order = {}
-  state.selected = {}
+  state.filters = {}
+  state.sort_keys = {}
+  state.column_order = {}
   state.clipboard = {}
   state.marked = {}
   state.marked_columns = {}

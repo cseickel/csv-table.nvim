@@ -11,7 +11,7 @@ local utils = require("csv-table.actions.utils")
 
 ---@param direction "asc"|"desc"
 ---@return fun(buf: csv.Buffer)
-local function sorter(direction)
+local function sort_action(direction)
   return function(buf)
     utils.on_column(buf, function(column)
       state.sort_by(buf.state, column, direction)
@@ -21,7 +21,7 @@ end
 
 ---@param direction "asc"|"desc"
 ---@return fun(buf: csv.Buffer)
-local function keyer(direction)
+local function add_sort_key_action(direction)
   return function(buf)
     utils.on_column(buf, function(column)
       state.add_sort_key(buf.state, column, direction)
@@ -29,10 +29,10 @@ local function keyer(direction)
   end
 end
 
-utils.register_action("sort_asc", "Sort by this column ascending, or clear that sort", sorter("asc"))
-utils.register_action("sort_desc", "Sort by this column descending, or clear that sort", sorter("desc"))
-utils.register_action("add_sort_key_asc", "Add this column to the sort, ascending", keyer("asc"))
-utils.register_action("add_sort_key_desc", "Add this column to the sort, descending", keyer("desc"))
+utils.register_action("sort_asc", "Sort by this column ascending, or clear that sort", sort_action("asc"))
+utils.register_action("sort_desc", "Sort by this column descending, or clear that sort", sort_action("desc"))
+utils.register_action("add_sort_key_asc", "Add this column to the sort, ascending", add_sort_key_action("asc"))
+utils.register_action("add_sort_key_desc", "Add this column to the sort, descending", add_sort_key_action("desc"))
 
 utils.register_action("remove_sort_key", "Drop this column from the sort", function(buf)
   utils.on_column(buf, function(column)

@@ -33,16 +33,16 @@ local M = {}
 ---@return string row_number_name
 ---@return string rowid_name
 local function prepended_names(names)
-  local taken = {}
+  local in_use = {}
   for _, name in ipairs(names) do
-    taken[name] = true
+    in_use[name] = true
   end
 
   local function pick(candidate)
-    while taken[candidate] do
+    while in_use[candidate] do
       candidate = candidate .. "_"
     end
-    taken[candidate] = true
+    in_use[candidate] = true
     return candidate
   end
 
@@ -86,7 +86,7 @@ local function inspect_sheet(path, sheet, sheets, on_done, on_error)
         columns = source_columns,
         row_number_name = row_number_name,
         rowid_name = rowid_name,
-        formats = format.analyse(sample, source_columns),
+        formats = format.analyze(sample, source_columns),
         sheet = sheet,
         sheets = sheets,
       })

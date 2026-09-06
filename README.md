@@ -255,10 +255,10 @@ Sorted columns get an arrow in the header. Sort on several and the arrows are nu
 |-------|------------------------|----------------------------------------|
 | `\|`  | `hide_column`          | Hide this column                       |
 | `c\|` | `show_all_columns`     | Show every column again                |
-| `x`   | `cut_column`           | Cut this column, holding it to paste   |
-| `X`   | `cut_append_column`    | Add this column to the cut being held  |
-| `p`   | `paste_columns_after`  | Paste the held columns after this one  |
-| `P`   | `paste_columns_before` | Paste the held columns before this one |
+| `x`   | `cut_column`           | Cut this column, keeping it to paste   |
+| `X`   | `cut_append_column`    | Add this column to the cut  |
+| `p`   | `paste_columns_after`  | Paste the cut columns after this one  |
+| `P`   | `paste_columns_before` | Paste the cut columns before this one |
 | `<`   | `move_column_left`     | Move this column one place left        |
 | `>`   | `move_column_right`    | Move this column one place right       |
 | `+`   | `increase_width`       | Widen this column by one               |
@@ -269,7 +269,7 @@ Sorted columns get an arrow in the header. Sort on several and the arrows are nu
 | Key  | Action               | Does                                  |
 | ---- | -------------------- | ------------------------------------- |
 | `al` | `align_left`         | Align this column left                |
-| `ac` | `align_center`       | Align this column centre              |
+| `ac` | `align_center`       | Align this column center              |
 | `ar` | `align_right`        | Align this column right               |
 | `.`  | `increase_precision` | Show one more decimal in this column  |
 | `,`  | `decrease_precision` | Show one fewer decimal in this column |

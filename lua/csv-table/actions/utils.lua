@@ -47,8 +47,8 @@ function M.get_all_actions()
   return actions
 end
 
---- Run `change` against the column under the cursor, then repaint. Nothing
---- happens before the first paint, when there is no column to be under it.
+--- Run `change` against the column under the cursor, then render. Nothing
+--- happens before the first render, when there is no column to be under it.
 ---@param buf csv.Buffer
 ---@param change fun(column: csv.Column)
 function M.on_column(buf, change)
