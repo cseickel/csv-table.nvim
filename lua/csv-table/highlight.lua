@@ -159,7 +159,7 @@ local function on_line(_, _, bufnr, row)
     return draw(bufnr, row, 0, #line, "CsvBorder")
   end
 
-  local ranges = layout.cell_ranges(current_window.layout, index)
+  local ranges = layout.get_row(current_window.layout, index)
   draw_borders(bufnr, row, line, ranges)
 
   for cell, range in ipairs(ranges) do

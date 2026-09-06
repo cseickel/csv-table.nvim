@@ -10,7 +10,7 @@ The buffer stays nomodifiable. Its text is xan's output, not a document.
 ]]
 
 local commands = require("csv-table.commands")
-local cursor = require("csv-table.cursor")
+local active_cell = require("csv-table.active_cell")
 local layout = require("csv-table.layout")
 local query = require("csv-table.query")
 local range = require("csv-table.range")
@@ -43,7 +43,7 @@ local RANGE_PRIORITY = 4200
 ---@param buffer csv.Buffer
 local function draw_marks(buffer)
   for line = buffer.layout.first_row, buffer.layout.last_row do
-    local rowid = buffer.layout.rowids[line]
+    local rowid = buffer.layout.row_id_by_index[line]
     if rowid and buffer.state.marked[rowid] then
       vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, line - 1, 0, {
         line_hl_group = "CsvMarkedRow",
@@ -77,7 +77,7 @@ local function draw_range(buffer)
   end
 
   for line = bounds.top, bounds.bottom do
-    local cells = layout.cell_ranges(buffer.layout, line)
+    local cells = layout.get_row(buffer.layout, line)
     local first, last = cells[bounds.left + 1], cells[bounds.right + 1]
     if first and last then
       vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, line - 1, first.from, {
@@ -147,7 +147,7 @@ function M.render(buffer, on_rendered)
 
     local window = vim.fn.bufwinid(buffer.bufnr)
     if window ~= -1 then
-      cursor.restore(buffer, window)
+      active_cell.restore(buffer, window)
     end
 
     if on_rendered then
@@ -261,28 +261,23 @@ function M.attach(bufnr, on_ready)
     callback = set_window_options,
   })
 
-  -- The user moved the cursor whenever `cursor.is_ours` says this plugin did not.
-  -- It is snapped into the nearest cell, and moving off the selection drops it,
-  -- the way a spreadsheet drops a selection on an unshifted arrow.
+  -- Handle manual movement of the cursor and translate it to cell movement.
   vim.api.nvim_create_autocmd("CursorMoved", {
     group = buffer_group,
     buffer = bufnr,
     callback = function()
       local buffer = buffers[bufnr]
-      if not buffer or not buffer.layout or cursor.is_ours(buffer, 0) then
+      if not buffer or not buffer.layout then
         return
       end
-      cursor.snap(buffer, 0)
-      if buffer.state.range then
-        range.clear(buffer.state)
-        M.redraw(buffer)
-      end
+      active_cell.cursor_moved(buffer, 0)
     end,
   })
+
   -- `guicursor` is global, so the buffer that decides it is the one the user is
   -- in. A read can be for a buffer nobody is in, which is what `bufload` does,
   -- and hiding the cursor for that one would hide it where the user is.
-  cursor.update_guicursor(vim.api.nvim_get_current_buf())
+  active_cell.update_guicursor(vim.api.nvim_get_current_buf())
 
   source.inspect(path, nil, function(source_info)
     if not vim.api.nvim_buf_is_valid(bufnr) then
@@ -297,7 +292,7 @@ function M.attach(bufnr, on_ready)
       buffer = bufnr,
       callback = function()
         buffers[bufnr] = nil
-        cursor.forget(bufnr)
+        active_cell.destroy(bufnr)
       end,
     })
 

@@ -12,7 +12,7 @@ text, which is what a spreadsheet pastes as cells.
 ]]
 
 local columns = require("csv-table.columns")
-local cursor = require("csv-table.cursor")
+local active_cell = require("csv-table.active_cell")
 local json = require("csv-table.json")
 local picker = require("csv-table.picker")
 local query = require("csv-table.query")
@@ -73,12 +73,12 @@ end
 ---@param buf csv.Buffer
 ---@param on_row fun(row: table<string, string>, number: integer)
 local function with_row(buf, on_row)
-  local cell = cursor.cell_ref(buf, 0)
+  local cell = active_cell.cell_ref(buf, 0)
   if not cell then
     return
   end
 
-  local line = buf.layout.lines_by_rowid[cell.row]
+  local line = buf.layout.row_index_by_id[cell.row]
   local number = state.first_row_number(buf.state) + line - buf.layout.first_row
   query.row(buf.state, cell.row, query.report, function(row)
     on_row(row, number)
@@ -122,8 +122,8 @@ local function copy_bounds(buf)
     return bounds
   end
 
-  local cell = cursor.cell_ref(buf, 0)
-  local line = cell and layout.lines_by_rowid[cell.row]
+  local cell = active_cell.cell_ref(buf, 0)
+  local line = cell and layout.row_index_by_id[cell.row]
   if not line then
     return nil
   end
@@ -154,7 +154,7 @@ function M.copy(buf, headers)
 
   local rowids = {}
   for line = bounds.top, bounds.bottom do
-    local rowid = buf.layout.rowids[line]
+    local rowid = buf.layout.row_id_by_index[line]
     if not rowid then
       return query.report("the selected rows are no longer on display")
     end

@@ -7,7 +7,7 @@ two that go to an end of the page take a count as a row number instead, the way
 `G` takes a line number.
 ]]
 
-local cursor = require("csv-table.cursor")
+local active_cell = require("csv-table.active_cell")
 local state = require("csv-table.state")
 local utils = require("csv-table.actions.utils")
 
@@ -16,7 +16,7 @@ local utils = require("csv-table.actions.utils")
 ---@return fun(buf: csv.Buffer)
 local function stepper(rows, cells)
   return function(buf)
-    cursor.step(buf, 0, rows * vim.v.count1, cells * vim.v.count1)
+    active_cell.step(buf, 0, rows * vim.v.count1, cells * vim.v.count1)
   end
 end
 
@@ -32,7 +32,7 @@ local function row_jump_action(edge)
     if not layout then
       return
     end
-    local cell = cursor.cell_ref(buf, 0)
+    local cell = active_cell.cell_ref(buf, 0)
     if not cell then
       return
     end
@@ -41,7 +41,7 @@ local function row_jump_action(edge)
     if vim.v.count > 0 then
       line = layout.first_row + vim.v.count - state.first_row_number(buf.state)
     end
-    cursor.move_to(buf, 0, line, cell.column + 1)
+    active_cell.move_to(buf, 0, line, cell.column + 1)
   end
 end
 

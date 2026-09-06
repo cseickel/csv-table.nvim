@@ -6,12 +6,12 @@ mark survives sorting, filtering and turning the page.
 ]]
 
 local buffer = require("csv-table.buffer")
-local cursor = require("csv-table.cursor")
+local active_cell = require("csv-table.active_cell")
 local state = require("csv-table.state")
 local utils = require("csv-table.actions.utils")
 
 utils.register_action("toggle_mark_row", "Mark or unmark this row", function(buf)
-  local cell = cursor.cell_ref(buf, 0)
+  local cell = active_cell.cell_ref(buf, 0)
   if not cell then
     return
   end

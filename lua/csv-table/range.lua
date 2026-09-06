@@ -19,6 +19,16 @@ It is pure Lua and can be exercised without nvim.
 
 local M = {}
 
+---@class csv.Row
+---@field id integer
+---@field index integer
+---@field buffer csv.Buffer
+
+---@class csv.Column
+---@class label string
+---@field index integer
+---@field buffer csv.Buffer
+
 ---@class csv.CellRef
 ---@field row integer    Source row id.
 ---@field column integer Position among the columns on display, counting from one.
@@ -32,6 +42,44 @@ local M = {}
 ---@field bottom integer Line it ends on.
 ---@field left integer   Leftmost column position.
 ---@field right integer  Rightmost column position.
+
+---@param buffer csv.Buffer
+---@param index integer
+---@return csv.Row|nil
+function M.get_row_by_index(buffer, index)
+  local layout = buffer.layout
+  if not layout then
+    return nil
+  end
+  local id = layout.row_id_by_index[index]
+  if not id then
+    return nil
+  end
+  return { id = id, index = index, buffer = buffer }
+end
+
+---@param buffer csv.Buffer
+---@param id integer
+---@return csv.Row|nil
+function M.get_row_by_id(buffer, id)
+  local layout = buffer.layout
+  if not layout then
+    return nil
+  end
+  local index = layout.row_index_by_id[id]
+  if not index then
+    return nil
+  end
+  return { id = id, index = index, buffer = buffer }
+end
+
+function M.get_column_by_index(buffer, index)
+  local layout = buffer.layout
+  if not layout then
+    return nil
+  end
+  return layout.columns[index]
+end
 
 --- Select the rectangle between two cells. One cell is selected by naming it
 --- twice.
@@ -74,8 +122,8 @@ function M.bounds(state, layout)
     return nil
   end
 
-  local anchor_line = layout.lines_by_rowid[range.anchor.row]
-  local cursor_line = layout.lines_by_rowid[range.cursor.row]
+  local anchor_line = layout.row_index_by_id[range.anchor.row]
+  local cursor_line = layout.row_index_by_id[range.cursor.row]
   if not anchor_line or not cursor_line then
     return nil
   end
@@ -97,13 +145,13 @@ end
 ---@param delta { rows: integer, columns: integer, column_count: integer } `column_count` is how many columns are on display.
 ---@return csv.CellRef|nil
 function M.step(cell, layout, delta)
-  local line = layout.lines_by_rowid[cell.row]
+  local line = layout.row_index_by_id[cell.row]
   if not line then
     return nil
   end
 
   local target_line = math.min(math.max(line + delta.rows, layout.first_row), layout.last_row)
-  local row = layout.rowids[target_line]
+  local row = layout.row_id_by_index[target_line]
   if not row then
     return nil
   end

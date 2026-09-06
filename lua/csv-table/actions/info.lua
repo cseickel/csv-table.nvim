@@ -2,21 +2,21 @@
 The actions that open a panel about the file rather than changing the view.
 ]]
 
-local cursor = require("csv-table.cursor")
+local active_cell = require("csv-table.active_cell")
 local dialog = require("csv-table.dialog")
 local inspect = require("csv-table.inspect")
 local panel = require("csv-table.panel")
 local utils = require("csv-table.actions.utils")
 
 utils.register_action("show_column", "Summarize this column", function(buf)
-  local column = cursor.column_at(buf, 0)
+  local column = active_cell.column_at(buf, 0)
   if column then
     panel.stats(buf, column)
   end
 end)
 
 utils.register_action("show_cell", "Show everything this cell holds", function(buf)
-  local column = cursor.column_at(buf, 0)
+  local column = active_cell.column_at(buf, 0)
   if column then
     inspect.cell(buf, column)
   end

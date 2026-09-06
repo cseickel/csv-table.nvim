@@ -11,7 +11,7 @@ then render. A helper only one module calls belongs in that module.
 ]]
 
 local buffer = require("csv-table.buffer")
-local cursor = require("csv-table.cursor")
+local active_cell = require("csv-table.active_cell")
 
 local M = {}
 
@@ -52,7 +52,7 @@ end
 ---@param buf csv.Buffer
 ---@param change fun(column: csv.Column)
 function M.on_column(buf, change)
-  local column = cursor.column_at(buf, 0)
+  local column = active_cell.column_at(buf, 0)
   if not column then
     return
   end

@@ -7,7 +7,7 @@ once.
 ]]
 
 local buffer = require("csv-table.buffer")
-local cursor = require("csv-table.cursor")
+local active_cell = require("csv-table.active_cell")
 local dialog = require("csv-table.dialog")
 local selection = require("csv-table.selection")
 local state = require("csv-table.state")
@@ -30,7 +30,7 @@ utils.register_action("filter_to_marked_both", "Show only marked rows and marked
 end)
 
 utils.register_action("filter", "Filter on this column", function(buf)
-  local column = cursor.column_at(buf, 0)
+  local column = active_cell.column_at(buf, 0)
   if column then
     dialog.open(buf, column)
   end

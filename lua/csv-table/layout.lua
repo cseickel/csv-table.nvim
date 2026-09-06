@@ -39,10 +39,11 @@ local CELL_PADDING = 2
 ---@class csv.Layout
 ---@field lines string[]    Buffer lines, borders included.
 ---@field header integer    Index of the header line.
+---@field column_count integer
 ---@field first_row integer Index of the first data line, past `last_row` when empty.
 ---@field last_row integer  Index of the last data line.
----@field rowids table<integer, integer> Source row id, keyed by line index.
----@field lines_by_rowid table<integer, integer> Line index, keyed by source row id.
+---@field row_id_by_index table<integer, integer> Source row id, keyed by line index.
+---@field row_index_by_id table<integer, integer> Line index, keyed by source row id.
 ---@field ranges csv.CellRange[] The header's cells, which every line shares unless it is listed below.
 ---@field ranges_by_line table<integer, csv.CellRange[]> The cells of each line whose byte offsets differ from the header's.
 
@@ -100,7 +101,7 @@ end
 ---@param layout csv.Layout
 ---@param index integer
 ---@return csv.CellRange[]
-function M.cell_ranges(layout, index)
+function M.get_row(layout, index)
   return layout.ranges_by_line[index] or layout.ranges
 end
 
@@ -112,7 +113,7 @@ end
 ---@return integer|nil from
 ---@return integer|nil to
 function M.cell_bounds(layout, index, cell)
-  local range = M.cell_ranges(layout, index)[cell]
+  local range = M.get_row(layout, index)[cell]
   if not range then
     return nil, nil
   end
@@ -143,7 +144,7 @@ end
 ---@param column integer 0-based byte offset, as nvim reports the cursor.
 ---@return integer
 function M.cell_at(layout, index, column)
-  local ranges = M.cell_ranges(layout, index)
+  local ranges = M.get_row(layout, index)
   for cell, range in ipairs(ranges) do
     if column < range.to then
       return cell
@@ -220,7 +221,8 @@ function M.parse(output)
   table.remove(lines, 1)
 
   local header_ranges = scan(lines[1])
-  if #header_ranges < 2 then
+  local column_count = #header_ranges
+  if column_count < 2 then
     return nil, "xan view drew no row id"
   end
   -- The outer border is one character where the theme draws one, and `scan`
@@ -248,6 +250,7 @@ function M.parse(output)
   local layout = {
     lines = lines,
     header = 1,
+    column_count = column_count,
     first_row = first_row,
     last_row = last_row,
     rowids = rowids,

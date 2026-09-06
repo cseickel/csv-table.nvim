@@ -13,7 +13,7 @@ cSpell:ignore rowids
 ]]
 
 local buffer = require("csv-table.buffer")
-local cursor = require("csv-table.cursor")
+local active_cell = require("csv-table.active_cell")
 local inspect = require("csv-table.inspect")
 local query = require("csv-table.query")
 local range = require("csv-table.range")
@@ -35,7 +35,7 @@ local EDGE = utils.EDGE
 local function extender(rows, cells)
   return function(buf)
     local current_range = buf.state.range
-    local start_cell = current_range and current_range.cursor or cursor.cell_ref(buf, 0)
+    local start_cell = current_range and current_range.end or active_cell.cell_ref(buf, 0)
     if not buf.layout or not start_cell then
       return
     end
@@ -50,7 +50,7 @@ local function extender(rows, cells)
       return query.report("the selection is not on this page")
     end
 
-    cursor.step(buf, 0, rows, cells)
+    active_cell.step(buf, 0, rows, cells)
     if current_range then
       range.extend(buf.state, new_end)
     else
@@ -88,7 +88,7 @@ local function last_column(buf)
 end
 
 utils.register_action("select_cell", "Select this cell", function(buf)
-  local cell = cursor.cell_ref(buf, 0)
+  local cell = active_cell.cell_ref(buf, 0)
   if not cell then
     return
   end
@@ -97,7 +97,7 @@ utils.register_action("select_cell", "Select this cell", function(buf)
 end)
 
 utils.register_action("select_row", "Select this whole row", selector(function(buf, _)
-  local cell = cursor.cell_ref(buf, 0)
+  local cell = active_cell.cell_ref(buf, 0)
   if not cell then
     return nil, nil
   end
@@ -105,19 +105,19 @@ utils.register_action("select_row", "Select this whole row", selector(function(b
 end))
 
 utils.register_action("select_column", "Select this whole column", selector(function(buf, layout)
-  local cell = cursor.cell_ref(buf, 0)
+  local cell = active_cell.cell_ref(buf, 0)
   if not cell then
     return nil, nil
   end
   return
-    { row = layout.rowids[layout.first_row], column = cell.column },
-    { row = layout.rowids[layout.last_row], column = cell.column }
+    { row = layout.row_id_by_index[layout.first_row], column = cell.column },
+    { row = layout.row_id_by_index[layout.last_row], column = cell.column }
 end))
 
 utils.register_action("select_page", "Select every cell on this page", selector(function(buf, layout)
   return
-    { row = layout.rowids[layout.first_row], column = 1 },
-    { row = layout.rowids[layout.last_row], column = last_column(buf) }
+    { row = layout.row_id_by_index[layout.first_row], column = 1 },
+    { row = layout.row_id_by_index[layout.last_row], column = last_column(buf) }
 end))
 
 utils.register_action("clear_selection", "Select nothing", function(buf)

@@ -8,7 +8,7 @@ moved is still the one under it.
 ]]
 
 local buffer = require("csv-table.buffer")
-local cursor = require("csv-table.cursor")
+local active_cell = require("csv-table.active_cell")
 local format = require("csv-table.format")
 local selection = require("csv-table.selection")
 local utils = require("csv-table.actions.utils")
@@ -28,7 +28,7 @@ local function follow(buf, column, on_focused)
       return
     end
     local line = vim.api.nvim_win_get_cursor(0)[1]
-    cursor.move_to(buf, 0, line, position + 1)
+    active_cell.move_to(buf, 0, line, position + 1)
     if on_focused then
       on_focused(position + 1)
     end
@@ -41,7 +41,7 @@ end
 ---@return fun(cell: integer)
 local function flash(buf)
   return function(cell)
-    cursor.flash_cell(buf, cell)
+    active_cell.flash_cell(buf, cell)
   end
 end
 
@@ -50,7 +50,7 @@ end
 ---@param buf csv.Buffer
 ---@param change fun(column: csv.Column, width: integer)
 local function on_padding(buf, change)
-  local column = cursor.column_at(buf, 0)
+  local column = active_cell.column_at(buf, 0)
   if not column then
     return
   end
@@ -97,7 +97,7 @@ end
 ---@return fun(buf: csv.Buffer)
 local function move_action(delta)
   return function(buf)
-    local column = cursor.column_at(buf, 0)
+    local column = active_cell.column_at(buf, 0)
     if column and selection.swap_column(buf.state, column, delta) then
       follow(buf, column, flash(buf))
     end
@@ -109,7 +109,7 @@ end
 local function paste_action(before)
   return function(buf)
     local first_cut = buf.state.clipboard[1]
-    local column = cursor.column_at(buf, 0)
+    local column = active_cell.column_at(buf, 0)
     if selection.paste_columns(buf.state, column, before) then
       follow(buf, first_cut, flash(buf))
     end
@@ -154,7 +154,7 @@ utils.register_action("increase_width", "Widen this column by one", width(1))
 utils.register_action("decrease_width", "Narrow this column by one", width(-1))
 
 utils.register_action("set_format", "Give this column a printf format", function(buf)
-  local column = cursor.column_at(buf, 0)
+  local column = active_cell.column_at(buf, 0)
   if not column then
     return
   end

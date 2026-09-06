@@ -1,20 +1,21 @@
 --[[
-The active cell.
+This module emulates the concept of cell movement and maintains the active cell.
+The real cursor is hidden and snapped into a specific edge of a cell, so any movement
+can be detected and translated into cell movements.
 
-The cursor is always in a data cell of the rendered table, the way a spreadsheet
-always has one active cell: every move lands it in a cell, a move the user makes
-onto a border or the row number is snapped into the nearest cell, and the cell is
-drawn as the active one while the real cursor is hidden. Every question about
-where the cursor is reads that cell.
+This module:
 
-Every byte offset here comes from `csv-table.layout` for the line the cursor is
-on, because a line holding a multi-byte character has its separators at
-different byte offsets than the header.
+1. Draws the active cell
+2. Intercepts nvim native character wise movements and translates them into cell movements
+3. Handles programmatic cell movement
+4. Provides information about the active cell and where the real cursor is parked within it
 
-Cell 1 is the row number, so the column under the cursor is cell 2 onwards.
+Column 1 is the row number and is a decoration instead of a data cell, so focus is restricted
+to column 2 onwards.
 ]]
 
 local layout = require("csv-table.layout")
+local range = require("csv-table.range")
 local selection = require("csv-table.selection")
 
 local M = {}
@@ -30,18 +31,15 @@ local CELL_PRIORITY = 4300
 -- `:`, `/` and every `vim.ui.input` prompt can be typed into.
 local HIDDEN_CURSOR = "n-v-o:CsvHiddenCursor"
 
----@class csv.CursorMark
+---@class csv.ActiveCell
 ---@field bufnr integer    The table the window was showing.
 ---@field position integer[] Line and byte column, as nvim reports a cursor.
----@field cell integer
+---@field row_number integer
+---@field column_number integer
 ---@field edge "left"|"right" Which end of the cell the cursor is at.
 
---- Where this plugin last set each window's cursor, so a move it did not make
---- can be told from one it did. A selection survives the moves the plugin makes
---- and is dropped by the ones the user makes. A cursor belongs to a window, so
---- a table shown in two windows has a record for each.
----@type table<integer, csv.CursorMark>
-local last_cursor = {}
+---@type table<integer, csv.ActiveCell>
+local active_cell = {}
 
 ---@param window integer 0 for the current window, as the API takes it.
 ---@return integer
@@ -54,40 +52,51 @@ end
 
 ---@param buffer csv.Buffer
 ---@param window integer
----@return csv.CursorMark|nil
-local function last_cursor_in(buffer, window)
-  local last = last_cursor[window_id(window)]
+---@return csv.ActiveCell|nil
+local function get_active_cell(buffer, window)
+  local last = active_cell[window_id(window)]
   if last and last.bufnr == buffer.bufnr then
     return last
   end
   return nil
 end
 
---- How many cells a line of the table holds, the row number counted.
+--- How many columns in the table, including with the row number.
 ---@param buffer csv.Buffer
 ---@return integer
-local function cell_count(buffer)
+local function column_count(buffer)
   return #selection.display_columns(buffer.state) + 1
 end
 
---- How far past the cursor the screen is kept scrolled: the row number cell and
---- the borders either side of it, so the first column always shows the row
---- number and the table's left edge, and every other column shows that much of
---- its neighbor. The row number is digits and padding, so its bytes are its
---- columns. In the last column nothing is kept, or the screen would scroll past
---- the table's right edge into blank space.
+--- This is calculate per column because the desired value is different
+--- depending on the region:
+---
+--- A. When at the left edge, this value is set to the width of the row number
+---    column. This prevents the cursor from entering that column and stops the
+---    scroll at the correct position.
+--- B. When in the middle region we want a comfortable preview of the next column
+---    to the right for orientation. The row number column width is fine for this
+---    purpose as well, so we don't need to handle it differently.
+--- C. When at the right edge, we want to stop the scroll so the right most border 
+---    is shown at the edge of the screen and we never show blank space past that. 
+---
+--- So in the end, it is either at the right most column (C) and scroll off is
+--- 0, or any other position (A or B) and the scroll off is the width of the
+--- row number column.
+---
+--- We may change that to add an explicit value for B in the future.
 ---@param buffer csv.Buffer
----@param cell integer
----@param ranges csv.CellRange[]
+---@param column_num integer
 ---@return integer
-local function scroll_off(buffer, cell, ranges)
-  if cell == cell_count(buffer) then
+local function scroll_off(buffer, column_num)
+  if column_num == column_count(buffer) then
     return 0
   end
-  return ranges[1].to - ranges[1].from + 2
+  local first_col = buffer.layout.ranges[1]
+  return first_col.to - first_col.from + 2
 end
 
---- Put the cursor in cell `cell` of `line` and draw it as the active one.
+--- Set the active cell to `cell` of `line`.
 ---
 --- nvim scrolls sideways only far enough to show the byte the cursor is on, so
 --- the cursor goes to the far end of the cell in the direction of travel: the
@@ -100,31 +109,40 @@ end
 --- the start of that character.
 ---@param buffer csv.Buffer
 ---@param window integer
----@param line integer
----@param cell integer
----@param ranges csv.CellRange[] The cells of `line`.
-local function set_cursor(buffer, window, line, cell, ranges)
-  local previous = last_cursor_in(buffer, window)
-  local edge = previous and previous.edge or "left"
-  if previous and cell > previous.cell then
-    edge = "right"
-  elseif previous and cell < previous.cell then
-    edge = "left"
+---@param row_number integer
+---@param column_number integer
+local function set_cursor(buffer, window, row_number, column_number)
+  local row = layout.get_row(buffer.layout, row_number)
+  if not row[column_number] then
+    return nil
+  end
+  local cell = row[column_number]
+
+  local edge = "left"
+  local previous = get_active_cell(buffer, window)
+  if previous then
+    if column_number > previous.column_number then
+      edge = "right"
+    elseif column_number < previous.column_number then
+      edge = "left"
+    else
+      edge = previous.edge or "left"
+    end
   end
 
-  local range = ranges[cell]
-  vim.wo[window][0].sidescrolloff = scroll_off(buffer, cell, ranges)
-  vim.api.nvim_win_set_cursor(window, { line, edge == "right" and range.to - 1 or range.from })
-  last_cursor[window_id(window)] = {
+  vim.wo[window][0].sidescrolloff = scroll_off(buffer, column_number)
+  vim.api.nvim_win_set_cursor(window, { row_number, edge == "right" and cell.to - 1 or cell.from })
+  active_cell[window_id(window)] = {
     bufnr = buffer.bufnr,
     position = vim.api.nvim_win_get_cursor(window),
-    cell = cell,
+    row_number = row_number,
+    column_number = column_number,
     edge = edge,
   }
 
   vim.api.nvim_buf_clear_namespace(buffer.bufnr, cell_namespace, 0, -1)
-  vim.api.nvim_buf_set_extmark(buffer.bufnr, cell_namespace, line - 1, range.from, {
-    end_col = range.to,
+  vim.api.nvim_buf_set_extmark(buffer.bufnr, cell_namespace, row_number - 1, cell.from, {
+    end_col = cell.to,
     hl_group = "CsvCursorCell",
     priority = CELL_PRIORITY,
   })
@@ -133,44 +151,58 @@ end
 --- Drop the record for `bufnr`, once the buffer is gone. nvim reuses buffer
 --- numbers, so a record left behind would describe the next buffer.
 ---@param bufnr integer
-function M.forget(bufnr)
-  for window, last in pairs(last_cursor) do
+function M.destroy(bufnr)
+  for window, last in pairs(active_cell) do
     if last.bufnr == bufnr then
-      last_cursor[window] = nil
+      active_cell[window] = nil
     end
   end
 end
 
---- Whether the cursor is where this plugin last set it.
+--- Handles manual movement of the cursor and translates it to cell movement.
 ---@param buffer csv.Buffer
 ---@param window integer
 ---@return boolean
-function M.is_ours(buffer, window)
-  local last = last_cursor_in(buffer, window)
+function M.cursor_moved(buffer, window)
+  local last = get_active_cell(buffer, window)
   if not last then
     return false
   end
   local position = vim.api.nvim_win_get_cursor(window)
-  return position[1] == last.position[1] and position[2] == last.position[2]
+  local not_moved = position[1] == last.position[1] and position[2] == last.position[2]
+  if not not_moved then
+    return false
+  end
+  M.snap(buffer, 0)
+  if buffer.state.range then
+    range.clear(buffer.state)
+    M.redraw(buffer)
+  end
+  return true
 end
 
---- Which line and cell the cursor is in, both clamped into the table, so a
---- cursor resting on a border, the row number, or a rule answers with the
---- nearest cell it could act on.
+local function clamp_position_to_layout(buffer, row_number, column_number)
+  local first, last = buffer.layout.first_row, buffer.layout.last_row
+  row_number = math.min(math.max(row_number, first), last)
+  column_number = math.min(math.max(column_number, 2), buffer.layout.column_count)
+  return row_number, column_number
+end
+
+--- The row/column coordinates of the real nvim cursor.
 ---@param buffer csv.Buffer
 ---@param window integer
 ---@return integer line
 ---@return integer cell
-local function cell_under_cursor(buffer, window)
+local function cell_nearest_cursor(buffer, window)
   local position = vim.api.nvim_win_get_cursor(window)
-  local first, last = buffer.layout.first_row, buffer.layout.last_row
-  local line = math.min(math.max(position[1], first), last)
-  local cell = layout.cell_at(buffer.layout, line, position[2])
-  return line, math.min(math.max(cell, 2), cell_count(buffer))
+  local row_number = position[1]
+  local column_number = layout.cell_at(buffer.layout, row_number, position[2])
+  return clamp_position_to_layout(buffer, row_number, column_number)
 end
 
---- Put the cursor on a cell named by line and cell number, both clamped, and
---- say which cell of the table that turned out to be.
+--- Attempt to set the active cell to `column_number` of `row_number`.
+--- If that is out of bounds, the nearest cell is chosen. The result is
+--- returned as a cell reference.
 ---@param buffer csv.Buffer
 ---@param window integer
 ---@param line integer
@@ -181,20 +213,16 @@ function M.move_to(buffer, window, line, cell)
     return nil
   end
 
-  line = math.min(math.max(line, buffer.layout.first_row), buffer.layout.last_row)
-  cell = math.min(math.max(cell, 2), cell_count(buffer))
+  local row_number, column_number = clamp_position_to_layout(buffer, line, cell)
 
-  local ranges = layout.cell_ranges(buffer.layout, line)
-  if not ranges[cell] then
-    return nil
-  end
-
-  set_cursor(buffer, window, line, cell, ranges)
-  local rowid = buffer.layout.rowids[line]
+  set_cursor(buffer, window, row_number, column_number)
+  local rowid = buffer.layout.row_id_by_index[row_number]
   if not rowid then
     return nil
   end
-  return { row = rowid, column = cell - 1 }
+  -- WGY is column -1? Is the 0 based?
+  -- rowid should not be named row, it is ambiguous
+  return { row = rowid, column = column_number - 1 }
 end
 
 --- Move the cursor `rows` lines and `cells` cells from where it is.
@@ -207,7 +235,7 @@ function M.step(buffer, window, rows, cells)
   if not buffer.layout then
     return nil
   end
-  local line, cell = cell_under_cursor(buffer, window)
+  local line, cell = cell_nearest_cursor(buffer, window)
   return M.move_to(buffer, window, line + rows, cell + cells)
 end
 
@@ -231,9 +259,9 @@ function M.restore(buffer, window)
   if not buffer.layout then
     return nil
   end
-  local last = last_cursor_in(buffer, window)
+  local last = get_active_cell(buffer, window)
   local line = vim.api.nvim_win_get_cursor(window)[1]
-  return M.move_to(buffer, window, line, last and last.cell or 2)
+  return M.move_to(buffer, window, line, last and last.column_number or 2)
 end
 
 --- Which cell of the table the cursor is in.
@@ -244,8 +272,8 @@ function M.cell_ref(buffer, window)
   if not buffer.layout then
     return nil
   end
-  local line, cell = cell_under_cursor(buffer, window)
-  local rowid = buffer.layout.rowids[line]
+  local line, cell = cell_nearest_cursor(buffer, window)
+  local rowid = buffer.layout.row_id_by_index[line]
   if not rowid then
     return nil
   end

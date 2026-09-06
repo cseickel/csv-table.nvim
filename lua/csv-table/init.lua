@@ -12,7 +12,7 @@ file does not matter.
 local actions = require("csv-table.actions")
 local buffer = require("csv-table.buffer")
 local columns = require("csv-table.columns")
-local cursor = require("csv-table.cursor")
+local active_cell = require("csv-table.active_cell")
 local highlight = require("csv-table.highlight")
 local keymaps = require("csv-table.keymaps")
 local state = require("csv-table.state")
@@ -143,7 +143,7 @@ function M.setup(opts)
   -- buffer owns are in `csv-table-buffer`.
   local group = vim.api.nvim_create_augroup("csv-table", { clear = true })
   highlight.setup(group)
-  cursor.setup(group)
+  active_cell.setup(group)
 
   vim.api.nvim_create_autocmd("BufReadCmd", {
     group = group,
