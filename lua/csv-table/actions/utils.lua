@@ -52,7 +52,7 @@ end
 ---@param buf csv.Buffer
 ---@param change fun(column: csv.Column)
 function M.on_column(buf, change)
-  local column = active_cell.column_at(buf, 0)
+  local column = active_cell.column(buf, 0)
   if not column then
     return
   end

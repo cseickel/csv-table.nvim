@@ -7,6 +7,7 @@ called from a keymap, a command, or a test. Resolving those values from the
 cursor belongs to `csv-table.buffer`.
 ]]
 
+local columns = require("csv-table.columns")
 local format = require("csv-table.format")
 
 local M = {}
@@ -50,18 +51,16 @@ M.page_size = 1000
 ---@field source string         Path of the file.
 ---@field sheet integer         0-based sheet being read, 0 for a source without sheets.
 ---@field sheets string[]       Every sheet name, empty for a source without sheets.
----@field columns csv.Column[]  Every source column, in file order.
----@field row_number_name string Name for the prepended row number, absent from `columns`.
----@field rowid_name string     Name for the prepended row id, absent from `columns`.
+---@field columns csv.Column[]  Every source column, in display order, hidden ones among them.
+---@field rowid_column csv.Column The prepended row id, which `layout.parse` cuts back out.
 ---@field filters csv.Filter[]  ANDed together.
 ---@field sort_keys csv.SortKey[] Most significant key first.
----@field column_order csv.Column[] Display order. Empty means every source column.
 ---@field clipboard csv.Column[] Cut columns waiting to be pasted.
 ---@field marked table<integer, boolean> Marked row ids.
----@field marked_columns table<integer, boolean> Marked column indices.
----@field range csv.Range|nil The cells picked out, absent when none are.
+---@field marked_columns table<integer, boolean> Marked column ids.
+---@field selection csv.Selection|nil The cells picked out, absent when none are.
 ---@field columns_filtered_to_marks boolean
----@field formats table<integer, csv.Format> Keyed by column index.
+---@field formats table<integer, csv.Format> Keyed by column id.
 ---@field page integer          0-based.
 ---@field limit integer         Rows per page.
 
@@ -73,12 +72,18 @@ function M.new(source)
     sheet = source.sheet,
     sheets = source.sheets,
     columns = source.columns,
-    row_number_name = source.row_number_name,
-    rowid_name = source.rowid_name,
+    -- `column_id` -1 keeps the row id clear of every source column and of
+    -- `state.formats`. `csv-table.source` picks a name the file's headers leave
+    -- free.
+    rowid_column = {
+      name = source.rowid_name,
+      label = source.rowid_name,
+      column_id = -1,
+      hidden = false,
+    },
     formats = source.formats,
     filters = {},
     sort_keys = {},
-    column_order = {},
     clipboard = {},
     marked = {},
     marked_columns = {},
@@ -88,12 +93,27 @@ function M.new(source)
   }
 end
 
+--- Every source column in file order, which is how the stream arrives and so
+--- how `rename` addresses them.
+---@param state csv.State
+---@return csv.Column[]
+function M.source_order(state)
+  local ordered = {}
+  for index, column in ipairs(state.columns) do
+    ordered[index] = column
+  end
+  table.sort(ordered, function(left, right)
+    return left.column_id < right.column_id
+  end)
+  return ordered
+end
+
 --- Whether a column holds numbers, which decides how it sorts.
 ---@param state csv.State
 ---@param column csv.Column
 ---@return boolean
 function M.is_numeric(state, column)
-  return format.is_numeric(state.formats[column.index])
+  return format.is_numeric(state.formats[column.column_id])
 end
 
 -- Sorting -------------------------------------------------------------------
@@ -105,7 +125,7 @@ end
 ---@param direction "asc"|"desc"
 function M.sort_by(state, column, direction)
   local only = #state.sort_keys == 1 and state.sort_keys[1]
-  if only and only.column.index == column.index and only.direction == direction then
+  if only and only.column.column_id == column.column_id and only.direction == direction then
     state.sort_keys = {}
   else
     state.sort_keys = {
@@ -122,7 +142,7 @@ end
 ---@param direction "asc"|"desc"
 function M.add_sort_key(state, column, direction)
   for index, key in ipairs(state.sort_keys) do
-    if key.column.index == column.index then
+    if key.column.column_id == column.column_id then
       if key.direction == direction then
         table.remove(state.sort_keys, index)
       else
@@ -145,7 +165,7 @@ end
 ---@param column csv.Column
 function M.remove_sort_key(state, column)
   for index, key in ipairs(state.sort_keys) do
-    if key.column.index == column.index then
+    if key.column.column_id == column.column_id then
       table.remove(state.sort_keys, index)
       state.page = 0
       return
@@ -196,7 +216,7 @@ end
 ---@param state csv.State
 ---@param column csv.Column
 function M.toggle_mark_column(state, column)
-  state.marked_columns[column.index] = not state.marked_columns[column.index] or nil
+  state.marked_columns[column.column_id] = not state.marked_columns[column.column_id] or nil
 end
 
 ---@param state csv.State
@@ -251,13 +271,12 @@ end
 function M.reset(state)
   state.filters = {}
   state.sort_keys = {}
-  state.column_order = {}
   state.clipboard = {}
   state.marked = {}
   state.marked_columns = {}
-  state.columns_filtered_to_marks = false
-  state.range = nil
+  state.selection = nil
   state.page = 0
+  columns.show_all(state)
 end
 
 return M

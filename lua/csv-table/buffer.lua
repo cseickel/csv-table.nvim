@@ -11,11 +11,12 @@ The buffer stays nomodifiable. Its text is xan's output, not a document.
 
 local commands = require("csv-table.commands")
 local active_cell = require("csv-table.active_cell")
+local columns = require("csv-table.columns")
 local layout = require("csv-table.layout")
 local query = require("csv-table.query")
-local range = require("csv-table.range")
 local selection = require("csv-table.selection")
 local source = require("csv-table.source")
+local statuscolumn = require("csv-table.statuscolumn")
 local state = require("csv-table.state")
 
 local M = {}
@@ -42,21 +43,21 @@ local RANGE_PRIORITY = 4200
 --- Draw the marked rows and the marked columns.
 ---@param buffer csv.Buffer
 local function draw_marks(buffer)
-  for line = buffer.layout.first_row, buffer.layout.last_row do
-    local rowid = buffer.layout.row_id_by_index[line]
-    if rowid and buffer.state.marked[rowid] then
-      vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, line - 1, 0, {
+  for buffer_line = buffer.layout.first_line, buffer.layout.last_line do
+    local row = layout.row_at_line(buffer.layout, buffer_line)
+    if row and buffer.state.marked[row.row_id] then
+      vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, buffer_line - 1, 0, {
         line_hl_group = "CsvMarkedRow",
       })
     end
   end
 
-  local header = buffer.layout.header
-  for position, column in ipairs(selection.display_columns(buffer.state)) do
-    if buffer.state.marked_columns[column.index] then
-      local from, to = layout.cell_bounds(buffer.layout, header, position + 1)
+  local header_line = buffer.layout.header_line
+  for column_number, column in ipairs(buffer.layout.columns) do
+    if buffer.state.marked_columns[column.column_id] then
+      local from, to = layout.cell_bounds(buffer.layout, header_line, column_number)
       if from then
-        vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, header - 1, from, {
+        vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, header_line - 1, from, {
           end_col = to,
           hl_group = "CsvMarkedColumn",
         })
@@ -65,20 +66,20 @@ local function draw_marks(buffer)
   end
 end
 
---- Draw the selected cells. The columns of a range are next to each other, so
---- each line takes one extmark from the left edge of the first to the right
+--- Draw the selected cells. The columns of a selection are next to each other,
+--- so each line takes one extmark from the left edge of the first to the right
 --- edge of the last. The priority puts it over a marked row, which is the whole
 --- line and the less specific of the two.
 ---@param buffer csv.Buffer
-local function draw_range(buffer)
-  local bounds = range.bounds(buffer.state, buffer.layout)
+local function draw_selection(buffer)
+  local bounds = selection.bounds(buffer.state, buffer.layout)
   if not bounds then
     return
   end
 
   for line = bounds.top, bounds.bottom do
-    local cells = layout.get_row(buffer.layout, line)
-    local first, last = cells[bounds.left + 1], cells[bounds.right + 1]
+    local cells = layout.cell_ranges(buffer.layout, line)
+    local first, last = cells[bounds.left], cells[bounds.right]
     if first and last then
       vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, line - 1, first.from, {
         end_col = last.to,
@@ -99,7 +100,7 @@ function M.redraw(buffer)
   end
   vim.api.nvim_buf_clear_namespace(buffer.bufnr, mark_namespace, 0, -1)
   draw_marks(buffer)
-  draw_range(buffer)
+  draw_selection(buffer)
 end
 
 ---@param bufnr integer
@@ -127,14 +128,25 @@ end
 ---@param buffer csv.Buffer
 ---@param on_rendered fun()|nil Runs once the new text is in the buffer.
 function M.render(buffer, on_rendered)
-  range.clear(buffer.state)
+  selection.clear(buffer.state)
 
-  query.run(commands.render(buffer.state), query.report, function(stdout)
+  -- Both the command and the layout read this one snapshot. The run is
+  -- asynchronous, so a second render starting meanwhile would otherwise hand
+  -- its column list to this render's text.
+  local display_columns = columns.display_columns(buffer.state)
+  local first_row_number = state.first_row_number(buffer.state)
+
+  local argv = commands.render(buffer.state, display_columns)
+  query.run(argv, query.report, function(stdout)
     if not vim.api.nvim_buf_is_valid(buffer.bufnr) then
       return
     end
 
-    local parsed, err = layout.parse(vim.split(stdout, "\n", { plain = true }))
+    local parsed, err = layout.parse(
+      vim.split(stdout, "\n", { plain = true }),
+      display_columns,
+      first_row_number
+    )
     if not parsed then
       return query.report(err)
     end
@@ -143,7 +155,7 @@ function M.render(buffer, on_rendered)
     replace_lines(buffer.bufnr, parsed.lines)
     M.redraw(buffer)
     -- `status.get_winbar` pins this line while the buffer is scrolled past it.
-    vim.b[buffer.bufnr].table_header = parsed.header
+    vim.b[buffer.bufnr].table_header = parsed.header_line
 
     local window = vim.fn.bufwinid(buffer.bufnr)
     if window ~= -1 then
@@ -162,11 +174,11 @@ end
 ---@param column csv.Column
 ---@return integer|nil
 function M.column_width(buffer, column)
-  local position = selection.position(buffer.state, column)
-  if not buffer.layout or not position then
+  if not buffer.layout then
     return nil
   end
-  return layout.cell_width(buffer.layout, position + 1)
+  local column_number = layout.column_number(buffer.layout, column)
+  return column_number and layout.cell_width(buffer.layout, column_number) or nil
 end
 
 --- Read another sheet of the same workbook. The filters, sort, marks, column
@@ -239,8 +251,9 @@ function M.attach(bufnr, on_ready)
   vim.bo[bufnr].filetype = "csv-table"
 
   -- A table is read by scrolling sideways, so wrapping would break every row
-  -- into a variable number of screen lines and unalign the columns. Line
-  -- numbers go too, since column one of the table is the row number.
+  -- into a variable number of screen lines and unalign the columns. The gutter
+  -- draws the row number through `csv-table.statuscolumn`, which takes the place
+  -- of the line numbers.
   --
   -- Each is set through `vim.wo[window][0]`, which is `:setlocal`: the value
   -- holds for this buffer in that window alone. `vim.wo[window]` is `:set`,
@@ -252,6 +265,7 @@ function M.attach(bufnr, on_ready)
       vim.wo[window][0].number = false
       vim.wo[window][0].relativenumber = false
       vim.wo[window][0].signcolumn = "no"
+      vim.wo[window][0].statuscolumn = statuscolumn.EXPRESSION
     end
   end
   set_window_options()
@@ -267,10 +281,14 @@ function M.attach(bufnr, on_ready)
     buffer = bufnr,
     callback = function()
       local buffer = buffers[bufnr]
-      if not buffer or not buffer.layout then
+      if not buffer or not buffer.layout or not active_cell.cursor_moved(buffer, 0) then
         return
       end
-      active_cell.cursor_moved(buffer, 0)
+      active_cell.snap(buffer, 0)
+      if selection.is_set(buffer.state) then
+        selection.clear(buffer.state)
+        M.redraw(buffer)
+      end
     end,
   })
 

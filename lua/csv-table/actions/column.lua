@@ -9,8 +9,9 @@ moved is still the one under it.
 
 local buffer = require("csv-table.buffer")
 local active_cell = require("csv-table.active_cell")
+local columns = require("csv-table.columns")
 local format = require("csv-table.format")
-local selection = require("csv-table.selection")
+local layout_module = require("csv-table.layout")
 local utils = require("csv-table.actions.utils")
 
 --- Render, then put the cursor at the start of `column`, so a column that
@@ -19,18 +20,16 @@ local utils = require("csv-table.actions.utils")
 --- whichever column the cursor had been left over.
 ---@param buf csv.Buffer
 ---@param column csv.Column
----@param on_focused fun(cell: integer)|nil Runs once the cursor is back on the column.
+---@param on_focused fun(column: csv.Column)|nil Runs once the cursor is back on the column.
 local function follow(buf, column, on_focused)
-  local position = selection.position(buf.state, column)
-
   buffer.render(buf, function()
-    if not position then
+    local cell = active_cell.cell(buf, 0)
+    if not cell or not layout_module.column_number(buf.layout, column) then
       return
     end
-    local line = vim.api.nvim_win_get_cursor(0)[1]
-    active_cell.move_to(buf, 0, line, position + 1)
+    active_cell.move_to(buf, 0, { row = cell.row, column = column })
     if on_focused then
-      on_focused(position + 1)
+      on_focused(column)
     end
   end)
 end
@@ -38,10 +37,10 @@ end
 --- A column that moved is somewhere else on the line, so it flashes to be found
 --- again. A column that only changed width has not gone anywhere.
 ---@param buf csv.Buffer
----@return fun(cell: integer)
+---@return fun(column: csv.Column)
 local function flash(buf)
-  return function(cell)
-    active_cell.flash_cell(buf, cell)
+  return function(column)
+    active_cell.flash_column(buf, column)
   end
 end
 
@@ -50,7 +49,7 @@ end
 ---@param buf csv.Buffer
 ---@param change fun(column: csv.Column, width: integer)
 local function on_padding(buf, change)
-  local column = active_cell.column_at(buf, 0)
+  local column = active_cell.column(buf, 0)
   if not column then
     return
   end
@@ -97,8 +96,8 @@ end
 ---@return fun(buf: csv.Buffer)
 local function move_action(delta)
   return function(buf)
-    local column = active_cell.column_at(buf, 0)
-    if column and selection.swap_column(buf.state, column, delta) then
+    local column = active_cell.column(buf, 0)
+    if column and columns.swap(buf.state, column, delta) then
       follow(buf, column, flash(buf))
     end
   end
@@ -109,33 +108,31 @@ end
 local function paste_action(before)
   return function(buf)
     local first_cut = buf.state.clipboard[1]
-    local column = active_cell.column_at(buf, 0)
-    if selection.paste_columns(buf.state, column, before) then
+    local column = active_cell.column(buf, 0)
+    if columns.paste(buf.state, column, before) then
       follow(buf, first_cut, flash(buf))
     end
   end
 end
 
 utils.register_action("hide_column", "Hide this column", function(buf)
-  utils.on_column(buf, function(column)
-    selection.hide_column(buf.state, column)
-  end)
+  utils.on_column(buf, columns.hide)
 end)
 
 utils.register_action("show_all_columns", "Show every column again", function(buf)
-  selection.show_all_columns(buf.state)
+  columns.show_all(buf.state)
   buffer.render(buf)
 end)
 
 utils.register_action("cut_column", "Cut this column, keeping it to paste", function(buf)
   utils.on_column(buf, function(column)
-    selection.cut_column(buf.state, column, false)
+    columns.cut(buf.state, column, false)
   end)
 end)
 
 utils.register_action("cut_append_column", "Add this column to the cut", function(buf)
   utils.on_column(buf, function(column)
-    selection.cut_column(buf.state, column, true)
+    columns.cut(buf.state, column, true)
   end)
 end)
 
@@ -154,12 +151,12 @@ utils.register_action("increase_width", "Widen this column by one", width(1))
 utils.register_action("decrease_width", "Narrow this column by one", width(-1))
 
 utils.register_action("set_format", "Give this column a printf format", function(buf)
-  local column = active_cell.column_at(buf, 0)
+  local column = active_cell.column(buf, 0)
   if not column then
     return
   end
 
-  local current = buf.state.formats[column.index]
+  local current = buf.state.formats[column.column_id]
   vim.ui.input({ prompt = "printf format: ", default = current and current.spec or "" }, function(spec)
     if spec == nil then
       return

@@ -19,7 +19,6 @@ to the row marks and the selection.
 local buffer = require("csv-table.buffer")
 local format = require("csv-table.format")
 local layout = require("csv-table.layout")
-local selection = require("csv-table.selection")
 
 local M = {}
 
@@ -40,7 +39,7 @@ local GROUPS = {
   CsvMarkedRow = { link = "DiffAdd" },
   CsvMarkedColumn = { link = "DiffText" },
   CsvSelection = { link = "Visual" },
-  CsvCursorCell = { reverse = true },
+  CsvActiveCell = { reverse = true },
   CsvFlash = { link = "IncSearch" },
   -- `blend = 100` is what hides the cursor drawn in this group.
   CsvHiddenCursor = { blend = 100 },
@@ -52,20 +51,19 @@ local function define_groups()
   end
 end
 
---- What each cell of a data row is colored by, keyed by cell number. Cell 1 is
---- the row number, so the column at display position `n` is cell `n + 1`. A
---- number is keyed by its kind rather than by a group, because the sign of the
---- value decides which of the two number groups it takes.
----@param state csv.State
+--- What each cell of a data row is colored by, keyed by column number. A number
+--- is keyed by its kind rather than by a group, because the sign of the value
+--- decides which of the two number groups it takes.
+---@param buf csv.Buffer
 ---@return table<integer, "number"|"date">
-local function cell_kinds(state)
+local function cell_kinds(buf)
   local kinds = {}
-  for position, column in ipairs(selection.display_columns(state)) do
-    local column_format = state.formats[column.index]
+  for column_number, column in ipairs(buf.layout.columns) do
+    local column_format = buf.state.formats[column.column_id]
     if format.is_numeric(column_format) then
-      kinds[position + 1] = "number"
+      kinds[column_number] = "number"
     elseif column_format and column_format.kind == "date" then
-      kinds[position + 1] = "date"
+      kinds[column_number] = "date"
     end
   end
   return kinds
@@ -133,7 +131,7 @@ local function on_win(_, _, bufnr)
     current_window = nil
     return false
   end
-  current_window = { layout = buf.layout, kinds = cell_kinds(buf.state) }
+  current_window = { layout = buf.layout, kinds = cell_kinds(buf) }
   return true
 end
 
@@ -153,23 +151,21 @@ local function on_line(_, _, bufnr, row)
     return
   end
 
-  -- A horizontal rule holds nothing but border.
-  local header = index == current_window.layout.header
-  if not header and (index < current_window.layout.first_row or index > current_window.layout.last_row) then
+  -- A border line is border all the way across.
+  local header = index == current_window.layout.header_line
+  if not header and (index < current_window.layout.first_line or index > current_window.layout.last_line) then
     return draw(bufnr, row, 0, #line, "CsvBorder")
   end
 
-  local ranges = layout.get_row(current_window.layout, index)
+  local ranges = layout.cell_ranges(current_window.layout, index)
   draw_borders(bufnr, row, line, ranges)
 
-  for cell, range in ipairs(ranges) do
+  for column_number, range in ipairs(ranges) do
     local group
     if header then
       group = "CsvHeader"
-    elseif cell == 1 then
-      group = "CsvRowNumber"
     else
-      local kind = current_window.kinds[cell]
+      local kind = current_window.kinds[column_number]
       group = kind and group_of(kind, line:sub(range.from + 1, range.to))
     end
     if group then

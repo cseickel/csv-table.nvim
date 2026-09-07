@@ -67,7 +67,7 @@ local function sort_summary(buf)
 
   local parts = {}
   for index, key in ipairs(buf.state.sort_keys) do
-    parts[index] = columns.display(key.column) .. (key.direction == "asc" and "▲" or "▼")
+    parts[index] = key.column.label .. (key.direction == "asc" and "▲" or "▼")
   end
   return "sort " .. table.concat(parts, " ")
 end
@@ -80,11 +80,7 @@ local function clipboard_summary(buf)
     return nil
   end
 
-  local names = {}
-  for index, column in ipairs(buf.state.clipboard) do
-    names[index] = columns.display(column)
-  end
-  return "cut " .. table.concat(names, ",")
+  return "cut " .. table.concat(columns.labels(buf.state.clipboard), ",")
 end
 
 --- How the page and everything applied to it read in a statusline. Empty for

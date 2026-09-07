@@ -1,60 +1,53 @@
 --[[
 The actions that select cells.
 
-Selecting changes nothing about what xan would return, so every action here
-draws over the text already in the buffer rather than rendering the page again.
-Rendering would in any case drop the selection, which is what `buffer.render`
-does deliberately.
+Selecting leaves the xan output alone, so every action here draws over the text
+already in the buffer. `buffer.render` clears the selection on purpose, so
+rendering again would throw away what the user just picked.
 
-Extending moves the cursor as well, the way a spreadsheet moves the active cell,
-so the keys that extend a selection are also the keys that walk the table.
-
-cSpell:ignore rowids
+Extending moves the active cell as well, the way a spreadsheet does, so the keys
+that extend a selection are also the keys that walk the table.
 ]]
 
 local buffer = require("csv-table.buffer")
 local active_cell = require("csv-table.active_cell")
 local inspect = require("csv-table.inspect")
+local layout_module = require("csv-table.layout")
 local query = require("csv-table.query")
-local range = require("csv-table.range")
 local selection = require("csv-table.selection")
 local utils = require("csv-table.actions.utils")
 
 local EDGE = utils.EDGE
 
---- Take the selection out by `rows` and `cells`, walking the cursor along with
---- it.
+--- Take the selection out by `rows` and `cells`, walking the active cell along
+--- with it.
 ---
---- The end of the selection moves from where the selection ends and the cursor
---- moves from where the cursor is, which are the same cell until a whole row or
---- column is selected. Keeping them apart is what lets a selected row be taken
---- down as a whole row while the cursor stays in the column being read.
+--- The head of the selection moves from the head and the active cell moves from
+--- where it is, which are the same cell until a whole row or column is selected.
+--- Keeping them apart is what lets a selected row be taken down as a whole row
+--- while the active cell stays in the column being read.
 ---@param rows integer
 ---@param cells integer
 ---@return fun(buf: csv.Buffer)
 local function extender(rows, cells)
   return function(buf)
-    local current_range = buf.state.range
-    local start_cell = current_range and current_range.end or active_cell.cell_ref(buf, 0)
+    local current = buf.state.selection
+    local start_cell = current and current.head or active_cell.cell(buf, 0)
     if not buf.layout or not start_cell then
       return
     end
 
-    local delta = {
-      rows = rows,
-      columns = cells,
-      column_count = #selection.display_columns(buf.state),
-    }
-    local new_end = range.step(start_cell, buf.layout, delta)
-    if not new_end then
+    local delta = { rows = rows, columns = cells }
+    local new_head = layout_module.step_cell(buf.layout, start_cell, delta)
+    if not new_head then
       return query.report("the selection is not on this page")
     end
 
     active_cell.step(buf, 0, rows, cells)
-    if current_range then
-      range.extend(buf.state, new_end)
+    if current then
+      selection.extend(buf.state, new_head)
     else
-      range.set(buf.state, start_cell, new_end)
+      selection.set(buf.state, start_cell, new_head)
     end
     buffer.redraw(buf)
   end
@@ -63,65 +56,70 @@ end
 --- Select the rectangle `corners` names, which is how a whole row, a whole
 --- column and the whole page are selected in one press. The cursor stays where
 --- it is, since the user is reading the cell it is on.
----@param corners fun(buf: csv.Buffer, layout: csv.Layout): csv.CellRef|nil, csv.CellRef|nil
+---@param corners fun(buf: csv.Buffer, layout: csv.Layout): csv.Cell|nil, csv.Cell|nil
 ---@return fun(buf: csv.Buffer)
 local function selector(corners)
   return function(buf)
-    if not buf.layout or buf.layout.first_row > buf.layout.last_row then
+    if not buf.layout or buf.layout.first_line > buf.layout.last_line then
       return query.report("there is nothing to select")
     end
 
-    local anchor, end_cell = corners(buf, buf.layout)
-    if not anchor or not end_cell or not anchor.row or not end_cell.row then
+    local anchor, head = corners(buf, buf.layout)
+    if not anchor or not head then
       return
     end
 
-    range.set(buf.state, anchor, end_cell)
+    selection.set(buf.state, anchor, head)
     buffer.redraw(buf)
   end
 end
 
----@param buf csv.Buffer
----@return integer
-local function last_column(buf)
-  return #selection.display_columns(buf.state)
+---@param layout csv.Layout
+---@param row csv.Row
+---@param column_number integer
+---@return csv.Cell|nil
+local function cell_at(layout, row, column_number)
+  local column = layout_module.column_at(layout, column_number)
+  return column and { row = row, column = column } or nil
 end
 
 utils.register_action("select_cell", "Select this cell", function(buf)
-  local cell = active_cell.cell_ref(buf, 0)
+  local cell = active_cell.cell(buf, 0)
   if not cell then
     return
   end
-  range.set(buf.state, cell, cell)
+  selection.set(buf.state, cell, cell)
   buffer.redraw(buf)
 end)
 
-utils.register_action("select_row", "Select this whole row", selector(function(buf, _)
-  local cell = active_cell.cell_ref(buf, 0)
-  if not cell then
-    return nil, nil
-  end
-  return { row = cell.row, column = 1 }, { row = cell.row, column = last_column(buf) }
-end))
-
-utils.register_action("select_column", "Select this whole column", selector(function(buf, layout)
-  local cell = active_cell.cell_ref(buf, 0)
+utils.register_action("select_row", "Select this whole row", selector(function(buf, layout)
+  local cell = active_cell.cell(buf, 0)
   if not cell then
     return nil, nil
   end
   return
-    { row = layout.row_id_by_index[layout.first_row], column = cell.column },
-    { row = layout.row_id_by_index[layout.last_row], column = cell.column }
+    cell_at(layout, cell.row, 1),
+    cell_at(layout, cell.row, layout_module.column_count(layout))
+end))
+
+utils.register_action("select_column", "Select this whole column", selector(function(buf, layout)
+  local cell = active_cell.cell(buf, 0)
+  if not cell then
+    return nil, nil
+  end
+  return
+    { row = layout_module.row_at_line(layout, layout.first_line), column = cell.column },
+    { row = layout_module.row_at_line(layout, layout.last_line), column = cell.column }
 end))
 
 utils.register_action("select_page", "Select every cell on this page", selector(function(buf, layout)
   return
-    { row = layout.row_id_by_index[layout.first_row], column = 1 },
-    { row = layout.row_id_by_index[layout.last_row], column = last_column(buf) }
+    cell_at(layout, layout_module.row_at_line(layout, layout.first_line), 1),
+    cell_at(layout, layout_module.row_at_line(layout, layout.last_line), layout_module.column_count(layout))
 end))
 
 utils.register_action("clear_selection", "Select nothing", function(buf)
-  range.clear(buf.state)
+  selection.clear(buf.state)
   buffer.redraw(buf)
 end)
 

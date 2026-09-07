@@ -1,22 +1,34 @@
 --[[
-Column identity.
+Columns: what one is, and which of them the table draws.
 
-A CSV file may repeat a header name, so a name alone does not identify a column.
-Every column is a `csv.Column`, and this module owns the four
-renderings xan needs: the selection syntax used by `select` and `sort -s`, the
-moonblade form used inside filter expressions, the display name shown in the
-buffer, and the `rename` argument that puts those display names on the output.
+A column is named by its `column_id`, the 0-based position it holds in the
+source file, which every xan stage accepts in place of a header name. Two stages
+write a name instead of reading one, the `rename` argument and the `as` clauses
+after it, and both need names that are unique across the file, so every column
+gets a `label`: the header text, plus its occurrence where a name repeats.
+
+`state.columns` is the one list. It holds every source column, and the user
+reorders it and sets `hidden` on its entries, so `column_id` gives the file
+order and a position in the list gives the display order. The table draws the
+visible entries, behind the row number.
 ]]
 
 local M = {}
 
 ---@class csv.Column
----@field name string     Header text exactly as it appears in the file.
----@field nth integer     0-based occurrence among columns sharing `name`.
----@field index integer   0-based position among the file's columns.
----@field duplicated boolean True when another column shares `name`.
+---@field name string      Header text exactly as it appears in the file.
+---@field label string     The name shown to the user, unique across the file.
+---@field column_id integer 0-based position among the file's columns. The row
+---                        id the pipeline prepends takes -1.
+---@field hidden boolean   True when the user has taken the column off display.
 
---- Build the column list from the lines of `xan headers -j`.
+--- Build the column list from the lines of `xan headers -j`, in file order and
+--- all on display.
+---
+--- A repeated header takes its occurrence as a suffix, so `a,b,a` labels its
+--- columns `a[0]`, `b` and `a[1]`. Every label is then unique, which `rename`
+--- needs to address a column by name and `to jsonl` needs to key an object by
+--- one.
 ---@param names string[]
 ---@return csv.Column[]
 function M.from_names(names)
@@ -32,9 +44,9 @@ function M.from_names(names)
     seen[name] = nth + 1
     columns[i] = {
       name = name,
-      nth = nth,
-      index = i - 1,
-      duplicated = totals[name] > 1,
+      label = totals[name] > 1 and (name .. "[" .. nth .. "]") or name,
+      column_id = i - 1,
+      hidden = false,
     }
   end
   return columns
@@ -80,72 +92,11 @@ local function csv_quote(value)
   return '"' .. value:gsub('"', '""') .. '"'
 end
 
---- Render a name as one token of a xan selection argument. xan reads `*`, `:`,
---- `!`, `[` and `]` as selection syntax, so a bare `has:colon` asks for a column
---- named `has`, and quoting the name stops that.
----
---- A name holding a double quote goes bare instead. xan reads `""` inside a
---- quoted name as two characters rather than as one, so quoting `va"l` asks for
---- `va""l` and the run fails, while a bare double quote is not selection syntax
---- and resolves. A name holding a double quote and a syntax character both
---- cannot be named at all.
----@param name string
----@return string
-function M.quote_name(name)
-  if name:find('"', 1, true) then
-    return name
-  end
-  return name:match("^[%w_]+$") and name or csv_quote(name)
-end
-
---- Render for a xan selection argument (`select`, `sort -s`, `frequency -s`).
---- The bare form of a name always resolves to its first occurrence, so the
---- `[nth]` suffix is only needed past occurrence zero.
----@param column csv.Column
----@return string
-function M.selector(column)
-  local base = M.quote_name(column.name)
-  if column.nth == 0 then
-    return base
-  end
-  return base .. "[" .. column.nth .. "]"
-end
-
---- Render a comma-joined selection argument for several columns, in order.
----@param columns csv.Column[]
----@return string
-function M.selection(columns)
-  local parts = {}
-  for i, column in ipairs(columns) do
-    parts[i] = M.selector(column)
-  end
-  return table.concat(parts, ",")
-end
-
 --- Render a moonblade string literal.
 ---@param value string
 ---@return string
 function M.string_literal(value)
   return '"' .. value:gsub("\\", "\\\\"):gsub('"', '\\"') .. '"'
-end
-
---- Render for use inside a moonblade expression (`filter`, `map`).
---- Always the two-argument `col` form: a bare identifier would be shorter but
---- would need its own rules for names that are not valid identifiers.
----@param column csv.Column
----@return string
-function M.expression(column)
-  return string.format("col(%s, %d)", M.string_literal(column.name), column.nth)
-end
-
---- The name shown to the user. Only a duplicated name gets its occurrence.
----@param column csv.Column
----@return string
-function M.display(column)
-  if not column.duplicated then
-    return column.name
-  end
-  return column.name .. "[" .. column.nth .. "]"
 end
 
 --- Render the argument for `xan rename`, which takes one CSV row of names
@@ -160,15 +111,163 @@ function M.rename_argument(names)
   return table.concat(parts, ",")
 end
 
---- The display names of `columns`, in order.
+--- The labels of `columns`, in order.
 ---@param columns csv.Column[]
 ---@return string[]
-function M.display_names(columns)
-  local names = {}
+function M.labels(columns)
+  local labels = {}
   for i, column in ipairs(columns) do
-    names[i] = M.display(column)
+    labels[i] = column.label
   end
-  return names
+  return labels
+end
+
+-- Which columns the table draws -----------------------------------------------
+
+--- The columns on display, in display order. A column's position here is its
+--- `column_number`, and the same position in `layout.ranges` is the cell it is
+--- drawn in.
+---@param state csv.State
+---@return csv.Column[]
+function M.display_columns(state)
+  local display = {}
+  for _, column in ipairs(state.columns) do
+    if not column.hidden then
+      table.insert(display, column)
+    end
+  end
+  return display
+end
+
+---@param state csv.State
+---@param column csv.Column
+---@return integer|nil
+local function index_of(state, column)
+  for index, candidate in ipairs(state.columns) do
+    if candidate.column_id == column.column_id then
+      return index
+    end
+  end
+  return nil
+end
+
+---@param column csv.Column
+function M.hide(column)
+  column.hidden = true
+end
+
+--- Hide a column and keep it on the clipboard. `append` adds to a cut already
+--- there, which is how several columns move together.
+---@param state csv.State
+---@param column csv.Column
+---@param append boolean
+function M.cut(state, column, append)
+  if not append then
+    state.clipboard = {}
+  end
+  for _, held in ipairs(state.clipboard) do
+    if held.column_id == column.column_id then
+      return M.hide(column)
+    end
+  end
+  table.insert(state.clipboard, column)
+  M.hide(column)
+end
+
+--- Put the held columns back, beside `column`, in the order they were cut.
+---@param state csv.State
+---@param column csv.Column|nil Paste at the end when absent.
+---@param before boolean
+---@return boolean pasted
+function M.paste(state, column, before)
+  if #state.clipboard == 0 then
+    return false
+  end
+
+  for _, held in ipairs(state.clipboard) do
+    local from = index_of(state, held)
+    if from then
+      table.remove(state.columns, from)
+    end
+  end
+
+  local at = #state.columns + 1
+  local position = column and index_of(state, column)
+  if position then
+    at = before and position or position + 1
+  end
+
+  for offset, held in ipairs(state.clipboard) do
+    held.hidden = false
+    table.insert(state.columns, at + offset - 1, held)
+  end
+  state.clipboard = {}
+  return true
+end
+
+--- Exchange a column with the visible column `delta` places away. The two swap
+--- in place, leaving any hidden column between them where it sits.
+---@param state csv.State
+---@param column csv.Column
+---@param delta integer
+---@return boolean moved True when the column had a neighbor to trade with.
+function M.swap(state, column, delta)
+  local index = index_of(state, column)
+  if not index then
+    return false
+  end
+
+  local step = delta > 0 and 1 or -1
+  local remaining = math.abs(delta)
+  local target = index
+  while remaining > 0 do
+    target = target + step
+    if target < 1 or target > #state.columns then
+      return false
+    end
+    if not state.columns[target].hidden then
+      remaining = remaining - 1
+    end
+  end
+
+  state.columns[index], state.columns[target] = state.columns[target], state.columns[index]
+  return true
+end
+
+--- Show every column again, back in file order.
+---@param state csv.State
+function M.show_all(state)
+  for _, column in ipairs(state.columns) do
+    column.hidden = false
+  end
+  table.sort(state.columns, function(left, right)
+    return left.column_id < right.column_id
+  end)
+  state.columns_filtered_to_marks = false
+end
+
+--- Show only the marked columns, or every column if already restricted.
+---@param state csv.State
+function M.show_marked_only(state)
+  if state.columns_filtered_to_marks then
+    return M.show_all(state)
+  end
+
+  local any = false
+  for _, column in ipairs(state.columns) do
+    if state.marked_columns[column.column_id] then
+      any = true
+      break
+    end
+  end
+  if not any then
+    return
+  end
+
+  for _, column in ipairs(state.columns) do
+    column.hidden = not state.marked_columns[column.column_id]
+  end
+  state.columns_filtered_to_marks = true
 end
 
 return M

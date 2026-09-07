@@ -11,7 +11,6 @@ The sheet dialog lists the sheets of a workbook.
 ]]
 
 local buffer = require("csv-table.buffer")
-local columns = require("csv-table.columns")
 local query = require("csv-table.query")
 local state = require("csv-table.state")
 local window = require("csv-table.window")
@@ -69,12 +68,12 @@ end
 ---@param values csv.Frequency[]
 local function pick_values(buf, column, values)
   if #values == 0 then
-    return query.report("no values in " .. columns.display(column))
+    return query.report("no values in " .. column.label)
   end
 
   local checked = {}
   local bufnr, winid = window.open(checklist(values, checked), {
-    title = columns.display(column) .. "  (space toggles, enter applies)",
+    title = column.label .. "  (space toggles, enter applies)",
     modifiable = true,
   })
 
@@ -113,7 +112,7 @@ end
 ---@param column csv.Column
 ---@param choice csv.Choice
 local function ask_for_value(buf, column, choice)
-  vim.ui.input({ prompt = columns.display(column) .. " " .. choice.label .. ": " }, function(answer)
+  vim.ui.input({ prompt = column.label .. " " .. choice.label .. ": " }, function(answer)
     if answer == nil or answer == "" then
       return
     end
@@ -185,7 +184,7 @@ function M.open(buf, column)
   table.insert(lines, "  v   choose from the values in this column")
   table.insert(lines, "  e   a moonblade expression")
 
-  local bufnr, winid = window.open(lines, { title = "Filter " .. columns.display(column) })
+  local bufnr, winid = window.open(lines, { title = "Filter " .. column.label })
 
   for _, choice in ipairs(choices) do
     vim.keymap.set("n", choice.key, function()

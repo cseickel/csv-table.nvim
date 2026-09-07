@@ -1,0 +1,67 @@
+direction: right
+
+title: The state of a table buffer {
+  near: top-center
+  shape: text
+  style.font-size: 24
+}
+
+classes: {
+  state: {style.fill: "#2d2d4a"}
+  data: {style.fill: "#3d3d3d"}
+}
+
+state: |md
+  ### state.lua
+  `csv.State`, one per buffer. The file's
+  columns, and everything the user has
+  asked for on top of them.
+| {class: state}
+
+fields: ||md
+  | Field | Holds |
+  |---|---|
+  | `columns` | Every source column, in display order, hidden ones among them |
+  | `rowid_column` | The row id the pipeline prepends, `column_id` -1 |
+  | `filters` | ANDed together |
+  | `sort_keys` | Most significant first |
+  | `marked` | Row ids |
+  | `marked_columns` | Column ids |
+  | `formats` | Keyed by column id |
+  | `selection` | The anchor and head cells |
+  | `page`, `limit` | Which slice of rows |
+|| {class: data}
+
+columns: |md
+  ### columns.lua
+  What a column is: `name` as the file
+  spells it, a unique `label`, `column_id`,
+  `hidden`. A repeated name takes a `[n]`
+  suffix in its label, so `rename` can
+  address it.
+
+  Also which columns the table draws.
+  `display_columns` takes the visible ones
+  from `state.columns`. Hide, cut, paste and
+  swap all work on that one list.
+| {class: state}
+
+format: |md
+  ### format.lua
+  From a 600 row sample: int, float with a
+  decimal count, date, or text. The user
+  can override the width, the alignment
+  and the printf spec.
+| {class: state}
+
+selection: |md
+  ### selection.lua
+  `csv.Selection`: an `anchor` cell and a
+  `head` cell. `buffer.render` clears it, so
+  both ends belong to the layout on screen.
+| {class: state}
+
+state -> fields
+state -> columns: identity, and which are drawn
+state -> format: how each one reads
+state -> selection: which cells are picked

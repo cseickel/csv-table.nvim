@@ -1,151 +1,95 @@
 --[[
-Which columns are shown, and in what order.
+The block of cells the user has picked out.
 
-`state.column_order` empty means every source column in file order, which is the
-state a freshly opened file is in. The first change that needs a position
-materializes the full list, so nothing here has to reason about the empty case
-twice.
+A selection is an anchor cell, a head cell, and everything between them. Both
+name a row and a column of the layout on screen, and `csv-table.buffer.render`
+clears the selection before it replaces that layout, so both ends belong to the
+text the user picked them from.
+
+The lines the rows are drawn on say which rows lie between the two ends, because
+a sort puts row ids on the page in any order.
+
+`csv-table.state.marked` is a different thing again: marks are scattered, they
+last, and they filter.
 ]]
+
+local layout_module = require("csv-table.layout")
 
 local M = {}
 
---- The columns on display, in display order.
+---@class csv.Selection
+---@field anchor csv.Cell Where the selection started.
+---@field head csv.Cell   Where it has been taken since.
+
+---@class csv.Bounds
+---@field top integer    Line the selection starts on.
+---@field bottom integer Line it ends on.
+---@field left integer   Leftmost column number.
+---@field right integer  Rightmost column number.
+
+--- Select the rectangle between two cells. One cell is selected by naming it
+--- twice.
 ---@param state csv.State
----@return csv.Column[]
-function M.display_columns(state)
-  if #state.column_order > 0 then
-    return state.column_order
-  end
-  return state.columns
+---@param anchor csv.Cell
+---@param head csv.Cell
+function M.set(state, anchor, head)
+  state.selection = { anchor = anchor, head = head }
 end
 
----@param list csv.Column[]
----@param column csv.Column
----@return integer|nil
-local function position_of(list, column)
-  for index, candidate in ipairs(list) do
-    if candidate.index == column.index then
-      return index
-    end
-  end
-  return nil
-end
-
---- Where `column` is among the columns on display, counting from one, or nil
---- when it is hidden.
+--- Take the running selection out to `cell`, leaving the anchor where it is.
 ---@param state csv.State
----@param column csv.Column
----@return integer|nil
-function M.position(state, column)
-  return position_of(M.display_columns(state), column)
-end
-
---- Materialize `column_order` so a column can be removed from or moved within it.
----@param state csv.State
-local function materialize_column_order(state)
-  if #state.column_order > 0 then
-    return
+---@param cell csv.Cell
+function M.extend(state, cell)
+  if not state.selection then
+    return M.set(state, cell, cell)
   end
-  local copy = {}
-  for index, column in ipairs(state.columns) do
-    copy[index] = column
-  end
-  state.column_order = copy
+  state.selection = { anchor = state.selection.anchor, head = cell }
 end
 
 ---@param state csv.State
----@param column csv.Column
-function M.hide_column(state, column)
-  materialize_column_order(state)
-  local index = position_of(state.column_order, column)
-  if index then
-    table.remove(state.column_order, index)
-  end
-end
-
---- Hide a column and keep it on the clipboard. `append` adds to a cut already
---- there rather than replacing it, so several columns move together.
----@param state csv.State
----@param column csv.Column
----@param append boolean
-function M.cut_column(state, column, append)
-  if not append then
-    state.clipboard = {}
-  end
-  if not position_of(state.clipboard, column) then
-    table.insert(state.clipboard, column)
-  end
-  M.hide_column(state, column)
-end
-
---- Put the held columns back, beside `column`.
----@param state csv.State
----@param column csv.Column|nil Paste at the end when absent.
----@param before boolean
----@return boolean pasted
-function M.paste_columns(state, column, before)
-  if #state.clipboard == 0 then
-    return false
-  end
-
-  materialize_column_order(state)
-  local position = column and position_of(state.column_order, column)
-  local insert_at = #state.column_order + 1
-  if position then
-    insert_at = before and position or position + 1
-  end
-
-  for offset, cut in ipairs(state.clipboard) do
-    table.insert(state.column_order, insert_at + offset - 1, cut)
-  end
-  state.clipboard = {}
-  return true
-end
-
---- Exchange a column with its neighbor `delta` places away.
----@param state csv.State
----@param column csv.Column
----@param delta integer
----@return boolean moved False at the edge of the selection.
-function M.swap_column(state, column, delta)
-  materialize_column_order(state)
-  local index = position_of(state.column_order, column)
-  if not index then
-    return false
-  end
-
-  local target = index + delta
-  if target < 1 or target > #state.column_order then
-    return false
-  end
-  state.column_order[index], state.column_order[target] = state.column_order[target], state.column_order[index]
-  return true
+function M.clear(state)
+  state.selection = nil
 end
 
 ---@param state csv.State
-function M.show_all_columns(state)
-  state.column_order = {}
-  state.columns_filtered_to_marks = false
+---@return boolean
+function M.is_set(state)
+  return state.selection ~= nil
 end
 
---- Show only the marked columns, or every column if already restricted.
+--- The lines and the columns the selection covers, present while both ends are
+--- on the page.
 ---@param state csv.State
-function M.toggle_marked_columns(state)
-  if state.columns_filtered_to_marks then
-    return M.show_all_columns(state)
+---@param layout csv.Layout
+---@return csv.Bounds|nil
+function M.bounds(state, layout)
+  local selection = state.selection
+  if not selection then
+    return nil
   end
 
-  local marked = {}
-  for _, column in ipairs(state.columns) do
-    if state.marked_columns[column.index] then
-      table.insert(marked, column)
-    end
+  local anchor_column = layout_module.column_number(layout, selection.anchor.column)
+  local head_column = layout_module.column_number(layout, selection.head.column)
+  if not anchor_column or not head_column then
+    return nil
   end
-  if #marked == 0 then
-    return
-  end
-  state.column_order = marked
-  state.columns_filtered_to_marks = true
+
+  local anchor_line = selection.anchor.row.buffer_line
+  local head_line = selection.head.row.buffer_line
+  return {
+    top = math.min(anchor_line, head_line),
+    bottom = math.max(anchor_line, head_line),
+    left = math.min(anchor_column, head_column),
+    right = math.max(anchor_column, head_column),
+  }
+end
+
+--- How many rows and columns the selection covers.
+---@param bounds csv.Bounds
+---@return integer rows
+---@return integer columns
+function M.size(bounds)
+  return bounds.bottom - bounds.top + 1, bounds.right - bounds.left + 1
 end
 
 return M

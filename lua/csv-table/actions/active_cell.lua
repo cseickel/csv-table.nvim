@@ -1,14 +1,13 @@
 --[[
 The actions that move the active cell.
 
-Each one steps by whole cells, so a count moves that many cells rather than
-that many characters, and the cursor lands in a cell whichever way it went. The
-two that go to an end of the page take a count as a row number instead, the way
-`G` takes a line number.
+Each one steps by whole cells, so a count moves that many cells. The two that go
+to an end of the page take a count as a row number instead, the way `G` takes a
+line number.
 ]]
 
 local active_cell = require("csv-table.active_cell")
-local state = require("csv-table.state")
+local layout_module = require("csv-table.layout")
 local utils = require("csv-table.actions.utils")
 
 ---@param rows integer
@@ -24,24 +23,24 @@ end
 --- given. The count is the number drawn in column one rather than a position
 --- down the page, so what the user types is what they read. A number belonging
 --- to another page clamps to the near end of this one.
----@param edge "first_row"|"last_row"
+---@param edge "first_line"|"last_line"
 ---@return fun(buf: csv.Buffer)
 local function row_jump_action(edge)
   return function(buf)
     local layout = buf.layout
-    if not layout then
-      return
-    end
-    local cell = active_cell.cell_ref(buf, 0)
+    local cell = layout and active_cell.cell(buf, 0)
     if not cell then
       return
     end
 
-    local line = layout[edge]
+    local first = layout_module.row_at_line(layout, layout.first_line)
+    local last = layout_module.row_at_line(layout, layout.last_line)
+    local row = edge == "first_line" and first or last
     if vim.v.count > 0 then
-      line = layout.first_row + vim.v.count - state.first_row_number(buf.state)
+      local number = math.min(math.max(vim.v.count, first.row_number), last.row_number)
+      row = layout_module.row_by_number(layout, number) or row
     end
-    active_cell.move_to(buf, 0, line, cell.column + 1)
+    active_cell.move_to(buf, 0, { row = row, column = cell.column })
   end
 end
 
@@ -52,5 +51,5 @@ utils.register_action("prev_row", "Move up a row", stepper(-1, 0))
 
 utils.register_action("first_column", "Move to the first column", stepper(0, -utils.EDGE))
 utils.register_action("last_column", "Move to the last column", stepper(0, utils.EDGE))
-utils.register_action("first_row", "Move to the top of the page, or to row N", row_jump_action("first_row"))
-utils.register_action("last_row", "Move to the bottom of the page, or to row N", row_jump_action("last_row"))
+utils.register_action("first_row", "Move to the top of the page, or to row N", row_jump_action("first_line"))
+utils.register_action("last_row", "Move to the bottom of the page, or to row N", row_jump_action("last_line"))

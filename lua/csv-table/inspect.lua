@@ -14,9 +14,9 @@ text, which is what a spreadsheet pastes as cells.
 local columns = require("csv-table.columns")
 local active_cell = require("csv-table.active_cell")
 local json = require("csv-table.json")
+local layout_module = require("csv-table.layout")
 local picker = require("csv-table.picker")
 local query = require("csv-table.query")
-local range = require("csv-table.range")
 local selection = require("csv-table.selection")
 local state = require("csv-table.state")
 local window = require("csv-table.window")
@@ -58,9 +58,8 @@ end
 ---@return csv.NamedValue[]
 local function named_values(buf, row)
   local values = {}
-  for index, column in ipairs(buf.state.columns) do
-    local name = columns.display(column)
-    values[index] = { name = name, value = value_of(row, name) }
+  for index, column in ipairs(state.source_order(buf.state)) do
+    values[index] = { name = column.label, value = value_of(row, column.label) }
   end
   return values
 end
@@ -73,15 +72,13 @@ end
 ---@param buf csv.Buffer
 ---@param on_row fun(row: table<string, string>, number: integer)
 local function with_row(buf, on_row)
-  local cell = active_cell.cell_ref(buf, 0)
+  local cell = active_cell.cell(buf, 0)
   if not cell then
     return
   end
 
-  local line = buf.layout.row_index_by_id[cell.row]
-  local number = state.first_row_number(buf.state) + line - buf.layout.first_row
-  query.row(buf.state, cell.row, query.report, function(row)
-    on_row(row, number)
+  query.row(buf.state, cell.row.row_id, query.report, function(row)
+    on_row(row, cell.row.row_number)
   end)
 end
 
@@ -89,10 +86,9 @@ end
 ---@param buf csv.Buffer
 ---@param column csv.Column
 function M.cell(buf, column)
-  local name = columns.display(column)
   with_row(buf, function(row)
-    local lines, json = value_lines(value_of(row, name))
-    local bufnr = window.open(lines, { title = name, wrap = true })
+    local lines, json = value_lines(value_of(row, column.label))
+    local bufnr = window.open(lines, { title = column.label, wrap = true })
     if json then
       vim.bo[bufnr].filetype = "json"
     end
@@ -117,17 +113,22 @@ local function copy_bounds(buf)
     return nil
   end
 
-  local bounds = range.bounds(buf.state, layout)
+  local bounds = selection.bounds(buf.state, layout)
   if bounds then
     return bounds
   end
 
-  local cell = active_cell.cell_ref(buf, 0)
-  local line = cell and layout.row_index_by_id[cell.row]
-  if not line then
+  local cell = active_cell.cell(buf, 0)
+  if not cell then
     return nil
   end
-  return { top = line, bottom = line, left = cell.column, right = cell.column }
+  local column_number = layout_module.column_number(layout, cell.column)
+  return {
+    top = cell.row.buffer_line,
+    bottom = cell.row.buffer_line,
+    left = column_number,
+    right = column_number,
+  }
 end
 
 --- Copy the selected cells as tab separated text, which is what a spreadsheet
@@ -142,10 +143,9 @@ function M.copy(buf, headers)
     return query.report("there is nothing to copy")
   end
 
-  local displayed = selection.display_columns(buf.state)
   local copied = {}
-  for position = bounds.left, bounds.right do
-    local column = displayed[position]
+  for column_number = bounds.left, bounds.right do
+    local column = layout_module.column_at(buf.layout, column_number)
     if not column then
       return query.report("the selected columns are no longer on display")
     end
@@ -153,12 +153,12 @@ function M.copy(buf, headers)
   end
 
   local rowids = {}
-  for line = bounds.top, bounds.bottom do
-    local rowid = buf.layout.row_id_by_index[line]
-    if not rowid then
+  for buffer_line = bounds.top, bounds.bottom do
+    local row = layout_module.row_at_line(buf.layout, buffer_line)
+    if not row then
       return query.report("the selected rows are no longer on display")
     end
-    rowids[#rowids + 1] = rowid
+    rowids[#rowids + 1] = row.row_id
   end
 
   local opts = { rowids = rowids, columns = copied, headers = headers }

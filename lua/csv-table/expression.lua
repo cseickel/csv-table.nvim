@@ -16,11 +16,13 @@ local M = {}
 
 local NUMERIC_CONVERSION = "%%[-+ #%d%.]*[diouxXeEfgGaA]"
 
---- Render one filter.
+--- Render one filter. `positions` says where each column sits in the stream the
+--- filter reads, which `csv-table.pipeline` fixed with its opening `select`.
 ---@param filter csv.Filter
 ---@param state csv.State
+---@param positions table<integer, integer>
 ---@return string
-function M.filter(filter, state)
+function M.filter(filter, state, positions)
   if filter.type == "expr" then
     return "(" .. filter.expression .. ")"
   end
@@ -38,14 +40,10 @@ function M.filter(filter, state)
     for index, rowid in ipairs(rowids) do
       literals[index] = columns.string_literal(tostring(rowid))
     end
-    return string.format(
-      "(col(%s, 0) in [%s])",
-      columns.string_literal(state.rowid_name),
-      table.concat(literals, ", ")
-    )
+    return string.format("(col(0) in [%s])", table.concat(literals, ", "))
   end
 
-  local column = columns.expression(filter.column)
+  local column = string.format("col(%d)", positions[filter.column.column_id])
 
   -- A row whose value is not a number is not a row satisfying a numeric
   -- comparison, which is what `try` turns the cast failure into.
@@ -73,11 +71,12 @@ end
 
 --- Combine every filter into the single expression `xan filter` receives.
 ---@param state csv.State
+---@param positions table<integer, integer>
 ---@return string
-function M.all_filters(state)
+function M.all_filters(state, positions)
   local parts = {}
   for index, filter in ipairs(state.filters) do
-    parts[index] = M.filter(filter, state)
+    parts[index] = M.filter(filter, state, positions)
   end
   return table.concat(parts, " && ")
 end

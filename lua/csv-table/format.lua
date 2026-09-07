@@ -132,22 +132,21 @@ function M.analyze_column(values)
 end
 
 --- Decide how every column reads.
---- The sample arrives keyed by display name, because that is what the JSON
---- objects can express, and leaves keyed by column index, because that is what
---- identifies a column everywhere else.
----@param sample table<string, string>[] Sample rows, keyed by display name.
+--- The sample arrives keyed by label, which is what a JSON object can express,
+--- and leaves keyed by column id, which is what identifies a column everywhere
+--- else.
+---@param sample table<string, string>[] Sample rows, keyed by label.
 ---@param source_columns csv.Column[]
 ---@return table<integer, csv.Format>
 function M.analyze(sample, source_columns)
   local formats = {}
   for _, column in ipairs(source_columns) do
-    local name = columns.display(column)
     local values = {}
     for index, row in ipairs(sample) do
-      local value = row[name]
+      local value = row[column.label]
       values[index] = type(value) == "string" and value or ""
     end
-    formats[column.index] = M.analyze_column(values)
+    formats[column.column_id] = M.analyze_column(values)
   end
   return formats
 end
@@ -157,10 +156,10 @@ end
 ---@param column csv.Column
 ---@return csv.Format
 local function format_for(formats, column)
-  local format = formats[column.index]
+  local format = formats[column.column_id]
   if not format then
     format = { kind = "text", precision = 0 }
-    formats[column.index] = format
+    formats[column.column_id] = format
   end
   return format
 end
@@ -191,7 +190,7 @@ end
 ---@param drawn_width integer Characters the column is drawn in.
 ---@return integer
 function M.working_width(formats, column, drawn_width)
-  local format = formats[column.index]
+  local format = formats[column.column_id]
   return format and format.width or drawn_width
 end
 
@@ -212,7 +211,7 @@ end
 ---@param column csv.Column
 ---@param spec string
 function M.set_spec(formats, column, spec)
-  entry(formats, column).spec = spec ~= "" and spec or nil
+  format_for(formats, column).spec = spec ~= "" and spec or nil
 end
 
 --- Pad every value of a column to `width` characters, cutting the longer ones.

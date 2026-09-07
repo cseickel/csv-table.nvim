@@ -1,0 +1,89 @@
+direction: down
+
+title: Modules {
+  near: top-center
+  shape: text
+  style.font-size: 24
+}
+
+classes: {
+  entry: {style.fill: "#3d2d4a"}
+  state: {style.fill: "#2d2d4a"}
+  build: {style.fill: "#4a4a2d"}
+  draw: {style.fill: "#2d4a2d"}
+  ui: {style.fill: "#3d3d3d"}
+  external: {style.fill: "#4a2d2d"}
+}
+
+entry: Entry {
+  style.fill: "#1a1a2a"
+  init: init.lua {class: entry}
+  keymaps: keymaps.lua {class: entry}
+  actions: actions/ {class: entry}
+  init -> keymaps -> actions
+}
+
+state: View state {
+  style.fill: "#1a1a2a"
+  state_mod: state.lua {class: state}
+  columns: columns.lua {class: state}
+  format: format.lua {class: state}
+  selection: selection.lua {class: state}
+  source: source.lua {class: state}
+  state_mod -> columns
+  state_mod -> format
+  state_mod -> selection
+  source -> state_mod
+}
+
+build: Building the xan command {
+  style.fill: "#1a1a2a"
+  commands: commands.lua {class: build}
+  pipeline: pipeline.lua {class: build}
+  expression: expression.lua {class: build}
+  query: query.lua {class: build}
+  commands -> pipeline -> expression
+  commands -> query
+}
+
+draw: Drawing the table {
+  style.fill: "#1a1a2a"
+  buffer: buffer.lua {class: draw}
+  layout: layout.lua {class: draw}
+  active_cell: active_cell.lua {class: draw}
+  highlight: highlight.lua {class: draw}
+  statuscolumn: statuscolumn.lua {class: draw}
+  buffer -> layout
+  buffer -> active_cell
+  buffer -> highlight
+  buffer -> statuscolumn
+}
+
+ui: Floats {
+  style.fill: "#1a1a2a"
+  inspect: inspect.lua {class: ui}
+  dialog: dialog.lua {class: ui}
+  panel: panel.lua {class: ui}
+  picker: picker.lua {class: ui}
+  window: window.lua {class: ui}
+  json: json.lua {class: ui}
+  inspect -> window
+  inspect -> picker
+  inspect -> json
+}
+
+xan: xan {
+  class: external
+  shape: cloud
+}
+
+entry.actions -> state.state_mod
+entry.actions -> draw.buffer
+entry.actions -> ui.inspect
+entry.init -> state.source
+draw.buffer -> build.commands
+draw.buffer -> state.selection
+build.query -> xan
+xan -> draw.layout
+ui.panel -> build.commands
+state.state_mod -> build.commands

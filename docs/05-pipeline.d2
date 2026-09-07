@@ -1,0 +1,146 @@
+direction: down
+
+title: pipeline.build, stage by stage {
+  near: top-center
+  shape: text
+  style.font-size: 24
+}
+
+example: |md
+  Worked through `a,b,c`, with `b` hidden and `c` sorted descending.
+  Every stage names its columns by position.
+| {style.fill: "#1a1a2a"}
+
+classes: {
+  stage: {style.fill: "#4a4a2d"}
+  shape_after: {style.fill: "#2d2d4a"}
+  post: {style.fill: "#2d4a2d"}
+}
+
+source: |md
+  ### The file
+  `a,b,c`
+| {class: shape_after}
+
+select: |md
+  ### `select 0,2`
+  The carried columns: everything on
+  display, then any column a sort key or a
+  filter names, by their file positions.
+  This is where a hidden column drops out,
+  and where the columns take the order the
+  user put them in.
+| {class: stage}
+
+enum: |md
+  ### `enum -c id`
+  Prepends the row id, the row's position in
+  the file, which it keeps through every
+  later stage.
+| {class: stage}
+
+fixed: |md
+  `id,a,c`
+
+  **The shape is now fixed.** The row id is
+  at 0 and each carried column is at its
+  place in the carried list, and every stage
+  below reads those same numbers.
+| {class: shape_after}
+
+filter: |md
+  ### `filter <expression>`
+  Runs once the user has filtered. One
+  moonblade expression, the filters ANDed,
+  written by `expression.lua` and addressing
+  columns as `col(2)`.
+
+  This stage and the `select` and `enum`
+  above it are `narrowing_stages`. `count`,
+  `stats` and `frequency` open their own
+  pipelines with the same three, so they
+  report on the rows the user is looking at.
+| {class: stage}
+
+sort: |md
+  ### `sort -s 2 -R`
+  One stage per key, least significant first,
+  because `xan sort` applies one direction to
+  all its keys and is stable. `-N` numeric,
+  `-R` descending.
+| {class: stage}
+
+slice: |md
+  ### `slice -s 0 -l 1000`
+  The page. Everything above decides which
+  rows exist. Everything below is presentation.
+| {class: stage}
+
+display: |md
+  ### `select -e ...`
+  The row id, then one clause per displayed
+  column: the printf spec or the detected
+  decimal count, padding to the width the
+  user pinned, a trailing space, and the
+  header text to draw it under.
+
+  **Column widths are applied here.** Every
+  cell in a pinned column leaves at exactly
+  that width, cut with an ellipsis if it ran
+  long. The header is cut to the same width,
+  because `view` sizes a column to its widest
+  cell and the header is one of the cells.
+
+  `try` wraps anything that can fail, so a
+  value that fails to cast falls back to its
+  raw text.
+| {class: stage}
+
+after_display: |md
+  `id,a,c ▼`
+| {class: shape_after}
+
+view: |md
+  ### `view -t table ...`
+  `-e` draws every column at the width its
+  content already has, which is the width the
+  clause above gave it. Left to itself, `view`
+  fits the table to the terminal.
+
+  `-A` every row, `-M -I` drop the meta rows,
+  `-r` right-aligns the numeric columns by
+  position.
+| {class: stage}
+
+drawn: |md
+  ### The drawn table
+  ```
+  ┌────┬────┬─────┐
+  │ id │ a  │ c ▼ │
+  ├────┼────┼─────┤
+  │  0 │ 10 │   3 │
+  │  2 │ 30 │   2 │
+  └────┴────┴─────┘
+  ```
+| {class: shape_after}
+
+parse: |md
+  ### layout.parse
+  Reads the row ids out of the first cell,
+  then cuts that cell from every line. What
+  the buffer holds starts at the first
+  displayed column, and `statuscolumn.lua`
+  draws the row number in the gutter.
+| {class: post}
+
+source -> select
+select -> enum
+enum -> fixed
+fixed -> filter
+filter -> sort
+sort -> slice
+slice -> display
+display -> after_display
+after_display -> view
+view -> drawn
+drawn -> parse

@@ -1,0 +1,104 @@
+direction: down
+
+title: The render path {
+  near: top-center
+  shape: text
+  style.font-size: 24
+}
+
+classes: {
+  build: {style.fill: "#4a4a2d"}
+  draw: {style.fill: "#2d4a2d"}
+  external: {style.fill: "#4a2d2d"}
+}
+
+render: |md
+  ### buffer.render
+  Clears the selection, then takes one
+  snapshot: the columns on display and
+  the number the first row is drawn with
+| {class: draw}
+
+commands: |md
+  ### commands.render
+  `xan run '<stages>' <path>`,
+  one process
+| {class: build}
+
+pipeline: |md
+  ### pipeline.build
+  The stages, in order:
+  `select` `enum` `filter` `sort`
+  `slice` `select -e` `view`
+
+  Stage by stage in 05-pipeline
+| {class: build}
+
+expression: |md
+  ### expression.lua
+  The `filter` and `map` bodies
+  as moonblade
+| {class: build}
+
+query: |md
+  ### query.run
+  Spawns xan, buffers stdout,
+  calls back
+| {class: build}
+
+xan: |md
+  ### xan
+| {
+  class: external
+  shape: cloud
+}
+
+parse: |md
+  ### layout.parse
+  Reads the row id out of the first
+  cell, cuts that cell from every line,
+  and builds a `csv.Row` per line
+| {class: draw}
+
+lines: |md
+  ### buffer text
+  `nvim_buf_set_lines` over the
+  whole buffer, nomodifiable
+| {class: draw}
+
+redraw: |md
+  ### buffer.redraw
+  Extmarks for the marked rows,
+  the marked columns and the selection
+| {class: draw}
+
+restore: |md
+  ### active_cell.restore
+  Back to the column the user was in,
+  since the new text has new widths
+| {class: draw}
+
+highlight: |md
+  ### highlight.lua
+  A decoration provider: nvim asks for
+  each line as it draws it
+| {class: draw}
+
+gutter: |md
+  ### statuscolumn.lua
+  nvim asks per line, and the layout
+  says which row that line holds, so
+  the row number is drawn in the gutter
+| {class: draw}
+
+render -> commands
+commands -> pipeline
+pipeline -> expression
+commands -> query
+query -> xan
+xan -> parse: the drawn table
+parse -> lines
+lines -> redraw
+redraw -> restore
+lines -> highlight: on every screen redraw
+lines -> gutter: on every screen redraw

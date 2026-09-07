@@ -10,6 +10,7 @@ else, so every other stage sees CSV whatever the file on disk holds.
 
 local columns = require("csv-table.columns")
 local pipeline = require("csv-table.pipeline")
+local view_state = require("csv-table.state")
 
 local M = {}
 
@@ -67,9 +68,10 @@ end
 
 --- The argv for running `state` through xan.
 ---@param state csv.State
+---@param display_columns csv.Column[] The columns to draw, the row number first.
 ---@return string[]
-function M.render(state)
-  return run(state.source, state.sheet, pipeline.build(state))
+function M.render(state, display_columns)
+  return run(state.source, state.sheet, pipeline.build(state, display_columns))
 end
 
 --- The argv for the sample `csv-table.format` measures precision from. Renaming
@@ -96,7 +98,7 @@ end
 ---@param rowid integer
 ---@return string[]
 function M.row(state, rowid)
-  local rename = columns.rename_argument(columns.display_names(state.columns))
+  local rename = columns.rename_argument(columns.labels(view_state.source_order(state)))
   return run(state.source, state.sheet, table.concat({
     "rename " .. pipeline.quote(rename),
     string.format("slice -s %d -l 1", rowid),
@@ -124,29 +126,25 @@ end
 --- The stages that put the rows back in the order they are drawn in. `slice -I`
 --- returns them in file order whatever order it was asked in, so every row looks
 --- its own id up in a map of row id to screen position and the sort reads that.
----
---- The sort names its column by position, because `map` appends the column and a
---- source column of the same name would otherwise be sorted on instead.
----@param state csv.State
 ---@param rowids integer[]
+---@param copied integer How many columns the copy carries.
 ---@return string[]
-local function ordering_stages(state, rowids)
+local function ordering_stages(rowids, copied)
   local positions = {}
   for position, rowid in ipairs(rowids) do
     positions[position] = string.format('"%d": %d', rowid, position)
   end
 
   local expression = string.format(
-    "get({%s}, col(%s, 0)) as %s",
+    "get({%s}, col(0)) as %s",
     table.concat(positions, ", "),
-    columns.string_literal(state.rowid_name),
     ORDER_COLUMN
   )
   return {
     "map " .. pipeline.quote(expression),
-    -- `enum` prepends one column and `map` appends this one, so it lands past
-    -- every source column.
-    string.format("sort -s %d -N", #state.columns + 1),
+    -- The row id sits at 0 and the copied columns run to `copied`, so `map`
+    -- appends this one just past them.
+    string.format("sort -s %d -N", copied + 1),
   }
 end
 
@@ -158,22 +156,28 @@ end
 ---@param opts { rowids: integer[], columns: csv.Column[], headers: boolean } `rowids` in the order the rows are drawn.
 ---@return string[]
 function M.copy(state, opts)
-  local positions = {}
+  local ids, kept = {}, {}
   for index, column in ipairs(opts.columns) do
-    positions[index] = column.index + 1
+    ids[index] = column.column_id
+    -- The row id leads the stream, so the first copied column sits at 1.
+    kept[index] = index
   end
 
-  local stages = { "enum -c " .. pipeline.quote(state.rowid_name) }
+  local stages = {
+    "select " .. pipeline.quote(table.concat(ids, ",")),
+    "enum -c " .. pipeline.quote(state.rowid_column.name),
+  }
+
   if consecutive(opts.rowids) then
     table.insert(stages, string.format("slice -s %d -l %d", opts.rowids[1], #opts.rowids))
   else
     table.insert(stages, "slice -I " .. table.concat(opts.rowids, ","))
-    for _, stage in ipairs(ordering_stages(state, opts.rowids)) do
+    for _, stage in ipairs(ordering_stages(opts.rowids, #opts.columns)) do
       table.insert(stages, stage)
     end
   end
 
-  table.insert(stages, "select " .. pipeline.quote(table.concat(positions, ",")))
+  table.insert(stages, "select " .. pipeline.quote(table.concat(kept, ",")))
   if not opts.headers then
     table.insert(stages, "behead")
   end
@@ -196,12 +200,15 @@ function M.sheets(path)
   return { "xan", "from", "--list-sheets", path }
 end
 
+--- Run `stage` over the rows the current filters leave. `wanted` names the
+--- columns `stage` addresses, so the opening `select` carries them.
 ---@param state csv.State
----@param stage string
+---@param wanted csv.Column[]
+---@param stage fun(positions: table<integer, integer>): string
 ---@return string[]
-local function narrowed_argv(state, stage)
-  local stages = pipeline.narrowing_stages(state)
-  table.insert(stages, stage)
+local function narrowed_argv(state, wanted, stage)
+  local stages, positions = pipeline.narrowing_stages(state, wanted)
+  table.insert(stages, stage(positions))
   return run(state.source, state.sheet, table.concat(stages, " | "))
 end
 
@@ -209,7 +216,9 @@ end
 ---@param state csv.State
 ---@return string[]
 function M.count(state)
-  return narrowed_argv(state, "count")
+  return narrowed_argv(state, {}, function()
+    return "count"
+  end)
 end
 
 --- The argv listing the distinct values of `column` among the rows the current
@@ -218,8 +227,10 @@ end
 ---@param column csv.Column
 ---@return string[]
 function M.frequency(state, column)
-  local selector = pipeline.quote(columns.selector(column))
-  return narrowed_argv(state, "frequency -s " .. selector .. " -A | to jsonl --strings '*'")
+  return narrowed_argv(state, { column }, function(positions)
+    local position = positions[column.column_id]
+    return "frequency -s " .. position .. " -A | to jsonl --strings '*'"
+  end)
 end
 
 --- The argv summarizing the rows the current filters leave, one JSON object per
@@ -228,11 +239,14 @@ end
 ---@param column csv.Column|nil
 ---@return string[]
 function M.stats(state, column)
-  local stage = "stats -A"
-  if column then
-    stage = stage .. " -s " .. pipeline.quote(columns.selector(column))
-  end
-  return narrowed_argv(state, stage .. " | to jsonl --strings '*'")
+  local wanted = column and { column } or view_state.source_order(state)
+  return narrowed_argv(state, wanted, function(positions)
+    local stage = "stats -A"
+    if column then
+      stage = stage .. " -s " .. positions[column.column_id]
+    end
+    return stage .. " | to jsonl --strings '*'"
+  end)
 end
 
 return M

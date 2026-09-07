@@ -182,7 +182,7 @@ The following highlight groups are defined by the plugin:
 | `CsvMarkedRow`      | `DiffAdd`      | A row you marked with `m`                        |
 | `CsvMarkedColumn`   | `DiffText`     | A column you marked with `<M-m>`                 |
 | `CsvSelection`      | `Visual`       | The cells you selected with `v`                  |
-| `CsvCursorCell`     | `reverse`      | The active cell                                  |
+| `CsvActiveCell`     | `reverse`      | The active cell                                  |
 | `CsvFlash`          | `IncSearch`    | The brief flash on a moved column                |
 | `CsvHiddenCursor`   | `blend = 100`  | The real cursor, while a table buffer is current |
 
@@ -217,7 +217,7 @@ All mappings are buffer-local in a csv-table buffer. Hit `?` to open a list of a
 
 Column one is the row number: the row's position in the table as filtered and sorted, counted from 1. It is a position in the view rather than a line of the file, so after a sort the first row on screen is row 1 whichever line of the file it came from. Numbering runs on across pages, so with a page size of 1000 the second page starts at 1001.
 
-The table has an active cell, the way a spreadsheet does. It is drawn with `CsvCursorCell` and the real cursor is hidden while a table buffer is current. The cursor is constrained to always be in a data cell and never on a border, the row number, the header, or past the table. All movements are by whole cells, and a count moves that many cells, except that `5gg` and `5G` go to the row numbered 5, which is the number drawn in column one. A number belonging to another page stops at the near end of this one. Any other motion that lands outside a cell, whether a mouse click, `/`, `w` or `%`, is snapped into the nearest one.
+The table has an active cell, the way a spreadsheet does. It is drawn with `CsvActiveCell` and the real cursor is hidden while a table buffer is current. The cursor is constrained to always be in a data cell and never on a border, the row number, the header, or past the table. All movements are by whole cells, and a count moves that many cells, except that `5gg` and `5G` go to the row numbered 5, which is the number drawn in column one. A number belonging to another page stops at the near end of this one. Any other motion that lands outside a cell, whether a mouse click, `/`, `w` or `%`, is snapped into the nearest one.
 
 Hiding the cursor needs `termguicolors` and a terminal that supports cursor styling. Without them the cursor shows as a block at one edge of the active cell.
 

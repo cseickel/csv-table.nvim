@@ -7,11 +7,10 @@ Information and statistics are drawn through the filters currently applied, so
 they describe the rows on screen rather than the file on disk.
 ]]
 
-local columns = require("csv-table.columns")
 local keymaps = require("csv-table.keymaps")
 local picker = require("csv-table.picker")
 local query = require("csv-table.query")
-local selection = require("csv-table.selection")
+local view_state = require("csv-table.state")
 local window = require("csv-table.window")
 
 local M = {}
@@ -85,13 +84,13 @@ local function view_lines(buf)
     elseif filter.type == "in" then
       table.insert(lines, string.format(
         "  %s is one of %s",
-        columns.display(filter.column),
+        filter.column.label,
         table.concat(filter.values, ", ")
       ))
     else
       table.insert(lines, string.format(
         "  %s %s %s",
-        columns.display(filter.column),
+        filter.column.label,
         filter.operator,
         filter.value
       ))
@@ -106,7 +105,7 @@ local function view_lines(buf)
     table.insert(lines, string.format(
       "  %d. %s %s",
       position,
-      columns.display(key.column),
+      key.column.label,
       key.direction == "asc" and "ascending" or "descending"
     ))
   end
@@ -126,13 +125,14 @@ local function column_lines(buf, stats)
     "column", "kind", "dec", "align", "min", "max", "mean", "distinct"
   ) }
 
-  for _, column in ipairs(selection.display_columns(buf.state)) do
-    local name = columns.display(column)
-    local format = buf.state.formats[column.index] or { kind = "text", precision = 0 }
-    local summary = stats[column.index + 2] or {}
+  ---@param column csv.Column
+  ---@param position integer Where the column sits among the rows `stats` returned.
+  local function describe(column, position)
+    local format = buf.state.formats[column.column_id] or { kind = "text", precision = 0 }
+    local summary = stats[position] or {}
     table.insert(lines, string.format(
       "  %-24s %-6s %-4d %-8s %12s %12s %12s %10s",
-      name,
+      column.label,
       format.kind,
       format.precision,
       format.align or "auto",
@@ -141,6 +141,12 @@ local function column_lines(buf, stats)
       summary.mean and summary.mean:sub(1, 12) or "",
       summary.cardinality or ""
     ))
+  end
+
+  -- `commands.stats` carries the columns in file order behind the row id, so a
+  -- column's row among the results is one past its place in that list.
+  for index, column in ipairs(view_state.source_order(buf.state)) do
+    describe(column, index + 1)
   end
 
   return lines
@@ -179,7 +185,7 @@ function M.stats(buf, column)
         table.insert(lines, string.format("  %-14s %s", field, summary[field]))
       end
     end
-    window.open(lines, { title = columns.display(column) })
+    window.open(lines, { title = column.label })
   end)
 end
 
