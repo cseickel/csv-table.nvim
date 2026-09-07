@@ -3,13 +3,12 @@ Reading `xan view` output.
 
 `view` draws a bordered table, so the rendered text already says where every
 column starts and which source row each line came from. This module turns that
-text into the lookups the cursor and the highlighting need, and holds nothing
-else.
+text into the lookups the active cell and the highlighting read.
 
 The row id is drawn as the first cell because the drawn table is the only way it
 reaches Lua. `parse` reads it into the row objects and cuts that cell from every
-line, so what the buffer receives starts at the row number, and what the user
-yanks or searches is what they read.
+line, so the buffer starts at the first column the user chose, and what they
+yank or search is what they read.
 
 A row on the page is a `csv.Row`, built here and filed under each of the three
 numbers that name it. A column on display is a `csv.Column`, and
@@ -61,7 +60,7 @@ local CELL_PADDING = 2
 ---@field rows_by_number table<integer, csv.Row>
 ---@field rows_by_id table<integer, csv.Row>
 ---@field rows_by_line table<integer, csv.Row>
----@field columns csv.Column[] The columns on display, the row number first. A column's position here is its `column_number`.
+---@field columns csv.Column[] The columns on display, in display order. A column's position here is its `column_number`.
 ---@field column_number_by_id table<integer, integer>
 ---@field ranges csv.CellRange[] The header's cells, which every line shares unless it is listed below.
 ---@field ranges_by_line table<integer, csv.CellRange[]> The cells of each line whose byte offsets differ from the header's.
@@ -271,7 +270,7 @@ end
 --- The row ids come out of the first cell before that cell is cut away, so
 --- every range this returns describes the text the buffer will hold.
 ---@param output string[]
----@param display_columns csv.Column[] The columns drawn, the row number first.
+---@param display_columns csv.Column[] The columns drawn, in display order.
 ---@param first_row_number integer The number the first row of the page is drawn with.
 ---@return csv.Layout|nil layout
 ---@return string|nil error

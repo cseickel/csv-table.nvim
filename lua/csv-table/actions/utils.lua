@@ -6,7 +6,7 @@ this table rather than collecting anything. A name registered twice stops the
 plugin loading, because which of the two a key would run is otherwise the order
 of a Lua table.
 
-`on_column` is the shape most actions take: change the column under the cursor,
+`on_column` is the shape most actions take: change the active cell's column,
 then render. A helper only one module calls belongs in that module.
 ]]
 
@@ -47,8 +47,8 @@ function M.get_all_actions()
   return actions
 end
 
---- Run `change` against the column under the cursor, then render. Nothing
---- happens before the first render, when there is no column to be under it.
+--- Run `change` against the active cell's column, then render. The first render
+--- is what puts a cell there, so this waits for it.
 ---@param buf csv.Buffer
 ---@param change fun(column: csv.Column)
 function M.on_column(buf, change)

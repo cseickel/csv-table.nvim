@@ -2,9 +2,9 @@
 The actions that act on a column.
 
 Hiding, cutting, pasting and moving change which columns are shown. Aligning,
-padding and formatting change how one column reads. Both resolve their column
-from the cursor, and the movement ones move the cursor too, so the column that
-moved is still the one under it.
+padding and formatting change how one column reads. Both take the column the
+active cell is in, and the ones that move a column move the active cell along
+with it, so the column that moved is still the one under it.
 ]]
 
 local buffer = require("csv-table.buffer")
@@ -14,13 +14,12 @@ local format = require("csv-table.format")
 local layout_module = require("csv-table.layout")
 local utils = require("csv-table.actions.utils")
 
---- Render, then put the cursor at the start of `column`, so a column that
---- changed stays under the cursor that changed it. A narrowing column would
---- otherwise slide out from under the cursor, and the next key would act on
---- whichever column the cursor had been left over.
+--- Render, then make `column` active again, so the column the user just changed
+--- stays the one they are on. A column that narrows slides out from under the
+--- cursor, and the next key would then act on whichever column took its place.
 ---@param buf csv.Buffer
 ---@param column csv.Column
----@param on_focused fun(column: csv.Column)|nil Runs once the cursor is back on the column.
+---@param on_focused fun(column: csv.Column)|nil Runs once the column is active again.
 local function follow(buf, column, on_focused)
   buffer.render(buf, function()
     local cell = active_cell.cell(buf, 0)
@@ -35,7 +34,7 @@ local function follow(buf, column, on_focused)
 end
 
 --- A column that moved is somewhere else on the line, so it flashes to be found
---- again. A column that only changed width has not gone anywhere.
+--- again. The width and format actions leave it where it was, and pass this by.
 ---@param buf csv.Buffer
 ---@return fun(column: csv.Column)
 local function flash(buf)
@@ -44,8 +43,8 @@ local function flash(buf)
   end
 end
 
---- Change how the column under the cursor is padded, measuring the column as it
---- is drawn so the change starts from the width on screen.
+--- Change how the active cell's column is padded, measuring the column as it is
+--- drawn so the change starts from the width on screen.
 ---@param buf csv.Buffer
 ---@param change fun(column: csv.Column, width: integer)
 local function on_padding(buf, change)

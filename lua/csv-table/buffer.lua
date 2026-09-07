@@ -97,8 +97,8 @@ local function draw_selection(buffer)
 end
 
 --- Draw the marks and the selection over the text already in the buffer.
---- Marking a row and selecting a cell change nothing xan would return, so both
---- redraw and neither asks for the page again.
+--- Marking a row and selecting a cell leave xan's output alone, so both are
+--- drawn in place.
 ---@param buffer csv.Buffer
 function M.redraw(buffer)
   if not buffer.layout then
@@ -128,8 +128,8 @@ end
 ---@type table<integer, table>
 local views = {}
 
---- Keep the current window's view, which the cursor moving and the window
---- scrolling are between them the whole of.
+--- Keep where the current window is looking. A cursor move and a scroll are
+--- the two ways that changes.
 local function remember_view()
   views[vim.api.nvim_get_current_win()] = vim.fn.winsaveview()
 end
@@ -314,17 +314,15 @@ function M.row_range(buffer)
   return first, first + layout.row_count(buffer.layout) - 1
 end
 
-
---- Take over `bufnr`, which nvim has named after a CSV file but has not read.
---- The table replaces the file's text, so the buffer is `nowrite`: writing the
---- rendered table back over the source would destroy it.
+--- Take over `bufnr`, which nvim has named after a CSV file and left to this
+--- plugin to read. The table replaces the file's text, so the buffer is
+--- `nowrite`: writing the rendered table back over the source would destroy it.
 ---@param bufnr integer
 ---@param on_ready fun(buffer: csv.Buffer)|nil
 function M.attach(bufnr, on_ready)
   -- `:edit` fires the read command again on a buffer already showing a table,
-  -- and means refresh rather than attach. This command replaces the whole read,
-  -- so `BufRead` never fires and filetype detection never runs. Setting the
-  -- filetype announces it again to whatever the user hangs off `FileType`.
+  -- and means refresh. This command owns the whole read, so setting the
+  -- filetype is what tells whatever the user hangs off `FileType`.
   local attached = buffers[bufnr]
   if attached then
     vim.bo[bufnr].filetype = "csv-table"
@@ -337,8 +335,8 @@ function M.attach(bufnr, on_ready)
       replace_lines(bufnr, attached.layout.lines)
       M.redraw(attached)
 
-      -- The selection and the active cell name rows of this layout, which is
-      -- the one still in hand, so both survive the text going out and back.
+      -- The active cell names a row of this layout, which is the one still in
+      -- hand, so the user comes back to the cell they left.
       local window = vim.fn.bufwinid(bufnr)
       if window ~= -1 then
         restore_view(attached, window)
@@ -402,7 +400,6 @@ function M.attach(bufnr, on_ready)
       remember_view()
     end,
   })
-
 
   -- `guicursor` is global, so the buffer that decides it is the one the user is
   -- in. A read can be for a buffer nobody is in, which is what `bufload` does,

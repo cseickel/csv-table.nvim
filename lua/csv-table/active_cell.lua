@@ -5,8 +5,9 @@ The real cursor is hidden and parked at one edge of the active cell, so any
 movement nvim reports is a movement the user made, and this module translates it
 back into a cell.
 
-Column 1 is the row number, a decoration, so the active cell lives in column 2
-and beyond.
+The edge is the direction of travel: nvim scrolls sideways only far enough to
+show the byte the cursor is on, so parking at the far end of the cell is what
+brings the whole cell into view.
 ]]
 
 local layout_module = require("csv-table.layout")
@@ -71,16 +72,12 @@ local function scroll_off(buffer, column_number)
   return PREVIEW
 end
 
-
---- nvim scrolls sideways only far enough to show the byte the cursor is on, so
---- the cursor goes to the far end of the cell in the direction of travel: the
---- last byte when moving right, the first when moving left. A move that stays
---- in the same cell keeps the end it had. 'sidescrolloff' then shows the border
---- and beyond it.
+--- Park the real cursor in the cell and draw it. The cursor takes the last byte
+--- of the cell when moving right and the first when moving left, and a move
+--- that stays in the same cell keeps the end it had.
 ---
---- The position recorded is the one nvim reports back rather than the one asked
---- for, because nvim moves a cursor set inside a multi-byte character to the
---- start of that character.
+--- The position recorded is the one nvim reports back, because nvim moves a
+--- cursor set inside a multi-byte character to the start of that character.
 ---@param buffer csv.Buffer
 ---@param window integer
 ---@param row csv.Row

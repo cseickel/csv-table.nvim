@@ -10,7 +10,7 @@ gets a `label`: the header text, plus its occurrence where a name repeats.
 `state.columns` is the one list. It holds every source column, and the user
 reorders it and sets `hidden` on its entries, so `column_id` gives the file
 order and a position in the list gives the display order. The table draws the
-visible entries, behind the row number.
+visible entries, in that order.
 ]]
 
 local M = {}

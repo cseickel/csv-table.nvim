@@ -26,8 +26,8 @@ local M = {}
 local GAP = "  "
 
 --- What one column holds in this row. `to jsonl --strings '*'` asks xan for
---- every value as a string, and `csv-table.format` already declines to trust
---- that, so this declines too.
+--- every value as a string, and a value that arrives as anything else settles
+--- for the empty string.
 ---@param row table<string, string>
 ---@param name string
 ---@return string
@@ -64,11 +64,10 @@ local function named_values(buf, row)
   return values
 end
 
---- Read the row the cursor is on. The number that row is drawn with goes to
---- `on_row` as well, because the cursor may have moved while xan ran, and it is
---- the number rather than the row id because the row id is not on screen to be
---- recognized. Nothing happens before the first render, when there is no row to
---- be on.
+--- Read the row the active cell is in. The row's number goes to `on_row` too,
+--- taken before xan runs, so a panel opened over a row the user has since left
+--- still says which row it is showing. The number is the one on screen, which
+--- is what the user can recognize.
 ---@param buf csv.Buffer
 ---@param on_row fun(row: table<string, string>, number: integer)
 local function with_row(buf, on_row)
@@ -82,7 +81,7 @@ local function with_row(buf, on_row)
   end)
 end
 
---- Show what the cell under the cursor holds.
+--- Show what the active cell holds, at full length.
 ---@param buf csv.Buffer
 ---@param column csv.Column
 function M.cell(buf, column)
@@ -103,8 +102,8 @@ local function yank(text)
   vim.fn.setreg('"', text)
 end
 
---- What copying should take: the selected cells, or the cell under the cursor
---- when nothing is selected.
+--- What copying takes: the selected cells while a selection is set, and the
+--- active cell on its own otherwise.
 ---@param buf csv.Buffer
 ---@return csv.Bounds|nil
 local function copy_bounds(buf)

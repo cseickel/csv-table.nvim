@@ -28,17 +28,17 @@ end
 --- `v:lnum`. The header and the border lines take blanks, so the table keeps its
 --- alignment down the whole buffer.
 ---
---- nvim draws every window, so the buffer comes from `g:statusline_winid`, the
---- window being drawn. Reading the current buffer would answer for the window
---- the user is in and leave every other window's gutter blank.
+--- nvim draws every window on screen and names the one it is drawing in
+--- `g:statusline_winid`, which is the window this answers for.
 ---@return string
 function M.text()
-  -- Required here because `csv-table.buffer` sets the option this belongs to.
   local window = vim.g.statusline_winid
   if not window or not vim.api.nvim_win_is_valid(window) then
     return ""
   end
 
+  -- Required here because `csv-table.buffer` requires this module to set the
+  -- option in the first place.
   local buf = require("csv-table.buffer").get(vim.api.nvim_win_get_buf(window))
   if not buf or not buf.layout then
     return ""

@@ -22,8 +22,8 @@ the positions hold for the whole run.
 local columns = require("csv-table.columns")
 local expression = require("csv-table.expression")
 
--- Taken as a bare function because `format` is what this file calls the value
--- it would be checking.
+-- The one function taken off the module, because `format` here names a column's
+-- format rather than the module that decides it.
 local is_numeric = require("csv-table.format").is_numeric
 
 local M = {}
@@ -83,6 +83,8 @@ local function opening_stages(state, carried)
   end
 
   local stages = {}
+  -- `count` over an unfiltered file carries nothing, and `select` wants at
+  -- least one column.
   if #ids > 0 then
     table.insert(stages, "select " .. shell_quote(table.concat(ids, ",")))
   end
@@ -197,9 +199,9 @@ local function right_aligned(state, display_columns)
   return table.concat(positions, ",")
 end
 
---- The stages that narrow the file to the rows on display, leaving out the page
---- slice and the formatting. The counting and summarizing commands open with
---- these, so they report on the rows the buffer is showing.
+--- The stages that leave exactly the rows the filters allow. `count`, `stats`
+--- and `frequency` open with these, so they report on the rows the buffer is
+--- showing.
 ---@param state csv.State
 ---@param wanted csv.Column[] Columns the caller needs to address afterwards.
 ---@return string[] stages
