@@ -92,14 +92,14 @@ function M.row(state, rowid, on_error, on_row)
   end)
 end
 
---- Rows as tab separated text, in the order they are drawn. `xan fmt` ends its
---- output with a newline, which a spreadsheet would paste as an empty row.
+--- Rows written in `opts.format`, in the order they are drawn. Every writer ends
+--- its output with a newline, which a spreadsheet would paste as an empty row.
 ---@param state csv.State
----@param opts { rowids: integer[], columns: csv.Column[], headers: boolean }
+---@param opts { rowids: integer[], columns: csv.Column[], headers: boolean, format: string }
 ---@param on_error fun(message: string)
 ---@param on_text fun(text: string)
-function M.copy(state, opts, on_error, on_text)
-  M.run(commands.copy(state, opts), on_error, function(stdout)
+function M.yank(state, opts, on_error, on_text)
+  M.run(commands.yank(state, opts), on_error, function(stdout)
     on_text((stdout:gsub("\n$", "")))
   end)
 end

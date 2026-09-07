@@ -18,7 +18,7 @@ local cell_namespace = vim.api.nvim_create_namespace("csv-active-cell")
 local flash_namespace = vim.api.nvim_create_namespace("csv-flash")
 local FLASH_MILLISECONDS = 250
 
--- Above `buffer.SELECTION_PRIORITY`, so the active cell shows over a selection.
+-- Above `overlay.SELECTION_PRIORITY`, so the active cell shows over a selection.
 local CELL_PRIORITY = 4300
 
 -- The modes a table buffer is read in. The command line keeps its cursor, so
@@ -145,21 +145,22 @@ function M.cursor_moved(buffer, window)
   return position[1] ~= active.position[1] or position[2] ~= active.position[2]
 end
 
---- The cell the real cursor is in. A cursor on a border line or on the header
---- answers with the nearest data cell.
+--- The cell drawn at `line` and byte `byte` of the buffer. A line holding a
+--- border or the header answers with the nearest data line, so every position
+--- in the buffer names a cell.
 ---@param buffer csv.Buffer
----@param window integer
+---@param line integer
+---@param byte integer 0-based, as nvim reports a cursor.
 ---@return csv.Cell|nil
-function M.cell(buffer, window)
+function M.cell_at(buffer, line, byte)
   local layout = buffer.layout
   if not layout or layout.first_line > layout.last_line then
     return nil
   end
 
-  local position = vim.api.nvim_win_get_cursor(window)
-  local buffer_line = math.min(math.max(position[1], layout.first_line), layout.last_line)
+  local buffer_line = math.min(math.max(line, layout.first_line), layout.last_line)
   local column_number = math.min(
-    layout_module.column_number_at(layout, buffer_line, position[2]),
+    layout_module.column_number_at(layout, buffer_line, byte),
     layout_module.column_count(layout)
   )
 
@@ -169,6 +170,46 @@ function M.cell(buffer, window)
     return nil
   end
   return { row = row, column = column }
+end
+
+--- The cell the real cursor is in.
+---@param buffer csv.Buffer
+---@param window integer
+---@return csv.Cell|nil
+function M.cell(buffer, window)
+  local position = vim.api.nvim_win_get_cursor(window)
+  return M.cell_at(buffer, position[1], position[2])
+end
+
+--- The cell a move of the real cursor was aiming for.
+---
+--- A cursor that landed in another cell names that cell, which is what a click,
+--- a search or `$` means. A cursor still inside the cell it started in was moved
+--- by something too small to leave it, such as `l` in a cell drawn twenty wide,
+--- and the cell one step that way is what was meant.
+---
+--- Sideways is the only direction that can be meant here, so a cursor that kept
+--- its byte kept its cell. `k` on the first row of the page is that: the cursor
+--- reaches the border line above and `cell_at` brings it back.
+---@param buffer csv.Buffer
+---@param window integer
+---@return csv.Cell|nil
+function M.moved_cell(buffer, window)
+  local landed = M.cell(buffer, window)
+  local active = get(buffer, window)
+  if not landed or not active then
+    return landed
+  end
+
+  local stayed = landed.row.row_id == active.row.row_id
+    and landed.column.column_id == active.column.column_id
+  local byte = vim.api.nvim_win_get_cursor(window)[2]
+  if not stayed or byte == active.position[2] then
+    return landed
+  end
+
+  local columns = byte > active.position[2] and 1 or -1
+  return layout_module.step_cell(buffer.layout, landed, { rows = 0, columns = columns })
 end
 
 --- The cell that is active in `window`, which is where the plugin last put the
@@ -211,15 +252,6 @@ function M.step(buffer, window, rows, columns)
   end
   local delta = { rows = rows, columns = columns }
   return M.move_to(buffer, window, layout_module.step_cell(buffer.layout, cell, delta))
-end
-
---- Put the active cell back where a move the plugin did not make has left the
---- real cursor.
----@param buffer csv.Buffer
----@param window integer
----@return csv.Cell|nil
-function M.snap(buffer, window)
-  return M.move_to(buffer, window, M.cell(buffer, window))
 end
 
 --- Put the active cell back in the column it was in before a render. The new

@@ -15,6 +15,7 @@ local columns = require("csv-table.columns")
 local active_cell = require("csv-table.active_cell")
 local highlight = require("csv-table.highlight")
 local keymaps = require("csv-table.keymaps")
+local movement = require("csv-table.movement")
 local state = require("csv-table.state")
 
 local M = {}
@@ -23,17 +24,34 @@ M.patterns = { "*.csv", "*.tsv", "*.xls", "*.xlsx", "*.xlsb", "*.ods" }
 
 ---@param buf csv.Buffer
 local function apply_keymaps(buf)
-  for key, name in pairs(keymaps.map) do
-    if name then
-      local action = actions.get_action(name)
+  for _, binding in ipairs(keymaps.resolve()) do
+    local modes = binding.visual and { "n", "x" } or { "n" }
+
+    if binding.command then
+      vim.keymap.set(modes, binding.key, binding.command, {
+        buffer = buf.bufnr,
+        desc = "csv-table: nvim's " .. binding.command,
+      })
+    else
+      local action = actions.get_action(binding.action)
       if not action then
-        error(string.format("csv-table: key %q names unknown action %q", key, name))
+        error(string.format("csv-table: key %q names unknown action %q", binding.key, binding.action))
       end
-      vim.keymap.set("n", key, function()
+
+      vim.keymap.set(modes, binding.key, function()
         action.run(buf)
       end, { buffer = buf.bufnr, desc = "csv-table: " .. action.description })
     end
   end
+
+  -- A click lands exactly where it was pointed, and `csv-table.movement` needs
+  -- to know that, since any other move that ends up in the cell it started in
+  -- was a motion too small to leave the cell. The expression hands the key back
+  -- so nvim still does the click itself.
+  vim.keymap.set({ "n", "x" }, "<LeftMouse>", function()
+    movement.click()
+    return "<LeftMouse>"
+  end, { buffer = buf.bufnr, expr = true, desc = "csv-table: follow the click" })
 end
 
 local SHEET_NAME_LENGTH = 10

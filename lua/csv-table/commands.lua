@@ -136,7 +136,7 @@ end
 --- returns them in file order whatever order it was asked in, so every row looks
 --- its own id up in a map of row id to screen position and the sort reads that.
 ---@param rowids integer[]
----@param copied integer How many columns the copy carries.
+---@param copied integer How many columns the yank keeps.
 ---@return string[]
 local function ordering_stages(rowids, copied)
   local positions = {}
@@ -157,19 +157,51 @@ local function ordering_stages(rowids, copied)
   }
 end
 
---- The argv copying rows as tab separated text, which is what a spreadsheet
---- pastes as cells. Naming the rows by id is what keeps the filter and the sort
---- from running again: they decided which rows are on screen, and the ids say
---- which of those to read.
+--- The stage that writes each format, keyed by the name the yank actions use.
+--- Every stage above emits CSV, so `csv` adds no stage of its own.
+local WRITERS = {
+  tsv = "fmt --tabs",
+  csv = nil,
+  json = "to json",
+  markdown = "to md",
+}
+
+--- The stage that drops the row id and leaves the copied columns.
+---
+--- `to json` keys each object by header name and `to md` heads each column with
+--- it, and a file may repeat a header, so those two take the labels instead:
+--- unique, and what the user reads in the drawn header.
+---@param opts { columns: csv.Column[], format: string }
+---@return string
+local function keeping_stage(opts)
+  local kept = {}
+  local named = opts.format == "json" or opts.format == "markdown"
+
+  for index, column in ipairs(opts.columns) do
+    -- The row id leads the stream, so the first yanked column sits at 1.
+    if named then
+      kept[index] = string.format("col(%d) as %s", index, columns.string_literal(column.label))
+    else
+      kept[index] = index
+    end
+  end
+
+  if named then
+    return "select -e " .. pipeline.quote(table.concat(kept, ", "))
+  end
+  return "select " .. pipeline.quote(table.concat(kept, ","))
+end
+
+--- The argv yanking rows in `opts.format`. Naming the rows by id is what keeps
+--- the filter and the sort from running again: they decided which rows are on
+--- screen, and the ids say which of those to read.
 ---@param state csv.State
----@param opts { rowids: integer[], columns: csv.Column[], headers: boolean } `rowids` in the order the rows are drawn.
+---@param opts { rowids: integer[], columns: csv.Column[], headers: boolean, format: string } `rowids` in the order the rows are drawn.
 ---@return string[]
-function M.copy(state, opts)
-  local ids, kept = {}, {}
+function M.yank(state, opts)
+  local ids = {}
   for index, column in ipairs(opts.columns) do
     ids[index] = column.column_id
-    -- The row id leads the stream, so the first copied column sits at 1.
-    kept[index] = index
   end
 
   local stages = {
@@ -186,11 +218,13 @@ function M.copy(state, opts)
     end
   end
 
-  table.insert(stages, "select " .. pipeline.quote(table.concat(kept, ",")))
+  table.insert(stages, keeping_stage(opts))
   if not opts.headers then
     table.insert(stages, "behead")
   end
-  table.insert(stages, "fmt --tabs")
+  if WRITERS[opts.format] then
+    table.insert(stages, WRITERS[opts.format])
+  end
   return run(state.source, state.sheet, table.concat(stages, " | "))
 end
 
@@ -210,7 +244,7 @@ function M.sheets(path)
 end
 
 --- Run `stage` over the rows the current filters leave. `wanted` names the
---- columns `stage` addresses, so the opening `select` carries them.
+--- columns `stage` addresses, so the opening `select` takes those columns.
 ---@param state csv.State
 ---@param wanted csv.Column[]
 ---@param stage fun(positions: table<integer, integer>): string

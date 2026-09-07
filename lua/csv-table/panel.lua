@@ -20,23 +20,35 @@ local STAT_FIELDS = {
   "min", "max", "mean", "median", "stddev", "mode",
 }
 
----@class csv.Binding
----@field key string
+---@class csv.Key
+---@field key string Every key that runs the action, empty for one with no key.
 ---@field name string Names an action in `csv-table.actions`.
 ---@field description string
 
---- Every binding, ordered by description, since the keys are mnemonic rather
---- than sequential.
----@return csv.Binding[]
+--- Every action, sorted by its description. Sorting by key would put `sa` next
+--- to `sd` and `ss`, which do three different things. An action with no key is
+--- in the list too, because the help panel runs whatever the user picks.
+---@return csv.Key[]
 function M.bindings()
   local actions = require("csv-table.actions")
 
-  local bindings = {}
-  for key, name in pairs(keymaps.map) do
-    local action = actions.get_action(name)
-    if action then
-      table.insert(bindings, { key = key, name = name, description = action.description })
+  local keys = {}
+  for _, binding in ipairs(keymaps.resolve()) do
+    if binding.action then
+      keys[binding.action] = keys[binding.action] or {}
+      table.insert(keys[binding.action], binding.key)
     end
+  end
+
+  local bindings = {}
+  for name, action in pairs(actions.get_all_actions()) do
+    local bound = keys[name] or {}
+    table.sort(bound)
+    table.insert(bindings, {
+      key = table.concat(bound, " "),
+      name = name,
+      description = action.description,
+    })
   end
 
   table.sort(bindings, function(left, right)
@@ -45,8 +57,9 @@ function M.bindings()
   return bindings
 end
 
---- Search the bindings and run the one chosen, so a key is something to find
---- rather than something to have memorised.
+--- Search every action and run the one chosen, so a key is something to find
+--- rather than something to have memorised, and an action with no key is still
+--- one press away.
 ---@param buf csv.Buffer
 function M.help(buf)
   local actions = require("csv-table.actions")
@@ -143,7 +156,7 @@ local function column_lines(buf, stats)
     ))
   end
 
-  -- `commands.stats` carries the columns in file order behind the row id, so a
+  -- `commands.stats` puts the columns in file order behind the row id, so a
   -- column's row among the results is one past its place in that list.
   for index, column in ipairs(view_state.source_order(buf.state)) do
     describe(column, index + 1)

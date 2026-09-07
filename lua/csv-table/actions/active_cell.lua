@@ -1,13 +1,18 @@
 --[[
 The actions that move the active cell.
 
-Each one steps by whole cells, so a count moves that many cells. The two that go
-to an end of the page take a count as a row number instead, the way `G` takes a
-line number.
+Each one steps by whole cells, so a count moves that many cells and `5G` is the
+row the gutter numbers 5.
+
+The default map binds the keys where that count is the whole point, `l` being
+one cell rather than one byte. The rest are here to be bound to, since a plain
+`j` is already a row and nvim's own motion, followed by the snap in
+`csv-table.movement`, lands on the right cell.
 ]]
 
 local active_cell = require("csv-table.active_cell")
 local layout_module = require("csv-table.layout")
+local movement = require("csv-table.movement")
 local utils = require("csv-table.actions.utils")
 
 ---@param rows integer
@@ -15,7 +20,9 @@ local utils = require("csv-table.actions.utils")
 ---@return fun(buf: csv.Buffer)
 local function stepper(rows, cells)
   return function(buf)
-    active_cell.step(buf, 0, rows * vim.v.count1, cells * vim.v.count1)
+    if buf.layout then
+      movement.step(buf, 0, rows * vim.v.count1, cells * vim.v.count1)
+    end
   end
 end
 
@@ -40,7 +47,7 @@ local function row_jump_action(edge)
       local number = math.min(math.max(vim.v.count, first.row_number), last.row_number)
       row = layout_module.row_by_number(layout, number) or row
     end
-    active_cell.move_to(buf, 0, { row = row, column = cell.column })
+    movement.go_to(buf, 0, { row = row, column = cell.column })
   end
 end
 

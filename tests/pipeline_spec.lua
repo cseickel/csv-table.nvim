@@ -190,13 +190,14 @@ describe("expression.all_filters", function()
   end)
 end)
 
-describe("commands.copy", function()
-  it("carries the copied columns and drops the row id at the end", function()
+describe("commands.yank", function()
+  it("carries the yanked columns and drops the row id at the end", function()
     local view, source = fixture.duplicated_headers()
-    local argv = commands.copy(view, {
+    local argv = commands.yank(view, {
       rowids = { 1, 2 },
       columns = { source[1], source[3] },
       headers = true,
+      format = "tsv",
     })
 
     matches(argv[3], "select '0,2'")
@@ -206,20 +207,22 @@ describe("commands.copy", function()
 
   it("takes a run of consecutive rows in one slice", function()
     local view, source = fixture.duplicated_headers()
-    local argv = commands.copy(view, {
+    local argv = commands.yank(view, {
       rowids = { 4, 5, 6 },
       columns = { source[1] },
       headers = true,
+      format = "tsv",
     })
     matches(argv[3], "slice %-s 4 %-l 3")
   end)
 
   it("puts scattered rows back in the order they are drawn", function()
     local view, source = fixture.duplicated_headers()
-    local argv = commands.copy(view, {
+    local argv = commands.yank(view, {
       rowids = { 9, 2 },
       columns = { source[1] },
       headers = true,
+      format = "tsv",
     })
 
     matches(argv[3], "slice %-I 9,2")
@@ -238,11 +241,49 @@ describe("commands.copy", function()
 
   it("beheads the output when the headers are unwanted", function()
     local view, source = fixture.duplicated_headers()
-    local argv = commands.copy(view, {
+    local argv = commands.yank(view, {
       rowids = { 1 },
       columns = { source[1] },
       headers = false,
+      format = "tsv",
     })
     matches(argv[3], "behead")
+  end)
+
+  it("writes CSV with no writer stage of its own", function()
+    local view, source = fixture.duplicated_headers()
+    local argv = commands.yank(view, {
+      rowids = { 1 },
+      columns = { source[1] },
+      headers = true,
+      format = "csv",
+    })
+
+    lacks(argv[3], "fmt")
+    lacks(argv[3], "to ")
+  end)
+
+  it("names the columns by their labels for json, so a repeated header keeps both", function()
+    local view, source = fixture.duplicated_headers()
+    local argv = commands.yank(view, {
+      rowids = { 1 },
+      columns = { source[1], source[3] },
+      headers = true,
+      format = "json",
+    })
+
+    matches(argv[3], 'select %-e .col%(1%) as "a%[0%]", col%(2%) as "a%[1%]"')
+    matches(argv[3], "to json")
+  end)
+
+  it("writes a markdown table", function()
+    local view, source = fixture.duplicated_headers()
+    local argv = commands.yank(view, {
+      rowids = { 1 },
+      columns = { source[1] },
+      headers = true,
+      format = "markdown",
+    })
+    matches(argv[3], "to md")
   end)
 end)

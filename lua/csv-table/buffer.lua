@@ -18,6 +18,8 @@ local commands = require("csv-table.commands")
 local active_cell = require("csv-table.active_cell")
 local columns = require("csv-table.columns")
 local layout = require("csv-table.layout")
+local movement = require("csv-table.movement")
+local overlay = require("csv-table.overlay")
 local query = require("csv-table.query")
 local selection = require("csv-table.selection")
 local source = require("csv-table.source")
@@ -35,79 +37,10 @@ local M = {}
 ---@type table<integer, csv.Buffer>
 local buffers = {}
 
-local mark_namespace = vim.api.nvim_create_namespace("csv-marks")
-
 -- The autocommands a table buffer owns. Kept out of the group `setup` clears,
 -- because these belong to one buffer: nvim drops them with the buffer, and a
 -- second `setup` would take them from the tables already open.
 local buffer_group = vim.api.nvim_create_augroup("csv-table-buffer", { clear = false })
-
--- Above the 4096 an extmark takes by default, so a selected cell draws over the
--- row highlight it may be sitting on.
-local SELECTION_PRIORITY = 4200
-
---- Draw the marked rows and the marked columns.
----@param buffer csv.Buffer
-local function draw_marks(buffer)
-  for buffer_line = buffer.layout.first_line, buffer.layout.last_line do
-    local row = layout.row_at_line(buffer.layout, buffer_line)
-    if row and buffer.state.marked[row.row_id] then
-      vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, buffer_line - 1, 0, {
-        line_hl_group = "CsvMarkedRow",
-      })
-    end
-  end
-
-  local header_line = buffer.layout.header_line
-  for column_number, column in ipairs(buffer.layout.columns) do
-    if buffer.state.marked_columns[column.column_id] then
-      local from, to = layout.cell_bounds(buffer.layout, header_line, column_number)
-      if from then
-        vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, header_line - 1, from, {
-          end_col = to,
-          hl_group = "CsvMarkedColumn",
-        })
-      end
-    end
-  end
-end
-
---- Draw the selected cells. The columns of a selection are next to each other,
---- so each line takes one extmark from the left edge of the first to the right
---- edge of the last. The priority puts it over a marked row, which is the whole
---- line and the less specific of the two.
----@param buffer csv.Buffer
-local function draw_selection(buffer)
-  local bounds = selection.bounds(buffer.state, buffer.layout)
-  if not bounds then
-    return
-  end
-
-  for line = bounds.top, bounds.bottom do
-    local cells = layout.cell_ranges(buffer.layout, line)
-    local first, last = cells[bounds.left], cells[bounds.right]
-    if first and last then
-      vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, line - 1, first.from, {
-        end_col = last.to,
-        hl_group = "CsvSelection",
-        priority = SELECTION_PRIORITY,
-      })
-    end
-  end
-end
-
---- Draw the marks and the selection over the text already in the buffer.
---- Marking a row and selecting a cell leave xan's output alone, so both are
---- drawn in place.
----@param buffer csv.Buffer
-function M.redraw(buffer)
-  if not buffer.layout then
-    return
-  end
-  vim.api.nvim_buf_clear_namespace(buffer.bufnr, mark_namespace, 0, -1)
-  draw_marks(buffer)
-  draw_selection(buffer)
-end
 
 ---@param bufnr integer
 ---@return csv.Buffer|nil
@@ -151,6 +84,41 @@ vim.api.nvim_create_autocmd("WinClosed", {
   group = buffer_group,
   callback = function(event)
     views[tonumber(event.match)] = nil
+  end,
+})
+
+-- Entering one of nvim's visual modes is what says the user is picking cells
+-- out, whichever key they entered it with. The pattern is the mode nvim came
+-- from and the mode it went to, so `\22` is blockwise visual and a switch
+-- between two visual modes matches as well.
+vim.api.nvim_create_autocmd("ModeChanged", {
+  group = buffer_group,
+  pattern = "*:[vV\22]",
+  callback = function(event)
+    local buffer = buffers[vim.api.nvim_get_current_buf()]
+    if not buffer or not buffer.layout then
+      return
+    end
+
+    local was = event.match:match("^(.*):")
+    if was == "v" or was == "V" or was == "\22" then
+      return movement.change_kind(buffer)
+    end
+    movement.start_extending(buffer, 0)
+  end,
+})
+
+-- Leaving a visual mode, where nvim writes `'<` and `'>` from the two ends it
+-- was holding. The block the user picked out goes back over them, so `gv`
+-- brings the cells back rather than nvim's own rectangle.
+vim.api.nvim_create_autocmd("ModeChanged", {
+  group = buffer_group,
+  pattern = "[vV\22]:*",
+  callback = function()
+    local buffer = buffers[vim.api.nvim_get_current_buf()]
+    if buffer and buffer.layout then
+      movement.mark_selection(buffer)
+    end
   end,
 })
 
@@ -256,7 +224,7 @@ function M.render(buffer, on_rendered)
     buffer.layout = parsed
     buffer.stamp = stamp
     replace_lines(buffer.bufnr, parsed.lines)
-    M.redraw(buffer)
+    overlay.redraw(buffer)
     -- `status.get_winbar` pins this line while the buffer is scrolled past it.
     vim.b[buffer.bufnr].table_header = parsed.header_line
 
@@ -331,7 +299,7 @@ function M.attach(bufnr, on_ready)
     local stamp = file_stamp(attached.state.source)
     if attached.layout and stamp == attached.stamp then
       replace_lines(bufnr, attached.layout.lines)
-      M.redraw(attached)
+      overlay.redraw(attached)
 
       -- The active cell names a row of this layout, which is the one still in
       -- hand, so the user comes back to the cell they left.
@@ -381,19 +349,15 @@ function M.attach(bufnr, on_ready)
     callback = set_window_options,
   })
 
-  -- Handle manual movement of the cursor and translate it to cell movement.
+  -- A motion this plugin leaves to nvim ends here, where the cell the user was
+  -- aiming for becomes the active cell.
   vim.api.nvim_create_autocmd("CursorMoved", {
     group = buffer_group,
     buffer = bufnr,
     callback = function()
       local buffer = buffers[bufnr]
-      if not buffer or not buffer.layout or not active_cell.cursor_moved(buffer, 0) then
-        return remember_view()
-      end
-      active_cell.snap(buffer, 0)
-      if selection.is_set(buffer.state) then
-        selection.clear(buffer.state)
-        M.redraw(buffer)
+      if buffer then
+        movement.follow_cursor(buffer, 0)
       end
       remember_view()
     end,

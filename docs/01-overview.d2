@@ -50,11 +50,16 @@ draw: Drawing the table {
   style.fill: "#1a1a2a"
   buffer: buffer.lua {class: draw}
   layout: layout.lua {class: draw}
+  movement: movement.lua {class: draw}
   active_cell: active_cell.lua {class: draw}
+  overlay: overlay.lua {class: draw}
   highlight: highlight.lua {class: draw}
   statuscolumn: statuscolumn.lua {class: draw}
   buffer -> layout
-  buffer -> active_cell
+  buffer -> movement
+  movement -> active_cell
+  movement -> overlay
+  buffer -> overlay
   buffer -> highlight
   buffer -> statuscolumn
 }
@@ -79,10 +84,11 @@ xan: xan {
 
 entry.actions -> state.state_mod
 entry.actions -> draw.buffer
+entry.actions -> draw.movement
 entry.actions -> ui.inspect
 entry.init -> state.source
 draw.buffer -> build.commands
-draw.buffer -> state.selection
+draw.movement -> state.selection
 build.query -> xan
 xan -> draw.layout
 ui.panel -> build.commands

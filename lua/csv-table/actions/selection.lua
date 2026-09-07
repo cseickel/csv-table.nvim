@@ -1,125 +1,57 @@
 --[[
-The actions that select cells.
+The actions that pick cells out.
 
-Selecting leaves the xan output alone, so every action here draws over the text
-already in the buffer, and the selection lives as long as that text does.
+Picking cells leaves the xan output alone, so every action here draws over the
+text already in the buffer, and the selection lives as long as that text does.
 
-Extending moves the active cell as well, the way a spreadsheet does, so the keys
-that extend a selection are also the keys that walk the table.
+Starting and resuming a selection are not here. Nvim's own visual modes say the
+user is extending, and `csv-table.movement` takes the head along with every move
+made in one, so `v`, `V` and `gv` all work with no action of ours.
 ]]
 
-local buffer = require("csv-table.buffer")
 local active_cell = require("csv-table.active_cell")
 local inspect = require("csv-table.inspect")
-local layout_module = require("csv-table.layout")
+local movement = require("csv-table.movement")
+local picker = require("csv-table.picker")
 local query = require("csv-table.query")
-local selection = require("csv-table.selection")
 local utils = require("csv-table.actions.utils")
 
 local EDGE = utils.EDGE
 
---- Take the selection out by `rows` and `cells`, walking the active cell along
---- with it.
----
---- The head of the selection moves from the head and the active cell moves from
---- where it is, which are the same cell until a whole row or column is selected.
---- Keeping them apart is what lets a selected row be taken down as a whole row
---- while the active cell stays in the column being read.
 ---@param rows integer
 ---@param cells integer
 ---@return fun(buf: csv.Buffer)
 local function extender(rows, cells)
   return function(buf)
-    local current = buf.state.selection
-    local start_cell = current and current.head or active_cell.cell(buf, 0)
-    if not buf.layout or not start_cell then
-      return
+    if buf.layout then
+      movement.extend(buf, 0, rows, cells)
     end
-
-    local delta = { rows = rows, columns = cells }
-    local new_head = layout_module.step_cell(buf.layout, start_cell, delta)
-    if not new_head then
-      return query.report("the selection is not on this page")
-    end
-
-    active_cell.step(buf, 0, rows, cells)
-    if current then
-      selection.extend(buf.state, new_head)
-    else
-      selection.set(buf.state, start_cell, new_head)
-    end
-    buffer.redraw(buf)
   end
 end
 
---- Select the rectangle `corners` names, which is how a whole row, a whole
---- column and the whole page are selected in one press. The active cell stays
---- where it is, since the user is reading the cell they are on.
----@param corners fun(buf: csv.Buffer, layout: csv.Layout): csv.Cell|nil, csv.Cell|nil
+--- Pick out the block `kind` covers, anchored on the active cell.
+---@param kind csv.SelectionKind
 ---@return fun(buf: csv.Buffer)
-local function selector(corners)
+local function selector(kind)
   return function(buf)
     if not buf.layout or buf.layout.first_line > buf.layout.last_line then
       return query.report("there is nothing to select")
     end
-
-    local anchor, head = corners(buf, buf.layout)
-    if not anchor or not head then
-      return
-    end
-
-    selection.set(buf.state, anchor, head)
-    buffer.redraw(buf)
+    movement.select(buf, 0, kind)
   end
 end
 
----@param layout csv.Layout
----@param row csv.Row
----@param column_number integer
----@return csv.Cell|nil
-local function cell_at(layout, row, column_number)
-  local column = layout_module.column_at(layout, column_number)
-  return column and { row = row, column = column } or nil
-end
-
-utils.register_action("select_cell", "Select this cell", function(buf)
-  local cell = active_cell.cell(buf, 0)
-  if not cell then
-    return
-  end
-  selection.set(buf.state, cell, cell)
-  buffer.redraw(buf)
-end)
-
-utils.register_action("select_row", "Select this whole row", selector(function(buf, layout)
-  local cell = active_cell.cell(buf, 0)
-  if not cell then
-    return nil, nil
-  end
-  return
-    cell_at(layout, cell.row, 1),
-    cell_at(layout, cell.row, layout_module.column_count(layout))
-end))
-
-utils.register_action("select_column", "Select this whole column", selector(function(buf, layout)
-  local cell = active_cell.cell(buf, 0)
-  if not cell then
-    return nil, nil
-  end
-  return
-    { row = layout_module.row_at_line(layout, layout.first_line), column = cell.column },
-    { row = layout_module.row_at_line(layout, layout.last_line), column = cell.column }
-end))
-
-utils.register_action("select_page", "Select every cell on this page", selector(function(buf, layout)
-  return
-    cell_at(layout, layout_module.row_at_line(layout, layout.first_line), 1),
-    cell_at(layout, layout_module.row_at_line(layout, layout.last_line), layout_module.column_count(layout))
-end))
+utils.register_action("select_column", "Select this whole column", selector("column"))
+utils.register_action("select_page", "Select every cell on this page", selector("page"))
 
 utils.register_action("clear_selection", "Select nothing", function(buf)
-  selection.clear(buf.state)
-  buffer.redraw(buf)
+  movement.clear_selection(buf)
+end)
+
+utils.register_action("swap_selection_ends", "Move to the other end of the selection", function(buf)
+  if buf.layout then
+    movement.swap_ends(buf, 0)
+  end
 end)
 
 utils.register_action("extend_left", "Take the selection one column left", extender(0, -1))
@@ -132,10 +64,57 @@ utils.register_action("extend_to_last_column", "Take the selection to the last c
 utils.register_action("extend_to_first_row", "Take the selection to the top of the page", extender(-EDGE, 0))
 utils.register_action("extend_to_last_row", "Take the selection to the bottom of the page", extender(EDGE, 0))
 
-utils.register_action("copy", "Copy the selected cells under their column names", function(buf)
-  inspect.copy(buf, true)
+utils.register_action("extend_to_click", "Take the selection out to the click", function(buf)
+  local position = vim.fn.getmousepos()
+  if not buf.layout or position.winid ~= vim.api.nvim_get_current_win() or position.column == 0 then
+    return
+  end
+
+  local cell = active_cell.cell_at(buf, position.line, position.column - 1)
+  if cell then
+    movement.extend_to(buf, 0, cell)
+  end
 end)
 
-utils.register_action("copy_without_headers", "Copy the selected cells alone", function(buf)
-  inspect.copy(buf, false)
+--- Every way the selected cells can reach the clipboard. `display` is the text
+--- the buffer already holds, and the rest are written by xan from the file.
+---
+--- `label` is what the picker offers, where the prompt has already said the
+--- word yank. `description` is what the help panel shows beside the key, where
+--- the line stands on its own.
+---@type { action: string, format: string, headers: boolean, label: string, description: string }[]
+local YANKS = {
+  { action = "yank_tsv", format = "tsv", headers = true,
+    label = "TSV", description = "Yank as tab separated values" },
+  { action = "yank_tsv_no_headers", format = "tsv", headers = false,
+    label = "TSV, no headers", description = "Yank as tab separated values, without the header row" },
+  { action = "yank_csv", format = "csv", headers = true,
+    label = "CSV", description = "Yank as CSV" },
+  { action = "yank_csv_no_headers", format = "csv", headers = false,
+    label = "CSV, no headers", description = "Yank as CSV, without the header row" },
+  { action = "yank_display", format = "display", headers = true,
+    label = "As displayed", description = "Yank the cells as they are drawn" },
+  { action = "yank_display_no_headers", format = "display", headers = false,
+    label = "As displayed, no headers", description = "Yank the cells as they are drawn, without the header row" },
+  { action = "yank_json", format = "json", headers = true,
+    label = "JSON", description = "Yank as JSON" },
+  { action = "yank_markdown", format = "markdown", headers = true,
+    label = "Markdown", description = "Yank as a markdown table" },
+}
+
+for _, yank in ipairs(YANKS) do
+  utils.register_action(yank.action, yank.description, function(buf)
+    inspect.yank(buf, yank.format, yank.headers)
+  end)
+end
+
+utils.register_action("yank_picker", "Choose a format and yank the selected cells", function(buf)
+  picker.choose(YANKS, {
+    prompt = "yank as",
+    format_item = function(yank)
+      return yank.label
+    end,
+  }, function(yank)
+    inspect.yank(buf, yank.format, yank.headers)
+  end)
 end)

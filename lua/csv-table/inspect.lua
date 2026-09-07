@@ -7,8 +7,8 @@ what a cell holds. Everything here goes back to the file through
 before any formatting.
 
 `cell` shows one value to be read, `row` offers the whole row to be searched and
-copies whatever is chosen, and `copy` takes the selected cells as tab separated
-text, which is what a spreadsheet pastes as cells.
+copies whatever is chosen, and `yank` writes the selected cells to the clipboard
+in whichever format was asked for.
 ]]
 
 local columns = require("csv-table.columns")
@@ -27,8 +27,8 @@ local GAP = "  "
 
 --- What `column` holds in this row. `csv-table.commands` renames the columns to
 --- their ids before writing the JSON, so the key is a column id as a string.
---- `to jsonl --strings '*'` asks xan for every value as a string, and a value
---- that arrives as anything else settles for the empty string.
+--- `to jsonl --strings '*'` writes every value as a string, so anything else
+--- arriving here is a number or a null, and the cell reads as empty.
 ---@param row table<string, string>
 ---@param column csv.Column
 ---@return string
@@ -95,19 +95,19 @@ function M.cell(buf, column)
   end)
 end
 
---- Yank `text` into the system clipboard and the unnamed register, so `p` inside
+--- Put `text` in the system clipboard and the unnamed register, so `p` inside
 --- nvim pastes it whether or not `clipboard` is set to follow the system one.
 ---@param text string
-local function yank(text)
+local function to_registers(text)
   vim.fn.setreg("+", text)
   vim.fn.setreg('"', text)
 end
 
---- What copying takes: the selected cells while a selection is set, and the
+--- What a yank takes: the selected cells while a selection is set, and the
 --- active cell on its own otherwise.
 ---@param buf csv.Buffer
 ---@return csv.Bounds|nil
-local function copy_bounds(buf)
+local function yank_bounds(buf)
   local layout = buf.layout
   if not layout then
     return nil
@@ -131,25 +131,70 @@ local function copy_bounds(buf)
   }
 end
 
---- Copy the selected cells as tab separated text, which is what a spreadsheet
---- pastes as cells. `xan` reads the values from the file and writes the text, so
---- a column narrow enough to have been drawn cut still copies whole and a value
---- holding a tab or a newline comes out quoted.
+--- The selected cells exactly as the table draws them, one line each, the header
+--- line first. This is the only format that stays in the buffer: a value its
+--- column draws cut is yanked cut, which is what makes it what you see.
+---
+--- Each line is cut at its own cell ranges, because a line holding a multi-byte
+--- character has its separators at byte offsets the header does not share.
 ---@param buf csv.Buffer
----@param headers boolean Whether to put the column names above the cells.
-function M.copy(buf, headers)
-  local bounds = copy_bounds(buf)
-  if not bounds then
-    return query.report("there is nothing to copy")
+---@param bounds csv.Bounds
+---@param headers boolean
+---@return string
+local function drawn_text(buf, bounds, headers)
+  local lines = {}
+
+  ---@param buffer_line integer
+  local function cut(buffer_line)
+    local cells = layout_module.cell_ranges(buf.layout, buffer_line)
+    local first, last = cells[bounds.left], cells[bounds.right]
+    if first and last then
+      table.insert(lines, buf.layout.lines[buffer_line]:sub(first.from + 1, last.to))
+    end
   end
 
-  local copied = {}
+  if headers then
+    cut(buf.layout.header_line)
+  end
+  for buffer_line = bounds.top, bounds.bottom do
+    cut(buffer_line)
+  end
+  return table.concat(lines, "\n")
+end
+
+--- Yank the selected cells in `format`, which is one of the names
+--- `csv-table.commands` writes: `tsv`, `csv`, `json`, `markdown`, or `display`.
+---
+--- Every format but `display` reads the values from the file through xan, so a
+--- column narrow enough to have been drawn cut still yanks whole, and a value
+--- holding a tab or a newline comes out quoted.
+---@param buf csv.Buffer
+---@param format string
+---@param headers boolean Whether to put the column names above the cells.
+function M.yank(buf, format, headers)
+  local bounds = yank_bounds(buf)
+  if not bounds then
+    return query.report("there is nothing to yank")
+  end
+
+  local rows = bounds.bottom - bounds.top + 1
+  local wide = bounds.right - bounds.left + 1
+  local function done()
+    vim.notify(string.format("csv-table: yanked %d rows by %d columns", rows, wide))
+  end
+
+  if format == "display" then
+    to_registers(drawn_text(buf, bounds, headers))
+    return done()
+  end
+
+  local yanked = {}
   for column_number = bounds.left, bounds.right do
     local column = layout_module.column_at(buf.layout, column_number)
     if not column then
       return query.report("the selected columns are no longer on display")
     end
-    copied[#copied + 1] = column
+    yanked[#yanked + 1] = column
   end
 
   local rowids = {}
@@ -161,10 +206,10 @@ function M.copy(buf, headers)
     rowids[#rowids + 1] = row.row_id
   end
 
-  local opts = { rowids = rowids, columns = copied, headers = headers }
-  query.copy(buf.state, opts, query.report, function(text)
-    yank(text)
-    vim.notify(string.format("csv-table: copied %d rows by %d columns", #rowids, #copied))
+  local opts = { rowids = rowids, columns = yanked, headers = headers, format = format }
+  query.yank(buf.state, opts, query.report, function(text)
+    to_registers(text)
+    done()
   end)
 end
 
@@ -188,7 +233,7 @@ function M.row(buf)
         return field.name .. padding .. GAP .. field.value:gsub("%s+", " ")
       end,
     }, function(field)
-      yank(field.value)
+      to_registers(field.value)
       vim.notify("csv-table: copied " .. field.name)
     end)
   end)

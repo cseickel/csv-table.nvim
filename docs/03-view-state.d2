@@ -28,7 +28,7 @@ fields: ||md
   | `marked` | Row ids |
   | `marked_columns` | Column ids |
   | `formats` | Keyed by column id |
-  | `selection` | The anchor and head cells |
+  | `selection` | The anchor cell, the head cell and the kind |
   | `page`, `limit` | Which slice of rows |
 || {class: data}
 
@@ -56,9 +56,17 @@ format: |md
 
 selection: |md
   ### selection.lua
-  `csv.Selection`: an `anchor` cell and a
-  `head` cell. `buffer.render` clears it, so
-  both ends belong to the layout on screen.
+  `csv.Selection`: an `anchor` cell, a `head`
+  cell, and a `kind` saying which of the two
+  axes those cells bound. `row` takes every
+  column, `column` takes every row.
+
+  `buffer.render` clears it, so both ends
+  belong to the layout on screen.
+
+  `movement.lua` is what moves the head: a
+  shift keyed move, or any move made while
+  nvim is in a visual mode.
 | {class: state}
 
 state -> fields
