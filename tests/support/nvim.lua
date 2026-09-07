@@ -1,9 +1,8 @@
 --[[
 Enough of nvim's API for the pure modules to load under plain lua.
 
-The modules under test reach for `vim` only to split strings, so this covers
-that and stops at the first thing they actually use. A module that needs more
-than this belongs in a headless nvim run instead.
+Splitting a string is what those modules ask `vim` for, so that is what this
+holds. A module that reaches further belongs in a headless nvim run.
 ]]
 
 _G.vim = {

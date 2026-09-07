@@ -21,9 +21,9 @@ utils.register_action("clear_all", "Clear filters, sort, marks and hidden column
   buffer.render(buf)
 end)
 
--- Requiring a module is what registers its actions, so nothing binds the result.
--- The directory comes from this file's own path rather than the runtimepath, so
--- a second copy of the plugin contributes no names.
+-- Requiring a module is what registers its actions, so the require stands alone.
+-- The directory comes from this file's own path, which keeps the list to the
+-- copy of the plugin that is running.
 local directory = vim.fs.dirname(debug.getinfo(1, "S").source:sub(2))
 
 for name in vim.fs.dir(directory) do

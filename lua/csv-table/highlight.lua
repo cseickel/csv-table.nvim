@@ -6,14 +6,13 @@ are drawn here too. A color follows from where a cell is and what its column
 holds, both of which `csv-table.layout` and `csv-table.format` already know, so
 nothing here searches the text.
 
-The decoration provider runs only for the lines nvim is drawing, and its marks
-are ephemeral, so nothing is stored between redraws and a render that replaces
-every line has nothing to reapply.
+The decoration provider runs for the lines nvim is drawing, and its marks last
+for that draw, so a render that replaces every line is answered by the next
+draw asking again.
 
-A cell holding text gets no group at all, so it reads in the normal foreground,
-and the border is drawn as the gaps between the cells rather than as a layer
-under them. Every group here sets a foreground alone, which leaves the background
-to the row marks and the selection.
+A cell holding text reads in the normal foreground, and the border is the gaps
+between the cells. Every group here sets a foreground alone, which leaves the
+background to the row marks and the selection.
 ]]
 
 local buffer = require("csv-table.buffer")
@@ -25,8 +24,8 @@ local M = {}
 local namespace = vim.api.nvim_create_namespace("csv-syntax")
 
 -- Under the 4096 an extmark takes by default, so the marks and the selection
--- both draw over the coloring rather than under it. Nothing here overlaps
--- anything else here, so one priority covers all of it.
+-- both draw over the coloring. One value covers every group here, which each
+-- claim their own stretch of the line.
 local PRIORITY = 100
 
 local GROUPS = {
@@ -118,8 +117,8 @@ local function draw_borders(bufnr, row, line, ranges)
   end
 end
 
---- The layout and the cell kinds for the window nvim is drawing, read once per
---- window rather than once per line.
+--- The layout and the cell kinds for the window nvim is drawing. `on_win` fills
+--- this once, and every `on_line` for that window reads it.
 ---@type { layout: csv.Layout, kinds: table<integer, "number"|"date"> }|nil
 local current_window = nil
 

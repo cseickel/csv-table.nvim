@@ -68,39 +68,48 @@ end
 
 --- The argv for running `state` through xan.
 ---@param state csv.State
----@param display_columns csv.Column[] The columns to draw, the row number first.
+---@param display_columns csv.Column[] The columns to draw, in display order.
 ---@return string[]
 function M.render(state, display_columns)
   return run(state.source, state.sheet, pipeline.build(state, display_columns))
 end
 
---- The argv for the sample `csv-table.format` measures precision from. Renaming
---- to display names first makes every key unique, which the JSON objects require
---- and duplicated headers would break.
+--- `to jsonl` keys its object by the column names in the stream, and a CSV may
+--- repeat a header, so the columns are renamed to their ids first. The keys come
+--- out `"0"`, `"1"`, `"2"`, one per column and free of anything needing quotes.
+---@param count integer How many columns the file holds.
+---@return string
+local function rename_to_ids(count)
+  local ids = {}
+  for index = 1, count do
+    ids[index] = index - 1
+  end
+  return "rename " .. pipeline.quote(table.concat(ids, ","))
+end
+
+--- The argv for the sample `csv-table.format` measures precision from.
 ---@param path string
 ---@param sheet integer|nil
----@param rename_argument string
+---@param column_count integer
 ---@return string[]
-function M.sample(path, sheet, rename_argument)
+function M.sample(path, sheet, column_count)
   return run(path, sheet, table.concat({
     string.format("slice -l %d", SAMPLE_HEAD_ROWS),
     string.format("sample %d", SAMPLE_ROWS),
-    "rename " .. pipeline.quote(rename_argument),
+    rename_to_ids(column_count),
     "to jsonl --strings '*'",
   }, " | "))
 end
 
---- The argv reading one whole row as a JSON object, keyed by display name.
+--- The argv reading one whole row as a JSON object, keyed by column id.
 --- `enum` numbers rows by their position in the source before anything filters
---- or sorts them, so a row id is the number of rows to skip. Renaming first
---- makes every key unique, which the JSON object requires.
+--- or sorts them, so a row id is the number of rows to skip.
 ---@param state csv.State
 ---@param rowid integer
 ---@return string[]
 function M.row(state, rowid)
-  local rename = columns.rename_argument(columns.labels(view_state.source_order(state)))
   return run(state.source, state.sheet, table.concat({
-    "rename " .. pipeline.quote(rename),
+    rename_to_ids(#state.columns),
     string.format("slice -s %d -l 1", rowid),
     "to jsonl --strings '*'",
   }, " | "))

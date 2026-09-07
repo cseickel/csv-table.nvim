@@ -127,10 +127,11 @@ drawn: |md
 parse: |md
   ### layout.parse
   Reads the row ids out of the first cell,
-  then cuts that cell from every line. What
-  the buffer holds starts at the first
-  displayed column, and `statuscolumn.lua`
-  draws the row number in the gutter.
+  then cuts that cell from every line. The
+  border lines reach the buffer with the
+  rest, so the table keeps its frame, and
+  `statuscolumn.lua` draws the row number in
+  the gutter.
 | {class: post}
 
 source -> select

@@ -211,7 +211,7 @@ function M.column_number(layout, column)
   return layout.column_number_by_id[column.column_id]
 end
 
---- How many columns are drawn, the row number among them.
+--- How many columns are drawn.
 ---@param layout csv.Layout
 ---@return integer
 function M.column_count(layout)
@@ -265,7 +265,8 @@ end
 
 --- Read the table `xan view` drew. It pads its output with a blank line at each
 --- end, and draws a top border, the header, a border, the rows, and a bottom
---- border.
+--- border. The blank lines go and the rest reaches the buffer, so the table
+--- keeps its frame.
 ---
 --- The row ids come out of the first cell before that cell is cut away, so
 --- every range this returns describes the text the buffer will hold.
@@ -285,10 +286,9 @@ function M.parse(output, display_columns, first_row_number)
   if #lines < 4 or not is_border_line(lines[1]) or not is_border_line(lines[3]) then
     return nil, "xan view did not produce a table"
   end
-  -- Cut the top border
-  table.remove(lines, 1)
 
-  local header_ranges = scan(lines[1])
+  local header_line = 2
+  local header_ranges = scan(lines[header_line])
   if #header_ranges < 2 then
     return nil, "xan view drew no row id"
   end
@@ -297,7 +297,7 @@ function M.parse(output, display_columns, first_row_number)
   local border_width = header_ranges[1].from > 0 and 1 or 0
   local id_width = header_ranges[1].to - header_ranges[1].from
 
-  local first_line, last_line = 3, #lines - 1
+  local first_line, last_line = 4, #lines - 1
   local rows_by_number, rows_by_id, rows_by_line = {}, {}, {}
   for buffer_line = first_line, last_line do
     local line = lines[buffer_line]
@@ -326,7 +326,7 @@ function M.parse(output, display_columns, first_row_number)
 
   local layout = {
     lines = lines,
-    header_line = 1,
+    header_line = header_line,
     first_line = first_line,
     last_line = last_line,
     rows_by_number = rows_by_number,
@@ -334,7 +334,7 @@ function M.parse(output, display_columns, first_row_number)
     rows_by_line = rows_by_line,
     columns = display_columns,
     column_number_by_id = column_number_by_id,
-    ranges = scan(lines[1]),
+    ranges = scan(lines[header_line]),
     ranges_by_line = {},
   }
 

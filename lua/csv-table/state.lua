@@ -94,8 +94,8 @@ function M.new(source)
   }
 end
 
---- Every source column in file order, which is how the stream arrives and so
---- how `rename` addresses them.
+--- Every source column in file order, which is the order a stage that has read
+--- the file untouched sees them in.
 ---@param state csv.State
 ---@return csv.Column[]
 function M.source_order(state)

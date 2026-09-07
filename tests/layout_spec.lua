@@ -38,21 +38,21 @@ describe("layout.parse", function()
 
   it("finds the header and the data lines", function()
     local result = parsed(1)
-    equals(result.header_line, 1)
-    equals(result.first_line, 3)
-    equals(result.last_line, 4)
+    equals(result.header_line, 2)
+    equals(result.first_line, 4)
+    equals(result.last_line, 5)
     equals(layout.row_count(result), 2)
   end)
 
   it("reads the row ids out of the first cell", function()
     local result = parsed(1)
-    equals(layout.row_at_line(result, 3).row_id, 7)
-    equals(layout.row_at_line(result, 4).row_id, 9)
+    equals(layout.row_at_line(result, 4).row_id, 7)
+    equals(layout.row_at_line(result, 5).row_id, 9)
   end)
 
   it("numbers the rows from the number the page starts at", function()
     local result = parsed(1001)
-    equals(layout.row_at_line(result, 3).row_number, 1001)
+    equals(layout.row_at_line(result, 4).row_number, 1001)
     equals(layout.row_by_number(result, 1002).row_id, 9)
   end)
 
@@ -60,15 +60,22 @@ describe("layout.parse", function()
     local result = parsed(1)
     local row = layout.row_by_id(result, 9)
     equals(row.row_number, 2)
-    equals(row.buffer_line, 4)
+    equals(row.buffer_line, 5)
     equals(layout.row_by_number(result, 2), row)
-    equals(layout.row_at_line(result, 4), row)
+    equals(layout.row_at_line(result, 5), row)
   end)
 
   it("cuts the row id cell out of every line", function()
     local result = parsed(1)
     equals(layout.column_count(result), 1)
     lacks(result.lines[result.header_line], "id")
+  end)
+
+  it("keeps the table's own border lines", function()
+    local result = parsed(1)
+    matches(result.lines[1], "┌")
+    matches(result.lines[3], "├")
+    matches(result.lines[#result.lines], "└")
   end)
 
   it("places the columns it was handed", function()
@@ -86,41 +93,41 @@ end)
 describe("layout.column_number_at", function()
   it("names the column a byte falls in", function()
     local result = parsed(1)
-    local range = layout.cell_ranges(result, 3)[1]
-    equals(layout.column_number_at(result, 3, range.from), 1)
+    local range = layout.cell_ranges(result, 4)[1]
+    equals(layout.column_number_at(result, 4, range.from), 1)
   end)
 
   it("answers with the last column for a byte past the table", function()
     local result = parsed(1)
-    equals(layout.column_number_at(result, 3, 500), 1)
+    equals(layout.column_number_at(result, 4, 500), 1)
   end)
 end)
 
 describe("layout.step_cell", function()
   it("walks to another row", function()
     local result, source = parsed(1)
-    local cell = { row = layout.row_at_line(result, 3), column = source[1] }
+    local cell = { row = layout.row_at_line(result, 4), column = source[1] }
     local stepped = layout.step_cell(result, cell, { rows = 1, columns = 0 })
     equals(stepped.row.row_id, 9)
   end)
 
   it("stops at the last row on the page", function()
     local result, source = parsed(1)
-    local cell = { row = layout.row_at_line(result, 3), column = source[1] }
+    local cell = { row = layout.row_at_line(result, 4), column = source[1] }
     local stepped = layout.step_cell(result, cell, { rows = 50, columns = 0 })
     equals(stepped.row.row_id, 9)
   end)
 
   it("stops at the first column", function()
     local result, source = parsed(1)
-    local cell = { row = layout.row_at_line(result, 3), column = source[1] }
+    local cell = { row = layout.row_at_line(result, 4), column = source[1] }
     local stepped = layout.step_cell(result, cell, { rows = 0, columns = -50 })
     equals(stepped.column.column_id, 0)
   end)
 
   it("answers nothing when the column has left the display", function()
     local result, source = parsed(1)
-    local cell = { row = layout.row_at_line(result, 3), column = source[2] }
+    local cell = { row = layout.row_at_line(result, 4), column = source[2] }
     equals(layout.step_cell(result, cell, { rows = 0, columns = 0 }), nil)
   end)
 end)

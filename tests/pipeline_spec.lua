@@ -227,6 +227,15 @@ describe("commands.copy", function()
     matches(argv[3], "sort %-s 2 %-N")
   end)
 
+  it("renames to column ids so the jsonl keys are unique", function()
+    local view = fixture.duplicated_headers()
+    local argv = commands.row(view, 7)
+
+    matches(argv[3], "rename '0,1,2'")
+    matches(argv[3], "slice %-s 7 %-l 1")
+    matches(argv[3], "to jsonl")
+  end)
+
   it("beheads the output when the headers are unwanted", function()
     local view, source = fixture.duplicated_headers()
     local argv = commands.copy(view, {

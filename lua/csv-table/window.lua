@@ -2,9 +2,10 @@
 Floating windows.
 
 The filter dialog and the panels all want the same thing: some lines of text in
-a centered float that closes on `q` or Escape. This is that, and nothing else.
+a centered float that closes on `q` or Escape.
 
-A list to search rather than read goes through `csv-table.picker` instead.
+A list to search goes through `csv-table.picker`, which hands it to whatever
+picker the user has installed.
 ]]
 
 local M = {}

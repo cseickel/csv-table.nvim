@@ -67,9 +67,9 @@ local function inspect_sheet(path, sheet, sheets, on_done, on_error)
     end
 
     local source_columns = columns.from_names(names)
-    local rename = columns.rename_argument(columns.labels(source_columns))
 
-    query.run_json_lines(commands.sample(path, sheet, rename), on_error, function(sample)
+    local argv = commands.sample(path, sheet, #source_columns)
+    query.run_json_lines(argv, on_error, function(sample)
       on_done({
         path = path,
         columns = source_columns,

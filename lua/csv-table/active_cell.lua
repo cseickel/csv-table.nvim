@@ -145,8 +145,8 @@ function M.cursor_moved(buffer, window)
   return position[1] ~= active.position[1] or position[2] ~= active.position[2]
 end
 
---- The cell the real cursor is in. A cursor on a border line, on the header or
---- in the row number answers with the nearest data cell.
+--- The cell the real cursor is in. A cursor on a border line or on the header
+--- answers with the nearest data cell.
 ---@param buffer csv.Buffer
 ---@param window integer
 ---@return csv.Cell|nil
@@ -282,10 +282,9 @@ function M.flash_column(buffer, column)
   end, FLASH_MILLISECONDS)
 end
 
---- `guicursor` without the entry this plugin appends, which is the value it
---- held before a table hid the cursor. The entry is dropped from the list
---- rather than cut out of the string, because cutting it out would leave the
---- comma beside it, and nvim rejects an empty entry.
+--- `guicursor` with this plugin's entry taken out, which is the value it held
+--- before a table hid the cursor. It splits on commas and drops the entry, so
+--- the commas around it come out with it. nvim rejects an empty entry.
 ---@param value string
 ---@return string
 local function without_hidden(value)
@@ -303,10 +302,9 @@ end
 ---
 --- `guicursor` is global and holds one entry per mode, the last entry for a
 --- mode winning, so hiding is appending an entry and showing is taking that
---- entry back out. Nothing is stored between the two: taking the entry out
---- rebuilds the value that was there before, and a value this plugin never
---- added to comes back unchanged, so another plugin styling the cursor its own
---- way is left alone.
+--- entry back out. The value is the whole record: taking the entry out rebuilds
+--- what was there, which leaves another plugin's cursor styling as that plugin
+--- set it.
 ---@param bufnr integer
 function M.update_guicursor(bufnr)
   local base = without_hidden(vim.o.guicursor)
@@ -321,11 +319,9 @@ end
 
 --- Follow the cursor's visibility for the rest of the session.
 ---
---- Entering a buffer is the only event that decides it. Undoing the hide on
---- leaving instead would hold for every buffer after a leave that is missed,
---- and a leave is missed by a buffer wiped while it is current or by a window
---- opened with `noautocmd`. Decided on entry, a missed event lasts until the
---- next entry rather than for the session.
+--- Entering a buffer is what decides it, so a missed event lasts until the next
+--- entry. `BufLeave` goes missing whenever a buffer is wiped while it is current
+--- or a window opens with `noautocmd`, which telescope and snacks both do.
 ---@param group integer
 function M.setup(group)
   vim.api.nvim_create_autocmd("BufEnter", {

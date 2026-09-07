@@ -2,10 +2,12 @@
 Columns: what one is, and which of them the table draws.
 
 A column is named by its `column_id`, the 0-based position it holds in the
-source file, which every xan stage accepts in place of a header name. Two stages
-write a name instead of reading one, the `rename` argument and the `as` clauses
-after it, and both need names that are unique across the file, so every column
-gets a `label`: the header text, plus its occurrence where a name repeats.
+source file, which every xan stage accepts in place of a header name.
+
+A column also has a `label`, the header text with its occurrence appended where
+a name repeats. That is the name the user reads, in the drawn header and in
+every panel, and it is what `csv-table.commands` keys a JSON object by, both of
+which need one name per column.
 
 `state.columns` is the one list. It holds every source column, and the user
 reorders it and sets `hidden` on its entries, so `column_id` gives the file
@@ -26,9 +28,8 @@ local M = {}
 --- all on display.
 ---
 --- A repeated header takes its occurrence as a suffix, so `a,b,a` labels its
---- columns `a[0]`, `b` and `a[1]`. Every label is then unique, which `rename`
---- needs to address a column by name and `to jsonl` needs to key an object by
---- one.
+--- columns `a[0]`, `b` and `a[1]`. That gives the user one name per column to
+--- read, and gives `to jsonl` one key per column to write.
 ---@param names string[]
 ---@return csv.Column[]
 function M.from_names(names)
@@ -85,41 +86,11 @@ function M.truncate(value, length)
   return table.concat(kept) .. "…"
 end
 
---- Wrap a value in double quotes, doubling any it contains.
----@param value string
----@return string
-local function csv_quote(value)
-  return '"' .. value:gsub('"', '""') .. '"'
-end
-
 --- Render a moonblade string literal.
 ---@param value string
 ---@return string
 function M.string_literal(value)
   return '"' .. value:gsub("\\", "\\\\"):gsub('"', '\\"') .. '"'
-end
-
---- Render the argument for `xan rename`, which takes one CSV row of names
---- covering every column of its input, in order.
----@param names string[]
----@return string
-function M.rename_argument(names)
-  local parts = {}
-  for i, name in ipairs(names) do
-    parts[i] = name:match('[,"\r\n]') and csv_quote(name) or name
-  end
-  return table.concat(parts, ",")
-end
-
---- The labels of `columns`, in order.
----@param columns csv.Column[]
----@return string[]
-function M.labels(columns)
-  local labels = {}
-  for i, column in ipairs(columns) do
-    labels[i] = column.label
-  end
-  return labels
 end
 
 -- Which columns the table draws -----------------------------------------------

@@ -80,7 +80,11 @@ local function clipboard_summary(buf)
     return nil
   end
 
-  return "cut " .. table.concat(columns.labels(buf.state.clipboard), ",")
+  local names = {}
+  for index, column in ipairs(buf.state.clipboard) do
+    names[index] = column.label
+  end
+  return "cut " .. table.concat(names, ",")
 end
 
 --- How the page and everything applied to it read in a statusline. Empty for

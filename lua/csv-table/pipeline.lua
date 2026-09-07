@@ -6,12 +6,12 @@ plugin builds one command string and hands it straight to xan. This module is
 the pure function from view state to that string. It is the only place that
 knows xan's command syntax, and it can be exercised without nvim.
 
-Two stages open every pipeline and fix its shape for everything that follows:
+Every pipeline opens by fixing its shape:
 
     select <the columns this run needs> | enum -c <row id>
 
-After those two, the row id sits at position 0 and each carried column sits at
-its index in the carried list, and every later stage names a column by that one
+From there the row id sits at position 0 and each carried column sits at its
+index in the carried list, and every later stage names a column by that one
 number. `carried_columns` returns the list and the lookup together.
 
 The closing `select -e` is the only other stage that changes the shape. It
@@ -22,8 +22,8 @@ the positions hold for the whole run.
 local columns = require("csv-table.columns")
 local expression = require("csv-table.expression")
 
--- The one function taken off the module, because `format` here names a column's
--- format rather than the module that decides it.
+-- Taken off the module as a bare function, since `format` here names a column's
+-- format.
 local is_numeric = require("csv-table.format").is_numeric
 
 local M = {}
@@ -176,10 +176,10 @@ local function display_stage(state, display_columns, positions)
   return "select -e " .. shell_quote(table.concat(clauses, ", "))
 end
 
---- The columns `view` should right-align, by their position in the drawn table.
---- A numeric column needs this because `printf` leaves it a string, which `view`
---- left-aligns. A column the user aligned is padded by `printf` already, so
---- `view` leaves it be.
+--- The columns `view` should right-align, by their position in the stream it
+--- reads. A numeric column needs this because `printf` leaves it a string, which
+--- `view` left-aligns. A column the user aligned is padded by `printf` already,
+--- so `view` leaves it be.
 ---@param state csv.State
 ---@param display_columns csv.Column[]
 ---@return string|nil
@@ -188,7 +188,8 @@ local function right_aligned(state, display_columns)
   for index, column in ipairs(display_columns) do
     local format = state.formats[column.column_id]
     if is_numeric(format) and not format.align then
-      -- The row id leads the drawn table, so the first displayed column is 1.
+      -- The closing `select -e` puts the row id at 0, so the first displayed
+      -- column is at 1, which is this loop's own index.
       table.insert(positions, index)
     end
   end

@@ -9,8 +9,8 @@ text the user picked them from.
 The lines the rows are drawn on say which rows lie between the two ends, because
 a sort puts row ids on the page in any order.
 
-`csv-table.state.marked` is a different thing again: marks are scattered, they
-last, and they filter.
+`csv-table.state.marked` is the other way to pick rows out: marks are scattered,
+they last across renders, and they filter.
 ]]
 
 local layout_module = require("csv-table.layout")

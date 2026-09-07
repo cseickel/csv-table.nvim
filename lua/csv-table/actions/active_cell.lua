@@ -20,9 +20,9 @@ local function stepper(rows, cells)
 end
 
 --- Go to the row numbered `count`, or to `edge` of the page when no count was
---- given. The count is the number drawn in column one rather than a position
---- down the page, so what the user types is what they read. A number belonging
---- to another page clamps to the near end of this one.
+--- given. The count is the number the gutter shows, so what the user types is
+--- what they read. A number belonging to another page clamps to the near end of
+--- this one.
 ---@param edge "first_line"|"last_line"
 ---@return fun(buf: csv.Buffer)
 local function row_jump_action(edge)

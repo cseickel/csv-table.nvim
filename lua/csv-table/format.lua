@@ -8,8 +8,8 @@ decisions into the `printf` clauses that xan applies, and `csv-table.highlight`
 colors a cell from the kind of the column it is in.
 
 Precision is measured after snapping each value to seven significant digits,
-because a column printed from float32 has noise past that point: 89% of the
-prices in a real file read as `199.589996338` when the number is `199.59`.
+because a column printed from float32 has noise past that point: a price of
+`199.59` reaches the file as `199.589996338`, which reads as nine decimals.
 ]]
 
 local columns = require("csv-table.columns")
@@ -131,19 +131,19 @@ function M.analyze_column(values)
   return { kind = "float", precision = math.min(precision, MAX_PRECISION) }
 end
 
---- Decide how every column reads.
---- The sample arrives keyed by label, which is what a JSON object can express,
---- and leaves keyed by column id, which is what identifies a column everywhere
---- else.
----@param sample table<string, string>[] Sample rows, keyed by label.
+--- Decide how every column reads. `csv-table.commands` renames the columns to
+--- their ids before writing the sample, so a JSON key is a column id as a
+--- string.
+---@param sample table<string, string>[] Sample rows, keyed by column id.
 ---@param source_columns csv.Column[]
 ---@return table<integer, csv.Format>
 function M.analyze(sample, source_columns)
   local formats = {}
   for _, column in ipairs(source_columns) do
+    local key = tostring(column.column_id)
     local values = {}
     for index, row in ipairs(sample) do
-      local value = row[column.label]
+      local value = row[key]
       values[index] = type(value) == "string" and value or ""
     end
     formats[column.column_id] = M.analyze_column(values)

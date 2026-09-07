@@ -25,14 +25,15 @@ local M = {}
 
 local GAP = "  "
 
---- What one column holds in this row. `to jsonl --strings '*'` asks xan for
---- every value as a string, and a value that arrives as anything else settles
---- for the empty string.
+--- What `column` holds in this row. `csv-table.commands` renames the columns to
+--- their ids before writing the JSON, so the key is a column id as a string.
+--- `to jsonl --strings '*'` asks xan for every value as a string, and a value
+--- that arrives as anything else settles for the empty string.
 ---@param row table<string, string>
----@param name string
+---@param column csv.Column
 ---@return string
-local function value_of(row, name)
-  local value = row[name]
+local function value_of(row, column)
+  local value = row[tostring(column.column_id)]
   return type(value) == "string" and value or ""
 end
 
@@ -59,7 +60,7 @@ end
 local function named_values(buf, row)
   local values = {}
   for index, column in ipairs(state.source_order(buf.state)) do
-    values[index] = { name = column.label, value = value_of(row, column.label) }
+    values[index] = { name = column.label, value = value_of(row, column) }
   end
   return values
 end
@@ -86,7 +87,7 @@ end
 ---@param column csv.Column
 function M.cell(buf, column)
   with_row(buf, function(row)
-    local lines, json = value_lines(value_of(row, column.label))
+    local lines, json = value_lines(value_of(row, column))
     local bufnr = window.open(lines, { title = column.label, wrap = true })
     if json then
       vim.bo[bufnr].filetype = "json"
@@ -167,7 +168,7 @@ function M.copy(buf, headers)
   end)
 end
 
---- Search the row under the cursor by column name or by value, and copy what is
+--- Search the active cell's row by column name or by value, and copy what is
 --- chosen. A row is read by searching it once a file is wide enough that the
 --- column being read is off the screen.
 ---@param buf csv.Buffer

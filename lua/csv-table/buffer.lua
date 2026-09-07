@@ -213,20 +213,19 @@ end
 
 --- Run the pipeline for `buffer` and draw what it returns.
 ---
---- The selection goes. A sort changes which rows lie between its two ends, and
---- hiding or moving a column changes which columns its two ends name, so a
---- selection that outlived a render would mean cells the user never picked.
+--- The selection goes, because a sort changes which rows lie between its two
+--- ends, and hiding or moving a column changes which columns those ends name.
 ---
---- The cursor goes back to the cell it was in, because the new text has its
---- own column widths, and the first render finds it at the top of the buffer.
+--- The active cell goes back to the column it was in. The new text has its own
+--- column widths, so the byte the cursor sat on may now belong to another
+--- column, and the column is what says where the user was.
 ---@param buffer csv.Buffer
 ---@param on_rendered fun()|nil Runs once the new text is in the buffer.
 function M.render(buffer, on_rendered)
   selection.clear(buffer.state)
 
-  -- Both the command and the layout read this one snapshot. The run is
-  -- asynchronous, so a second render starting meanwhile would otherwise hand
-  -- its column list to this render's text.
+  -- The command and the layout read this one snapshot, so they agree even when
+  -- a second render starts while this one is waiting on xan.
   local display_columns = columns.display_columns(buffer.state)
   local first_row_number = state.first_row_number(buffer.state)
   local stamp = file_stamp(buffer.state.source)
@@ -287,8 +286,8 @@ function M.column_width(buffer, column)
 end
 
 --- Read another sheet of the same workbook. The filters, sort, marks, column
---- selection and formats all name columns of the sheet being left, so the view
---- starts clean rather than pointing them at columns that may not exist.
+--- order and formats all name columns of the sheet being left, so the new sheet
+--- gets a fresh state.
 ---@param buffer csv.Buffer
 ---@param sheet integer 0-based.
 function M.open_sheet(buffer, sheet)
@@ -315,8 +314,7 @@ function M.row_range(buffer)
 end
 
 --- Take over `bufnr`, which nvim has named after a CSV file and left to this
---- plugin to read. The table replaces the file's text, so the buffer is
---- `nowrite`: writing the rendered table back over the source would destroy it.
+--- plugin to read.
 ---@param bufnr integer
 ---@param on_ready fun(buffer: csv.Buffer)|nil
 function M.attach(bufnr, on_ready)

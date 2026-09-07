@@ -15,8 +15,9 @@ local layout_module = require("csv-table.layout")
 local utils = require("csv-table.actions.utils")
 
 --- Render, then make `column` active again, so the column the user just changed
---- stays the one they are on. A column that narrows slides out from under the
---- cursor, and the next key would then act on whichever column took its place.
+--- stays the one they are on. A column that narrows leaves the byte the cursor
+--- is parked on inside whichever column took its place, and the next key would
+--- act on that one.
 ---@param buf csv.Buffer
 ---@param column csv.Column
 ---@param on_focused fun(column: csv.Column)|nil Runs once the column is active again.

@@ -2,8 +2,7 @@
 The actions that select cells.
 
 Selecting leaves the xan output alone, so every action here draws over the text
-already in the buffer. `buffer.render` clears the selection on purpose, so
-rendering again would throw away what the user just picked.
+already in the buffer, and the selection lives as long as that text does.
 
 Extending moves the active cell as well, the way a spreadsheet does, so the keys
 that extend a selection are also the keys that walk the table.
@@ -54,8 +53,8 @@ local function extender(rows, cells)
 end
 
 --- Select the rectangle `corners` names, which is how a whole row, a whole
---- column and the whole page are selected in one press. The cursor stays where
---- it is, since the user is reading the cell it is on.
+--- column and the whole page are selected in one press. The active cell stays
+--- where it is, since the user is reading the cell they are on.
 ---@param corners fun(buf: csv.Buffer, layout: csv.Layout): csv.Cell|nil, csv.Cell|nil
 ---@return fun(buf: csv.Buffer)
 local function selector(corners)

@@ -1,11 +1,11 @@
 --[[
 The dialogs that ask the user to choose something.
 
-The filter dialog offers the comparisons that suit the column's detected kind,
-so a numeric column never offers `contains` and a text column never offers `>`,
-and it offers the column's own values as a checklist. The value list is drawn
-through the filters already applied, so every value it shows is one that would
-leave rows on screen.
+The filter dialog offers the comparisons that suit the column's detected kind, so
+a numeric column gets `>` and `<=` where a text column gets `contains` and
+`startswith`, and it offers the column's own values as a checklist. The value
+list is drawn through the filters already applied, so every value it shows is
+one that would leave rows on screen.
 
 The sheet dialog lists the sheets of a workbook.
 ]]
