@@ -17,7 +17,7 @@ local cell_namespace = vim.api.nvim_create_namespace("csv-active-cell")
 local flash_namespace = vim.api.nvim_create_namespace("csv-flash")
 local FLASH_MILLISECONDS = 250
 
--- Above `buffer.RANGE_PRIORITY`, so the active cell shows over a selection.
+-- Above `buffer.SELECTION_PRIORITY`, so the active cell shows over a selection.
 local CELL_PRIORITY = 4300
 
 -- The modes a table buffer is read in. The command line keeps its cursor, so
@@ -172,6 +172,16 @@ function M.cell(buffer, window)
     return nil
   end
   return { row = row, column = column }
+end
+
+--- The cell that is active in `window`, which is where the plugin last put the
+--- cursor.
+---@param buffer csv.Buffer
+---@param window integer
+---@return csv.Cell|nil
+function M.active(buffer, window)
+  local active = get(buffer, window)
+  return active and { row = active.row, column = active.column } or nil
 end
 
 --- Make `cell` active and park the real cursor in it.

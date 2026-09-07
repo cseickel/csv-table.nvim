@@ -1,8 +1,10 @@
 --[[
 The actions that move between pages.
 
-Nothing counts the rows a filter matches until asked, so `last_page` is the only
-one of these that goes to xan before it can move.
+`state.row_count` holds how many rows the filters leave, which `buffer.render`
+fills in after each render, so these move without going to xan first. A render
+that lands past the end steps back on its own, which covers the moment before
+the first count arrives.
 ]]
 
 local buffer = require("csv-table.buffer")
@@ -10,8 +12,17 @@ local query = require("csv-table.query")
 local state = require("csv-table.state")
 local utils = require("csv-table.actions.utils")
 
+--- The 0-based number of the last page, once the rows have been counted.
+---@param buf csv.Buffer
+---@return integer|nil
+local function last_page(buf)
+  local total = buf.state.row_count
+  return total and math.max(math.ceil(total / buf.state.limit) - 1, 0) or nil
+end
+
 utils.register_action("next_page", "Show the next page", function(buf)
-  if buffer.at_last_page(buf) then
+  local last = last_page(buf)
+  if last and buf.state.page >= last then
     return vim.notify("csv-table: last page", vim.log.levels.INFO)
   end
   state.turn_page(buf.state, 1)
@@ -29,8 +40,15 @@ utils.register_action("first_page", "Show the first page", function(buf)
 end)
 
 utils.register_action("last_page", "Show the last page", function(buf)
+  local last = last_page(buf)
+  if last then
+    state.goto_page(buf.state, last)
+    return buffer.render(buf)
+  end
+
   query.count(buf.state, query.report, function(count)
-    state.goto_page(buf.state, math.ceil(count / buf.state.limit) - 1)
+    buf.state.row_count = count
+    state.goto_page(buf.state, math.max(math.ceil(count / buf.state.limit) - 1, 0))
     buffer.render(buf)
   end)
 end)

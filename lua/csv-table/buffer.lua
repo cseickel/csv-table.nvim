@@ -2,11 +2,16 @@
 The buffer a CSV is shown in.
 
 Owns one record per buffer, holding the state the user is building and the
-layout of what is currently on screen. Rendering runs the pipeline and replaces
-every line, so the layout is rebuilt on each render and nothing derived from it
-outlives the text it describes.
+layout of what is on screen. Rendering runs the pipeline and replaces every
+line, and each render builds a fresh layout, so what the layout describes is
+the text in the buffer.
 
-The buffer stays nomodifiable. Its text is xan's output, not a document.
+A read of a file that has the same size and modification time as the one the
+layout came from puts those same lines back, which is what makes switching
+away from a table and back again instant.
+
+The buffer stays nomodifiable. Its text is xan's output, and writing it back
+over the file would destroy the file.
 ]]
 
 local commands = require("csv-table.commands")
@@ -25,6 +30,7 @@ local M = {}
 ---@field bufnr integer
 ---@field state csv.State
 ---@field layout csv.Layout|nil Absent until the first render succeeds.
+---@field stamp string|nil What the file looked like when the layout was read.
 
 ---@type table<integer, csv.Buffer>
 local buffers = {}
@@ -38,7 +44,7 @@ local buffer_group = vim.api.nvim_create_augroup("csv-table-buffer", { clear = f
 
 -- Above the 4096 an extmark takes by default, so a selected cell draws over the
 -- row highlight it may be sitting on.
-local RANGE_PRIORITY = 4200
+local SELECTION_PRIORITY = 4200
 
 --- Draw the marked rows and the marked columns.
 ---@param buffer csv.Buffer
@@ -84,7 +90,7 @@ local function draw_selection(buffer)
       vim.api.nvim_buf_set_extmark(buffer.bufnr, mark_namespace, line - 1, first.from, {
         end_col = last.to,
         hl_group = "CsvSelection",
-        priority = RANGE_PRIORITY,
+        priority = SELECTION_PRIORITY,
       })
     end
   end
@@ -117,6 +123,94 @@ local function replace_lines(bufnr, lines)
   vim.bo[bufnr].modifiable = false
 end
 
+--- Where each window is looking, as `winsaveview` reports it, so a buffer that
+--- is emptied and filled again can be put back the way the user left it.
+---@type table<integer, table>
+local views = {}
+
+--- Keep the current window's view, which the cursor moving and the window
+--- scrolling are between them the whole of.
+local function remember_view()
+  views[vim.api.nvim_get_current_win()] = vim.fn.winsaveview()
+end
+
+-- `WinScrolled` reports a window rather than a buffer, so it is registered once
+-- and asks whether the window it names is showing a table.
+vim.api.nvim_create_autocmd("WinScrolled", {
+  group = buffer_group,
+  callback = function()
+    if vim.bo.filetype == "csv-table" then
+      remember_view()
+    end
+  end,
+})
+
+-- nvim reuses window handles, so a view left behind would describe the next
+-- window to take the number.
+vim.api.nvim_create_autocmd("WinClosed", {
+  group = buffer_group,
+  callback = function(event)
+    views[tonumber(event.match)] = nil
+  end,
+})
+
+--- Look at `window` the way it was left. The active cell goes back first, so
+--- nvim has the cursor on the right line before the view is asked for, and the
+--- view then decides which part of the table is on screen.
+---
+--- Scheduled, because `:edit` puts the cursor on line 1 once the read command
+--- it fired has returned, and this has to land after that.
+---@param buffer csv.Buffer
+---@param window integer
+local function restore_view(buffer, window)
+  local cell = active_cell.active(buffer, window)
+  local view = views[window]
+
+  vim.schedule(function()
+    if not vim.api.nvim_win_is_valid(window) or vim.api.nvim_win_get_buf(window) ~= buffer.bufnr then
+      return
+    end
+
+    active_cell.move_to(buffer, window, cell)
+    if view then
+      vim.api.nvim_win_call(window, function()
+        vim.fn.winrestview(view)
+      end)
+    end
+  end)
+end
+
+--- What `path` looks like on disk, as a value two reads can be compared by.
+--- A file written again in the same second keeps its modification time, so the
+--- size comes along.
+---@param path string
+---@return string|nil nil while the file is out of reach.
+local function file_stamp(path)
+  local stat = vim.uv.fs_stat(path)
+  if not stat then
+    return nil
+  end
+  return string.format("%d:%d:%d", stat.size, stat.mtime.sec, stat.mtime.nsec)
+end
+
+--- Count the rows the filters leave, once, and keep the answer on the state.
+--- The count costs a pass over the file, so it runs when the filters have
+--- changed and the statusline has nothing to report.
+---@param buffer csv.Buffer
+local function count_rows(buffer)
+  if buffer.state.row_count then
+    return
+  end
+
+  local counted = buffer.state
+  query.count(buffer.state, query.report, function(count)
+    -- The state is replaced when another sheet is opened, so the answer lands
+    -- on the state that asked for it.
+    counted.row_count = count
+    vim.cmd.redrawstatus()
+  end)
+end
+
 --- Run the pipeline for `buffer` and draw what it returns.
 ---
 --- The selection goes. A sort changes which rows lie between its two ends, and
@@ -135,6 +229,7 @@ function M.render(buffer, on_rendered)
   -- its column list to this render's text.
   local display_columns = columns.display_columns(buffer.state)
   local first_row_number = state.first_row_number(buffer.state)
+  local stamp = file_stamp(buffer.state.source)
 
   local argv = commands.render(buffer.state, display_columns)
   query.run(argv, query.report, function(stdout)
@@ -151,7 +246,16 @@ function M.render(buffer, on_rendered)
       return query.report(err)
     end
 
+    -- A page past the first that came back empty is a page past the end, which
+    -- happens when the rows divide evenly into pages. Step back and draw the
+    -- page that does have rows, so the user sees the view stay where it was.
+    if layout.row_count(parsed) < 1 and buffer.state.page > 0 then
+      state.turn_page(buffer.state, -1)
+      return M.render(buffer, on_rendered)
+    end
+
     buffer.layout = parsed
+    buffer.stamp = stamp
     replace_lines(buffer.bufnr, parsed.lines)
     M.redraw(buffer)
     -- `status.get_winbar` pins this line while the buffer is scrolled past it.
@@ -162,6 +266,7 @@ function M.render(buffer, on_rendered)
       active_cell.restore(buffer, window)
     end
 
+    count_rows(buffer)
     if on_rendered then
       on_rendered()
     end
@@ -209,17 +314,6 @@ function M.row_range(buffer)
   return first, first + layout.row_count(buffer.layout) - 1
 end
 
---- Whether the rendered page is the last one, which is true when it came back
---- short. Nothing counts the rows a filter matches, so a short page is the only
---- signal that paging further would show an empty table.
----@param buffer csv.Buffer
----@return boolean
-function M.at_last_page(buffer)
-  if not buffer.layout then
-    return false
-  end
-  return layout.row_count(buffer.layout) < buffer.state.limit
-end
 
 --- Take over `bufnr`, which nvim has named after a CSV file but has not read.
 --- The table replaces the file's text, so the buffer is `nowrite`: writing the
@@ -234,8 +328,24 @@ function M.attach(bufnr, on_ready)
   local attached = buffers[bufnr]
   if attached then
     vim.bo[bufnr].filetype = "csv-table"
-    -- nvim has already emptied the buffer, so the layout describes text that is
-    -- gone and the next render is a whole xan run away.
+
+    -- nvim empties the buffer before this runs, so the text has to go back
+    -- whatever happens. When the file is the one the layout was read from, the
+    -- lines already in hand are that text, and xan has nothing to add.
+    local stamp = file_stamp(attached.state.source)
+    if attached.layout and stamp == attached.stamp then
+      replace_lines(bufnr, attached.layout.lines)
+      M.redraw(attached)
+
+      -- The selection and the active cell name rows of this layout, which is
+      -- the one still in hand, so both survive the text going out and back.
+      local window = vim.fn.bufwinid(bufnr)
+      if window ~= -1 then
+        restore_view(attached, window)
+      end
+      return
+    end
+
     attached.layout = nil
     return M.render(attached)
   end
@@ -282,15 +392,17 @@ function M.attach(bufnr, on_ready)
     callback = function()
       local buffer = buffers[bufnr]
       if not buffer or not buffer.layout or not active_cell.cursor_moved(buffer, 0) then
-        return
+        return remember_view()
       end
       active_cell.snap(buffer, 0)
       if selection.is_set(buffer.state) then
         selection.clear(buffer.state)
         M.redraw(buffer)
       end
+      remember_view()
     end,
   })
+
 
   -- `guicursor` is global, so the buffer that decides it is the one the user is
   -- in. A read can be for a buffer nobody is in, which is what `bufload` does,

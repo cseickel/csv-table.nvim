@@ -95,10 +95,11 @@ function M.status(bufnr)
 
   local parts = { sheet_summary(buf) }
   local first, last = buffer.row_range(buf)
+  local total = buf.state.row_count
   if last < first then
     table.insert(parts, "no rows")
-  elseif buffer.at_last_page(buf) then
-    table.insert(parts, string.format("rows %d-%d (end)", first, last))
+  elseif total then
+    table.insert(parts, string.format("rows %d-%d of %d", first, last, total))
   else
     table.insert(parts, string.format("rows %d-%d", first, last))
   end

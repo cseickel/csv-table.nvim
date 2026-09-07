@@ -25,6 +25,7 @@ local SPECS = {
   "layout_spec",
   "pipeline_spec",
   "selection_spec",
+  "state_spec",
 }
 
 for _, spec in ipairs(SPECS) do

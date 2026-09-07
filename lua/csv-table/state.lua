@@ -53,6 +53,7 @@ M.page_size = 1000
 ---@field sheets string[]       Every sheet name, empty for a source without sheets.
 ---@field columns csv.Column[]  Every source column, in display order, hidden ones among them.
 ---@field rowid_column csv.Column The prepended row id, which `layout.parse` cuts back out.
+---@field row_count integer|nil How many rows the filters leave, once xan has counted them.
 ---@field filters csv.Filter[]  ANDed together.
 ---@field sort_keys csv.SortKey[] Most significant key first.
 ---@field clipboard csv.Column[] Cut columns waiting to be pasted.
@@ -181,36 +182,63 @@ end
 
 -- Filters -------------------------------------------------------------------
 
+--- Go back to the first page and forget the row count, which is what changing
+--- which rows are shown costs.
+---@param state csv.State
+local function filters_changed(state)
+  state.page = 0
+  state.row_count = nil
+end
+
 ---@param state csv.State
 ---@param filter csv.Filter
 function M.add_filter(state, filter)
   table.insert(state.filters, filter)
-  state.page = 0
+  filters_changed(state)
 end
 
 ---@param state csv.State
 function M.pop_filter(state)
   table.remove(state.filters)
-  state.page = 0
+  filters_changed(state)
 end
 
 ---@param state csv.State
 function M.clear_filters(state)
   state.filters = {}
-  state.page = 0
+  filters_changed(state)
 end
 
 -- Marks ---------------------------------------------------------------------
+
+--- Whether a filter is reading the marked set, which makes marking a row change
+--- how many rows there are.
+---@param state csv.State
+---@return boolean
+local function filtered_to_marks(state)
+  for _, filter in ipairs(state.filters) do
+    if filter.type == "marked" then
+      return true
+    end
+  end
+  return false
+end
 
 ---@param state csv.State
 ---@param rowid integer
 function M.toggle_mark(state, rowid)
   state.marked[rowid] = not state.marked[rowid] or nil
+  if filtered_to_marks(state) then
+    state.row_count = nil
+  end
 end
 
 ---@param state csv.State
 function M.clear_marks(state)
   state.marked = {}
+  if filtered_to_marks(state) then
+    state.row_count = nil
+  end
 end
 
 ---@param state csv.State
@@ -230,7 +258,7 @@ function M.toggle_marked_filter(state)
   for index, filter in ipairs(state.filters) do
     if filter.type == "marked" then
       table.remove(state.filters, index)
-      state.page = 0
+      filters_changed(state)
       return
     end
   end
@@ -276,6 +304,7 @@ function M.reset(state)
   state.marked_columns = {}
   state.selection = nil
   state.page = 0
+  state.row_count = nil
   columns.show_all(state)
 end
 
