@@ -1,20 +1,10 @@
 --[[
-The block of cells the user has picked out.
+Defines the selection: an anchor cell, a head cell, and a kind naming which of
+the two axes those cells bound.
 
-A selection is an anchor cell, a head cell, and a kind saying which of the two
-axes those cells bound. The head is where the active cell was at the last
-extend, so a plain move leaves the block where the user put it and the next
-extend takes the block to wherever they have since walked.
-
-Both cells name a row and a column of the layout on screen, and
-`csv-table.buffer.render` clears the selection before it replaces that layout,
-so both ends belong to the text the user picked them from.
-
-The lines the rows are drawn on say which rows lie between the two ends, because
-a sort puts row ids on the page in any order.
-
-`csv-table.state.marked` is the other way to pick rows out: marks are scattered,
-they last across renders, and they filter.
+Reads and writes `state.selection`:
+- set, extend, set_kind, clear, is_set
+- the bounds it covers on the layout, and their size
 ]]
 
 local layout_module = require("csv-table.layout")
@@ -82,7 +72,8 @@ function M.is_set(state)
 end
 
 --- The lines and the columns the selection covers, present while both ends are
---- on the page.
+--- on the page. Rows are bounded by the lines they are drawn on, since a sort
+--- puts row ids on the page in any order.
 ---@param state csv.State
 ---@param layout csv.Layout
 ---@return csv.Bounds|nil

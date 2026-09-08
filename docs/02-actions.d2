@@ -1,0 +1,58 @@
+direction: down
+
+title: What a key press runs {
+  near: top-center
+  shape: text
+  style.font-size: 24
+}
+
+classes: {
+  entry: {style.fill: "#3d2d4a"}
+  state: {style.fill: "#2d2d4a"}
+  draw: {style.fill: "#2d4a2d"}
+  ui: {style.fill: "#3d3d3d"}
+}
+
+setup: Bound once, when the buffer is attached {
+  style.fill: "#1a1a2a"
+
+  map: "keymaps.map\n· every key and the action it names" {class: entry}
+  resolve: "keymaps.resolve\n· follows BUILT_IN_ into the user's own config" {class: entry}
+  registry: "actions/utils\n· register_action fills one registry, keyed by name" {class: entry}
+  apply: "init.apply_keymaps\n· binds each key to this buffer" {class: entry}
+
+  map -> resolve -> apply
+  registry -> apply: the action the name finds
+}
+
+press: a key press {
+  shape: oval
+  class: entry
+}
+
+run: "action.run(buf)" {class: entry}
+
+change: "state.lua, columns.lua, format.lua\n· change what the view asks for" {class: state}
+render: "buffer.render\n· the whole page is drawn again" {class: draw}
+move: "movement.lua\n· move the active cell, or the selection head" {class: draw}
+redraw: "overlay.redraw\n· extmarks over the text already there" {class: draw}
+float: "panel.lua, inspect.lua, dialog.lua\n· open a float, leaving the table alone" {class: ui}
+yank: "inspect.yank\n· read the values through xan, write the registers" {class: ui}
+
+next: 03-render-path {
+  shape: document
+  class: draw
+}
+
+setup.apply -> press
+press -> run
+
+run -> change: sort, filter, mark, page, column
+change -> render
+render -> next
+
+run -> move: motion, extend, select
+move -> redraw
+
+run -> float: "show_cell, show_row, show_column,\nshow_file_info, select_sheet, show_help"
+run -> yank: y and Y

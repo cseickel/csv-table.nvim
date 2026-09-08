@@ -1,13 +1,11 @@
 --[[
-The cell the user is on, and the movement between cells.
+Tracks the cell the user is on, one per window, with the real cursor hidden and
+parked at one edge of that cell.
 
-The real cursor is hidden and parked at one edge of the active cell, so any
-movement nvim reports is a movement the user made, and this module translates it
-back into a cell.
-
-The edge is the direction of travel: nvim scrolls sideways only far enough to
-show the byte the cursor is on, so parking at the far end of the cell is what
-brings the whole cell into view.
+- `cell_at`, `cell` and `moved_cell` say which cell a position names
+- `move_to`, `step` and `restore` make a cell active
+- `flash_column` highlights one column for a quarter second
+- `update_guicursor` hides the cursor in a table and shows it anywhere else
 ]]
 
 local layout_module = require("csv-table.layout")
@@ -74,7 +72,9 @@ end
 
 --- Park the real cursor in the cell and draw it. The cursor takes the last byte
 --- of the cell when moving right and the first when moving left, and a move
---- that stays in the same cell keeps the end it had.
+--- that stays in the same cell keeps the end it had. nvim scrolls sideways only
+--- far enough to show the byte the cursor is on, so the far end is what brings
+--- the whole cell into view.
 ---
 --- The position recorded is the one nvim reports back, because nvim moves a
 --- cursor set inside a multi-byte character to the start of that character.
@@ -315,8 +315,7 @@ function M.flash_column(buffer, column)
 end
 
 --- `guicursor` with this plugin's entry taken out, which is the value it held
---- before a table hid the cursor. It splits on commas and drops the entry, so
---- the commas around it come out with it. nvim rejects an empty entry.
+--- before a table hid the cursor. nvim rejects an empty entry.
 ---@param value string
 ---@return string
 local function without_hidden(value)
@@ -330,13 +329,11 @@ local function without_hidden(value)
 end
 
 --- Hide the real cursor if `bufnr` holds a table and show it if it does not.
---- The active cell is what shows where the cursor is in a table.
 ---
---- `guicursor` is global and holds one entry per mode, the last entry for a
---- mode winning, so hiding is appending an entry and showing is taking that
---- entry back out. The value is the whole record: taking the entry out rebuilds
---- what was there, which leaves another plugin's cursor styling as that plugin
---- set it.
+--- `guicursor` is global and holds one entry per mode, the last entry for a mode
+--- winning, so hiding is appending an entry and showing is taking it back out.
+--- Rebuilding from the value leaves another plugin's cursor styling as that
+--- plugin set it.
 ---@param bufnr integer
 function M.update_guicursor(bufnr)
   local base = without_hidden(vim.o.guicursor)

@@ -1,5 +1,5 @@
 --[[
-The actions that mark rows and columns.
+Registers toggle_mark_row, toggle_mark_column and clear_marks.
 
 A row is marked by its source id rather than by the line it is drawn on, so a
 mark survives sorting, filtering and turning the page.

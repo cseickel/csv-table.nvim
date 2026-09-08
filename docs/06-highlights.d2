@@ -1,0 +1,44 @@
+direction: right
+
+title: Applying the highlight groups {
+  near: top-center
+  shape: text
+  style.font-size: 24
+}
+
+classes: {
+  define: {style.fill: "#2d2d4a"}
+  draw: {style.fill: "#2d4a2d"}
+  data: {style.fill: "#3d3d3d"}
+}
+
+groups: "highlight.lua\n· GROUPS defines every group the plugin uses\n· set with default = true, so a colorscheme wins\n· set again on ColorScheme, which clears them" {class: define}
+
+provider: "highlight.lua\n· a decoration provider, on_win then on_line\n· ephemeral extmarks, gone after that draw\n· the csv-syntax namespace" {class: draw}
+
+overlay: "overlay.lua\n· the csv-marks namespace\n· redraw clears it and draws all three again" {class: draw}
+
+cell: "active_cell.lua\n· the csv-active-cell namespace, redrawn on every move\n· the csv-flash namespace, cleared after 250ms" {class: draw}
+
+gutter: "statuscolumn.lua\n· %#CsvRowNumber# inside the statuscolumn text\n· no extmark" {class: draw}
+
+cursor: "active_cell.update_guicursor\n· one guicursor entry for n-v-o\n· no extmark" {class: draw}
+
+groups -> provider: "CsvBorder, CsvHeader,\nCsvDate, CsvNumberPositive,\nCsvNumberNegative"
+groups -> overlay: "CsvMarkedRow, CsvMarkedColumn,\nCsvSelection"
+groups -> cell: "CsvActiveCell, CsvFlash"
+groups -> gutter: "CsvRowNumber"
+groups -> cursor: "CsvHiddenCursor"
+
+stack: Which extmark draws over which {
+  shape: sql_table
+  class: data
+  "4300": the active cell
+  "4200": the selection
+  "4096": marked rows, marked columns, flash
+  "100": the cell colors
+}
+
+cell -> stack
+overlay -> stack
+provider -> stack

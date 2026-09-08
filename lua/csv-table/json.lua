@@ -1,10 +1,13 @@
 --[[
-JSON as text.
+Breaks a cell holding JSON onto one value per line, since it arrives as a single
+line of punctuation.
 
-A cell holding JSON reads as one line of punctuation, so it is broken onto one
-value per line before it is shown. The text is walked rather than decoded and
-printed again, so only the whitespace between tokens changes and every number,
-key order and escape is the one in the file.
+- `is_json` says whether a value is an object or an array
+- `indent` lays it out
+
+The text is walked rather than decoded and printed again, so only the whitespace
+between tokens changes and every number, key order and escape is the one in the
+file.
 ]]
 
 local M = {}

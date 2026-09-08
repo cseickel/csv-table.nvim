@@ -1,10 +1,13 @@
 --[[
-Source inspection.
+Defines `csv.Source`, what `inspect` learns about a file before anything can be
+rendered:
 
-What the plugin must know about a file before it can render anything: the
-columns it holds, a row id name that none of those columns already uses, and how
-each numeric column should read. All of it comes from xan, so all of it is
-asynchronous.
+- its columns, from `xan headers`
+- a row id name none of those columns already uses
+- a `csv.Format` per column, from a sample of rows
+- its sheet names, when the file is a workbook
+
+All of it comes from xan, so `inspect` answers a callback.
 ]]
 
 local columns = require("csv-table.columns")

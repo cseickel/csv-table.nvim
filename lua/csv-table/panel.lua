@@ -1,10 +1,14 @@
 --[[
-What the plugin says about itself: the keys, the file, and a column's figures.
+Opens the panels that describe the plugin and the file.
 
-The key list is generated from the keymap table and the descriptions on the
-actions, so a binding that changes cannot leave its documentation behind.
-Information and statistics are drawn through the filters currently applied, so
-they describe the rows on screen rather than the file on disk.
+- `help` searches every action by description and runs the one chosen
+- `bindings` pairs each action with the keys that reach it
+- `info` gives the source, the row and column counts, the filters, the sort,
+  and a line per column
+- `stats` gives everything xan reports for one column
+
+`info` and `stats` run through the filters applied, so they describe the rows on
+screen rather than the file on disk.
 ]]
 
 local keymaps = require("csv-table.keymaps")

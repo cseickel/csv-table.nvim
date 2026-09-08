@@ -1,13 +1,14 @@
 --[[
-The registry every action is written into, and what the action modules share.
+Holds the registry every action is written into.
 
-An action module registers its actions as it loads, so `csv-table.actions` reads
-this table rather than collecting anything. A name registered twice stops the
-plugin loading, because which of the two a key would run is otherwise the order
-of a Lua table.
+- `register_action` adds one, and refuses a name already taken
+- `get_action` and `get_all_actions` read the registry
+- `on_column` is the shape most actions take: change the active cell's column,
+  then render
+- `EDGE` is a step further than any table is wide or long
 
-`on_column` is the shape most actions take: change the active cell's column,
-then render. A helper only one module calls belongs in that module.
+A name registered twice stops the plugin loading, since which of the two a key
+would run is otherwise the order of a Lua table.
 ]]
 
 local buffer = require("csv-table.buffer")

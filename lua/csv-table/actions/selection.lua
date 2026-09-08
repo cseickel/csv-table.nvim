@@ -1,12 +1,13 @@
 --[[
-The actions that pick cells out.
-
-Picking cells leaves the xan output alone, so every action here draws over the
-text already in the buffer, and the selection lives as long as that text does.
+Registers the actions that pick cells out and yank them:
+- select_column, select_page, clear_selection, swap_selection_ends
+- extend_left, right, up, down, and the four that reach an edge
+- extend_to_click
+- eight yanks, one per format, and `yank_picker` to choose among them
 
 Starting and resuming a selection are not here. Nvim's own visual modes say the
-user is extending, and `csv-table.movement` takes the head along with every move
-made in one, so `v`, `V` and `gv` all work with no action of ours.
+user is extending, and `movement` takes the head along with every move made in
+one, so `v`, `V` and `gv` all work with no action of ours.
 ]]
 
 local active_cell = require("csv-table.active_cell")

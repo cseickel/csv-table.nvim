@@ -1,8 +1,11 @@
 --[[
-The actions that narrow which rows are shown.
+Registers the actions that narrow what is shown:
+- `filter` opens the dialog for this column
+- filter_to_marked_rows, filter_to_marked_columns, filter_to_marked_both
+- pop_filter and clear_filters
 
 Filters are ANDed, and each one names a column except the marked filter, which
-reads the marked set at render time so marking another row widens the view at
+reads the marked set at render time, so marking another row widens the view at
 once.
 ]]
 

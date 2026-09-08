@@ -1,13 +1,10 @@
 --[[
-The marks and the selection, drawn over the text already in the buffer.
+Draws extmarks over the rendered table for:
+- marked rows
+- marked columns
+- the selection
 
-Marking a row and picking out a block leave xan's output alone, so both are
-extmarks over the lines the last render put there. Every one of them lives in a
-single namespace, and `redraw` clears that namespace and draws the lot again,
-which is why nothing here has to work out what changed.
-
-The active cell is drawn by `csv-table.active_cell`, in its own namespace, so
-moving the cell leaves these marks alone.
+`redraw` clears the namespace and draws all three again.
 ]]
 
 local layout_module = require("csv-table.layout")
@@ -47,10 +44,8 @@ local function draw_marks(buffer)
   end
 end
 
---- Draw the selected cells. The columns of a selection are next to each other,
---- so each line takes one extmark from the left edge of the first to the right
---- edge of the last. The priority puts it over a marked row, which is the whole
---- line and the less specific of the two.
+--- Draw the selected cells. The selected columns are next to each other, so one
+--- extmark per line spans the first column's left edge to the last one's right.
 ---@param buffer csv.Buffer
 local function draw_selection(buffer)
   local bounds = selection.bounds(buffer.state, buffer.layout)
@@ -71,7 +66,6 @@ local function draw_selection(buffer)
   end
 end
 
---- Draw the marks and the selection again.
 ---@param buffer csv.Buffer
 function M.redraw(buffer)
   if not buffer.layout then

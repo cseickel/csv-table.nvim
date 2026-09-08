@@ -1,21 +1,16 @@
 --[[
-Moving the active cell, and what each move does to the selection.
+Moves the active cell and the head of the selection together.
 
-Three things move the cell: an action bound to a key, a motion nvim owns and
-this plugin sees afterwards, and a mouse click. All three come through here, so
-the rule about the selection is written once.
+- `go_to` and `step` move the cell
+- `follow_cursor` and `click` catch the motions nvim owns
+- `extend`, `extend_to`, `select` and `swap_ends` move the head
+- `start_extending` and `change_kind` answer nvim's visual modes
+- `mark_selection` writes the block to `'<` and `'>`, which is what `gv` reads
 
-The rule is that a plain move leaves the selection where the user put it. Only
-extending moves the head, and the user extends in two ways: a shift keyed move,
-or any move at all while nvim is in a visual mode. Nvim owns that mode, so a
-remapped `<C-v>` and any plugin that starts visual mode both count, and this
-module never has to be told which key was pressed.
-
-`state.selection` holds the block that `csv-table.overlay` draws, because the
-block outlives visual mode: a plain move leaves it alone and the next shift
-keyed move extends it, both in normal mode. Every change to it is written to
-`'<` and `'>` as well, and entering visual mode with nothing selected reads
-those two ends back, which is what makes nvim's own `gv` reselect the cells.
+A plain move leaves the selection where the user put it. A move extends it when
+the key was shift keyed, or when nvim is in a visual mode. Nvim owns that mode,
+so a remapped `<C-v>` and any plugin that starts visual mode both count, and
+nothing here has to be told which key was pressed.
 ]]
 
 local active_cell = require("csv-table.active_cell")
@@ -32,10 +27,8 @@ local function in_visual_mode()
   return mode == "v" or mode == "V" or mode == "\22"
 end
 
---- Leave the selected block in `'<` and `'>` as well, so nvim's own `gv`
---- reselects those cells rather than the two ends nvim was holding. Reading
---- those marks back on the way into visual mode is what makes `gv` ours with no
---- action of its own.
+--- Leave the selected block in `'<` and `'>`, so nvim's own `gv` reselects those
+--- cells rather than the two ends nvim was holding.
 ---
 --- Nvim writes both marks itself when a visual mode ends, so `buffer.lua` runs
 --- this again on the way out and lands last.

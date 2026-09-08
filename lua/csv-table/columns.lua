@@ -1,18 +1,14 @@
 --[[
-Columns: what one is, and which of them the table draws.
+Defines `csv.Column`: the header text, a label unique across the file, the
+0-based `column_id` the file gives it, and whether it is hidden.
 
-A column is named by its `column_id`, the 0-based position it holds in the
-source file, which every xan stage accepts in place of a header name.
+- `from_names` builds `state.columns` from `xan headers`
+- `display_columns` takes the visible ones, in the order the user put them
+- hide, cut, paste, swap, show_all and show_marked_only reorder that one list
+- `text_length`, `truncate` and `string_literal` measure and cut text
 
-A column also has a `label`, the header text with its occurrence appended where
-a name repeats. That is the name the user reads, in the drawn header and in
-every panel, and it is what `csv-table.commands` keys a JSON object by, both of
-which need one name per column.
-
-`state.columns` is the one list. It holds every source column, and the user
-reorders it and sets `hidden` on its entries, so `column_id` gives the file
-order and a position in the list gives the display order. The table draws the
-visible entries, in that order.
+A position in `state.columns` is the display order and `column_id` is the file
+order, so every xan stage takes the id and the drawn table takes the position.
 ]]
 
 local M = {}

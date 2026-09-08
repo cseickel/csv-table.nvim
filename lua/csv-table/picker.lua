@@ -1,11 +1,10 @@
 --[[
-How a searchable list is put in front of the user.
+Puts a searchable list in front of the user through `vim.ui.select`, the one
+interface telescope, snacks, fzf-lua and nvim's own prompt all implement, so
+the plugin depends on none of them.
 
-`vim.ui.select` is the one interface telescope, snacks, fzf-lua and nvim's own
-prompt all implement, so a picker here runs in whichever of them the user has
-installed and the plugin depends on none of them.
-
-Enter is the only key `vim.ui.select` offers, so an entry has exactly one action.
+Enter is the only key `vim.ui.select` offers, so an entry has exactly one
+action.
 ]]
 
 local M = {}

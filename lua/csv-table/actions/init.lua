@@ -1,11 +1,10 @@
 --[[
-Every action a key can run.
+Loads every module beside it and hands out the actions they registered, so
+adding a module is enough to add its actions.
 
-An action module registers what it defines as it loads, so this file loads the
-modules beside it and then hands out what they registered. Adding a module is
-enough to add its actions.
-
-`refresh` and `clear_all` are here because they belong to no one topic.
+Registers the two actions that belong to no one topic:
+- `refresh` reads the file again
+- `clear_all` drops the filters, sort, marks and hidden columns
 ]]
 
 local buffer = require("csv-table.buffer")

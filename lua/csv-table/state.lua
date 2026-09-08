@@ -1,10 +1,12 @@
 --[[
-View state and the actions that change it.
+Defines `csv.State`, one per buffer: the file's columns and everything the user
+has asked for on top of them.
 
-One state table per buffer: the file's columns, and everything the user has
-asked for on top of them. Every action here takes the values it needs as
-arguments, so a keymap, a command and a test can all call it. Working out those
-values from where the active cell is belongs to `csv-table.buffer`.
+Changes it:
+- sorting
+- filters
+- marked rows and marked columns
+- paging
 ]]
 
 local columns = require("csv-table.columns")

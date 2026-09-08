@@ -1,28 +1,20 @@
 --[[
-Which key runs which action.
+Holds `map`, every key the plugin binds and the action it runs.
 
-Kept apart from both the actions and the setup so the help panel can read it
-without either depending on the other. A table passed to `setup` is merged over
-`map`, and a key set to `false` there binds nothing.
+- `M.visual` names the entries bound in visual mode as well as normal mode
+- `resolve` turns `map` into the bindings `init.apply_keymaps` sets
+- `built_in` reads the `BUILT_IN_` prefix
 
-A key written `BUILT_IN_l` names the nvim command `l` rather than the key `l`.
-`resolve` puts the action wherever that command lives in the user's config: on
-`l` itself while the user leaves `l` alone, and on any key the user has mapped
-to `l`. A user whose `l` moves between windows decided what `l` means, and
-`next_column` stays off it.
+A key written `BUILT_IN_l` names the nvim command `l` rather than the key `l`,
+and `resolve` puts the action wherever that command lives in the user's config.
+A user whose `l` moves between windows decided what `l` means, and `next_column`
+stays off it. A value written the same way runs an nvim command in place of an
+action, which is how `v` starts a blockwise selection.
 
-A value written the same way names an nvim command to run in place of an
-action, which is how `v` starts a blockwise selection: `BUILT_IN_v` runs
-`BUILT_IN_<C-v>`, and charwise visual never happens in a table.
-
-Movement keys are bound only where a count has to mean something in table terms:
-`5l` is five cells and `5G` is the row the gutter numbers 5. Everything else,
+A movement key is bound only where a count has to mean something in table terms:
+`5l` is five cells and `5G` is the row the gutter numbers 5. Every other motion,
 `j` and `w` and `/` and the clicks, stays nvim's, and the cursor is followed to
 whichever cell it reached.
-
-Starting any visual mode is what says the user is extending, whichever key they
-have bound to it, so `V` and `gv` are nvim's own and only `v` is bound, to
-nvim's `<C-v>`.
 ]]
 
 local M = {}

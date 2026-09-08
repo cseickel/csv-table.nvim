@@ -1,14 +1,11 @@
 --[[
-The buffer a CSV is shown in.
+Defines `csv.Buffer`, one per buffer: the state the user is building and the
+layout of what is on screen.
 
-Owns one record per buffer, holding the state the user is building and the
-layout of what is on screen. Rendering runs the pipeline and replaces every
-line, and each render builds a fresh layout, so what the layout describes is
-the text in the buffer.
-
-A read of a file that has the same size and modification time as the one the
-layout came from puts those same lines back, which is what makes switching
-away from a table and back again instant.
+- `attach` takes over a buffer nvim named after a CSV file
+- `render` runs the pipeline and replaces every line
+- `open_sheet` reads another sheet of the same workbook
+- autocommands keep the view, the visual mode selection and the active cell
 
 The buffer stays nomodifiable. Its text is xan's output, and writing it back
 over the file would destroy the file.
@@ -183,10 +180,6 @@ end
 ---
 --- The selection goes, because a sort changes which rows lie between its two
 --- ends, and hiding or moving a column changes which columns those ends name.
----
---- The active cell goes back to the column it was in. The new text has its own
---- column widths, so the byte the cursor sat on may now belong to another
---- column, and the column is what says where the user was.
 ---@param buffer csv.Buffer
 ---@param on_rendered fun()|nil Runs once the new text is in the buffer.
 function M.render(buffer, on_rendered)

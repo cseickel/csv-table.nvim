@@ -1,15 +1,14 @@
 --[[
-What kind of value each column holds.
+Defines `csv.Format`, one per column: its kind, the decimals to print, and the
+width, alignment and printf spec the user has asked for.
 
-A CSV cell is text, so nothing in the file says what a column means. This module
-decides, from a sample of rows, which columns hold numbers and how many decimals
-each one needs, and which hold dates. `csv-table.pipeline` turns the numeric
-decisions into the `printf` clauses that xan applies, and `csv-table.highlight`
-colors a cell from the kind of the column it is in.
+- `analyze` reads a sample of rows and decides int, float, date or text
+- `is_numeric` and `working_width` answer what a column reads as and how wide
+  it is drawn
+- `adjust_precision`, `set_spec` and `set_padding` take the user's overrides
 
-Precision is measured after snapping each value to seven significant digits,
-because a column printed from float32 has noise past that point: a price of
-`199.59` reaches the file as `199.589996338`, which reads as nine decimals.
+A CSV cell is text, so the sample is the only thing that says what a column
+holds.
 ]]
 
 local columns = require("csv-table.columns")
@@ -24,6 +23,9 @@ local M = {}
 ---@field spec string|nil A printf specification, replacing every other rule.
 
 local MAX_PRECISION = 6
+
+-- A column printed from float32 has noise past seven digits: a price of 199.59
+-- reaches the file as 199.589996338, which reads as nine decimals.
 local SIGNIFICANT_DIGITS = 7
 
 --- Decimals a value needs once its float noise is gone, or nil when the value

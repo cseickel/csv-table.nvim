@@ -1,13 +1,12 @@
 --[[
-State to moonblade.
+Writes the moonblade expressions xan takes, since filters and formatting reach
+it as expressions rather than flags.
 
-Filters and formatting both reach xan as expressions rather than flags, so this
-module owns that translation. `csv-table.pipeline` owns the surrounding command
-line.
+- `filter` renders one `csv.Filter`, and `all_filters` ANDs them together
+- `value_expression` writes a column's printf and padding
 
-Two rules run through everything here. String comparison uses `eq` where numeric
-comparison uses `==`, and a comparison against a cell that will not cast aborts
-the whole run, so anything that can fail is wrapped in `try`.
+String comparison uses `eq` where numeric comparison uses `==`, and a cast that
+fails aborts the whole run, so anything that can fail is wrapped in `try`.
 ]]
 
 local columns = require("csv-table.columns")

@@ -1,33 +1,13 @@
 --[[
-Reading `xan view` output.
+Defines `csv.Layout`, built fresh by `parse` out of what `xan view` drew.
 
-`view` draws a bordered table, so the rendered text already says where every
-column starts and which source row each line came from. This module turns that
-text into the lookups the active cell and the highlighting read.
+- `parse` reads the row ids out of the first cell, cuts that cell from every
+  line, and files each row under its id, its number and its line
+- lookups from a row id, a row number, a line or a column to what draws it
+- the byte range of every cell, which the cursor and the extmarks take
+- `step_cell`, the cell a move lands on
 
-The row id is drawn as the first cell because the drawn table is the only way it
-reaches Lua. `parse` reads it into the row objects and cuts that cell from every
-line, so the buffer starts at the first column the user chose, and what they
-yank or search is what they read.
-
-A row on the page is a `csv.Row`, built here and filed under each of the three
-numbers that name it. A column on display is a `csv.Column`, and
-`column_number_by_id` gives the position it is drawn at. Every parse builds both
-afresh, so both describe the text on screen.
-
-`view` draws three border lines: the top of the table, the one under the header,
-and the bottom. The rest of the lines hold cells.
-
-Every column is drawn at the same display width on every line, so one set of
-cell ranges describes the whole table in display columns. The cursor and the
-extmarks take byte offsets, and a line holding a multi-byte character has its
-separators at different byte offsets than the header, so `parse` keeps the
-header's byte ranges once and a line's own byte ranges only where they differ.
-
-A cell runs between the separators around it. Under a theme that draws the outer
-border, the first and last cells run to the ends of the line.
-
-It is pure Lua and can be exercised without nvim.
+Pure Lua, so it runs without nvim.
 ]]
 
 local columns = require("csv-table.columns")
@@ -338,6 +318,9 @@ function M.parse(output, display_columns, first_row_number)
     ranges_by_line = {},
   }
 
+  -- Every column is drawn at one display width, so the header's ranges answer
+  -- for most lines. A line holding a multi-byte character puts its separators
+  -- at other byte offsets, and only those lines are kept.
   for buffer_line = first_line, last_line do
     local ranges = scan(lines[buffer_line])
     if not same_ranges(ranges, layout.ranges) then

@@ -1,13 +1,13 @@
 --[[
-The actions that move the active cell.
+Registers the actions that move the active cell by whole cells:
+- next_column, prev_column, next_row, prev_row
+- first_column, last_column
+- first_row and last_row, which take a row number
 
-Each one steps by whole cells, so a count moves that many cells and `5G` is the
-row the gutter numbers 5.
-
-The default map binds the keys where that count is the whole point, `l` being
-one cell rather than one byte. The rest are here to be bound to, since a plain
-`j` is already a row and nvim's own motion, followed by the snap in
-`csv-table.movement`, lands on the right cell.
+A count moves that many cells, so `5l` is five columns and `5G` is the row the
+gutter numbers 5. The default map binds only the keys where that count is the
+point, since a plain `j` is already a row and the snap in `movement` lands it on
+the right cell.
 ]]
 
 local active_cell = require("csv-table.active_cell")

@@ -1,11 +1,10 @@
 --[[
-Floating windows.
+Opens lines of text in a centered float, sized to the text and closing on `q`
+or Escape.
 
-The filter dialog and the panels all want the same thing: some lines of text in
-a centered float that closes on `q` or Escape.
-
-A list to search goes through `csv-table.picker`, which hands it to whatever
-picker the user has installed.
+- `open` builds the float
+- `close_on` binds more keys that close it
+- `close` closes one by id
 ]]
 
 local M = {}

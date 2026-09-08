@@ -1,13 +1,11 @@
 --[[
-Asking xan about the data rather than for it.
+Runs xan and decodes what comes back.
 
-Rendering wants a page of rows. Counting the result, listing a column's distinct
-values, and summarizing a column want answers. Each of those runs through the
-same filters the buffer is showing, so what comes back always describes what is
-on screen.
-
-This module also owns running a xan command at all, and `report`, so every
-caller reports a failure the same way.
+- `run` spawns an argv and hands stdout to a callback
+- `run_json_lines` decodes one JSON object per line
+- `count`, `row`, `yank`, `frequency` and `stats` each run one command and
+  return the value it asked for
+- `report` is how every failure reaches the user
 ]]
 
 local commands = require("csv-table.commands")

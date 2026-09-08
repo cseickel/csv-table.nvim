@@ -1,8 +1,9 @@
 --[[
-The actions that order the rows.
+Registers the actions that order the rows: sort_asc, sort_desc,
+add_sort_key_asc, add_sort_key_desc, remove_sort_key and clear_sort.
 
-One key sorts by a column alone and another adds it as a less significant key,
-so the same column can be asked for twice and mean two different things.
+Sorting by a column and adding it as a less significant key are separate keys,
+so the same column asked for twice means two different things.
 ]]
 
 local buffer = require("csv-table.buffer")

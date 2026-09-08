@@ -1,13 +1,12 @@
 --[[
-The dialogs that ask the user to choose something.
+Opens the two dialogs that add a filter or change the sheet.
 
-The filter dialog offers the comparisons that suit the column's detected kind, so
-a numeric column gets `>` and `<=` where a text column gets `contains` and
-`startswith`, and it offers the column's own values as a checklist. The value
-list is drawn through the filters already applied, so every value it shows is
-one that would leave rows on screen.
+- `open` offers the comparisons that suit the column's kind, a checklist of the
+  column's own values, or a moonblade expression
+- `sheets` lists a workbook's sheets and reads the one chosen
 
-The sheet dialog lists the sheets of a workbook.
+The value checklist is drawn through the filters already applied, so every value
+it offers is one that would leave rows on screen.
 ]]
 
 local buffer = require("csv-table.buffer")

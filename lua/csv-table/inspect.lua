@@ -1,14 +1,14 @@
 --[[
-The values behind the table.
+Reads values back out of the file, since a value wider than its column is drawn
+cut and the text on screen cannot answer what a cell holds.
 
-A value wider than its column is drawn cut, so the text on screen cannot answer
-what a cell holds. Everything here goes back to the file through
-`csv-table.query`, so every value is the one in the source, at full length and
-before any formatting.
+- `cell` opens what the active cell holds, at full length
+- `row` offers every column of the row to be searched, and copies the choice
+- `yank` writes the selected cells to the clipboard as tsv, csv, json, markdown
+  or `display`
 
-`cell` shows one value to be read, `row` offers the whole row to be searched and
-copies whatever is chosen, and `yank` writes the selected cells to the clipboard
-in whichever format was asked for.
+`display` is the one format taken from the buffer rather than the file, so a
+value drawn cut is yanked cut.
 ]]
 
 local columns = require("csv-table.columns")

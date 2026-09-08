@@ -1,13 +1,13 @@
 --[[
-The row number in the gutter.
+Draws the row number in the gutter.
 
-The number a row is drawn under counts within the current filter and sort and
-runs on across pages, so it is a fact about the view rather than a value in the
-file. nvim draws it: `'statuscolumn'` calls `text` once per line, and
-`csv-table.layout` already knows which row that line holds.
+- `EXPRESSION` is the `'statuscolumn'` value `buffer.attach` sets
+- `text` answers for the line nvim is drawing
 
-The width comes from the last row on the page, so every number on a page is
-drawn at the same width and the table starts at the same screen column.
+The number counts within the current filter and sort and runs on across pages,
+so it is a fact about the view rather than a value in the file. Its width comes
+from the last row on the page, so the table starts at the same screen column on
+every line.
 ]]
 
 local layout = require("csv-table.layout")

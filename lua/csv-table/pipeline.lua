@@ -1,22 +1,16 @@
 --[[
-State to xan pipeline.
+Builds the argument for `xan run '<pipeline>' <file>`, the one process that
+draws a page.
 
-`xan run '<pipeline>' <file>` executes a whole pipeline in one process, so the
-plugin builds one command string and hands it straight to xan. This module is
-the pure function from view state to that string. It is the only place that
-knows xan's command syntax, and it can be exercised without nvim.
+- `carried_columns` picks the columns the run takes, and where each one sits
+- `narrowing_stages` is select, enum and filter, which `count`, `stats` and
+  `frequency` open with as well
+- `build` adds sort, slice, the formatting `select -e`, and `view`
+- `quote` wraps one argument for the shlex splitting xan does
 
-Every pipeline opens by fixing its shape:
-
-    select <the columns this run needs> | enum -c <row id>
-
-From there the row id sits at position 0 and each carried column sits at its
-index in the carried list, and every later stage names a column by that one
-number. `carried_columns` returns the list and the lookup together.
-
-The closing `select -e` is the only other stage that changes the shape. It
-formats each displayed column and gives it its header text, and it runs last, so
-the positions hold for the whole run.
+The opening `select | enum` fixes the shape: the row id at 0 and each carried
+column at its place in the list, so every stage below names a column by that
+number. Pure Lua, so it runs without nvim.
 ]]
 
 local columns = require("csv-table.columns")

@@ -1,11 +1,14 @@
 --[[
-The argv that runs xan.
+Builds every argv the plugin runs. All of them are `xan`, and all but `sheets`
+are `xan run '<stages>' <path>`, one process with no shell and no pipes.
 
-`csv-table.pipeline` says which stages a view needs. This module says how to run
-them: `xan run '<stages>' <path>`, one process, no shell and no pipes.
+- `render` draws a page, through `pipeline.build`
+- `count`, `frequency` and `stats` report on the rows the filters leave
+- `yank` writes the picked rows as tsv, csv, json or markdown
+- `sample`, `row`, `headers` and `sheets` read the file for the panels
 
-A source that is not already CSV gets a `from` stage in front of everything
-else, so every other stage sees CSV whatever the file on disk holds.
+A source that is not already CSV takes a `from` stage in front, so every stage
+below it sees CSV whatever the file on disk holds.
 ]]
 
 local columns = require("csv-table.columns")

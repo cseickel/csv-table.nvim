@@ -1,5 +1,9 @@
 --[[
-The actions that open a panel about the file rather than changing the view.
+Registers the actions that open a panel rather than changing the view:
+- show_cell, show_row, show_column
+- show_file_info
+- select_sheet
+- show_help
 ]]
 
 local active_cell = require("csv-table.active_cell")

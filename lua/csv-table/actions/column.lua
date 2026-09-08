@@ -1,10 +1,11 @@
 --[[
-The actions that act on a column.
+Registers the actions on the column the active cell is in:
+- hide, show_all, cut, cut_append, paste before or after, move left or right
+- align left, center or right
+- increase or decrease the precision, widen or narrow, set a printf format
 
-Hiding, cutting, pasting and moving change which columns are shown. Aligning,
-padding and formatting change how one column reads. Both take the column the
-active cell is in, and the ones that move a column move the active cell along
-with it, so the column that moved is still the one under it.
+An action that moves a column takes the active cell with it, so the column that
+moved is still the one under the cursor.
 ]]
 
 local buffer = require("csv-table.buffer")

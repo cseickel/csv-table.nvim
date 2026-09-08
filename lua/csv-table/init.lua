@@ -1,12 +1,12 @@
 --[[
-Entry point.
+The entry point, where a spreadsheet file is caught before nvim reads it.
 
-A spreadsheet file is intercepted before nvim reads it. The buffer shows `xan
-view` output, rendered from view state on every change, so the size of the
-file does not matter.
-
-`setup` merges `keymaps` over the default bindings and replaces `patterns` and
-`page_size`.
+- `setup` takes `keymaps`, `patterns` and `page_size`, then registers the
+  `BufReadCmd` that hands a matching file to `buffer.attach`
+- the `CsvTable` command opens a path as a table
+- `status` is the statusline: the sheet, the rows on the page, the filters, the
+  marks, the sort and the cut columns
+- `apply_keymaps` binds the resolved keys to a buffer
 ]]
 
 local actions = require("csv-table.actions")

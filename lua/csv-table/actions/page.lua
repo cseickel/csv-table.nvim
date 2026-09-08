@@ -1,8 +1,9 @@
 --[[
-The actions that move between pages.
+Registers the actions that move between pages: next_page, prev_page,
+first_page, last_page and set_page_size.
 
-`state.row_count` holds how many rows the filters leave, which `buffer.render`
-fills in after each render, so these move without going to xan first. A render
+`state.row_count` says where the last page is, and `buffer.render` fills it in
+after each render, so these turn a page without going to xan first. A render
 that lands past the end steps back on its own, which covers the moment before
 the first count arrives.
 ]]
