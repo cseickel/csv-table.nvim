@@ -59,9 +59,9 @@ end
 --- cell's border and a slice of the next column for orientation.
 local PREVIEW = 8
 
---- The last column takes 0, so the right border of the table lands at the edge
---- of the screen and the screen ends there. Every other column takes the
---- preview.
+--- The last column is set to 0, so the right border is at the edge of the
+--- screen and does not scroll past it. Every other column uses the preview
+--- value.
 ---@param buffer csv.Buffer
 ---@param column_number integer
 ---@return integer
