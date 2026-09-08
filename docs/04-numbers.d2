@@ -16,26 +16,17 @@ classes: {
 rows: A row on the page {
   style.fill: "#1a1a2a"
 
-  row: |md
-    ### csv.Row
-    Built by `layout.parse`, one per drawn
-    line, filed under all three numbers.
-    Every render builds them fresh.
-  | {class: row}
+  row: "csv.Row\none per drawn line, built fresh every render" {class: row}
 
-  numbers: ||md
-    | Number | Is |
-    |---|---|
-    | `row_id` | The `enum` id: position in the source file, before any filter or sort. Survives everything. |
-    | `row_number` | What the user reads in the gutter, drawn by `statuscolumn.lua`. Counts within the current filter and sort, across pages. |
-    | `buffer_line` | Index into `layout.lines`, so it counts the border lines and the header. |
-  || {class: data}
+  numbers: The three numbers {
+    shape: sql_table
+    class: data
+    row_id: position in the file, from enum
+    row_number: what the gutter shows
+    buffer_line: index into layout.lines
+  }
 
-  lookups: |md
-    ### The three lookups
-    `rows_by_id`, `rows_by_number`,
-    `rows_by_line`
-  | {class: row}
+  lookups: "rows_by_id\nrows_by_number\nrows_by_line" {class: row}
 
   row -> numbers
   row -> lookups
@@ -44,31 +35,16 @@ rows: A row on the page {
 cols: A column {
   style.fill: "#1a1a2a"
 
-  column: |md
-    ### csv.Column
-    Lives in `state.columns` for the life of
-    the buffer. Hiding sets a flag and leaves
-    it in the list.
-  | {class: column}
+  column: "csv.Column\nlives in state.columns for the life of the buffer" {class: column}
 
-  col_numbers: ||md
-    | Number | Is |
-    |---|---|
-    | `column_id` | 0-based position in the source file. The row id the pipeline prepends takes -1. |
-    | `column_number` | 1-based position among the drawn columns. |
-  || {class: data}
+  col_numbers: The two numbers {
+    shape: sql_table
+    class: data
+    column_id: 0-based, in the file
+    column_number: 1-based, among the drawn columns
+  }
 
-  drawn: |md
-    ### Where it is drawn
-    `layout.columns[column_number]` is the
-    column, `layout.ranges[column_number]`
-    is the byte range of its cell. One
-    number indexes both.
-
-    `layout.parse` cuts the row id cell away,
-    so column 1 of the buffer is the first
-    column the user chose to see.
-  | {class: column}
+  drawn: "Where it is drawn\nlayout.columns[n] and layout.ranges[n]" {class: column}
 
   column -> col_numbers
   column -> drawn
@@ -77,30 +53,9 @@ cols: A column {
 stream: Where a column sits in the xan stream {
   style.fill: "#1a1a2a"
 
-  carried: ||md
-    ### pipeline.carried_columns
-    The pipeline opens with
-
-    `select <carried> | enum -c id`
-
-    so the row id lands at 0 and each carried
-    column lands at its place in the carried
-    list. That holds for every stage below.
-  || {class: stream}
-
-  positions: |md
-    ### position_by_column_id
-    Built alongside the carried list and
-    handed to whatever writes an expression.
-    One number per column, for the whole run.
-  | {class: stream}
-
-  who: |md
-    The carried list is the columns on
-    display, then any column a sort key or a
-    filter names, so a hidden column the user
-    is still sorting on comes along.
-  | {class: data}
+  carried: "pipeline.carried_columns\nselect <carried> | enum -c id" {class: stream}
+  positions: "position_by_column_id\none position per column, for the whole run" {class: stream}
+  who: "What is carried\nthe drawn columns, plus any a sort or filter names" {class: data}
 
   carried -> positions
   positions -> who

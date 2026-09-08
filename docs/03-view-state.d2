@@ -11,63 +11,25 @@ classes: {
   data: {style.fill: "#3d3d3d"}
 }
 
-state: |md
-  ### state.lua
-  `csv.State`, one per buffer. The file's
-  columns, and everything the user has
-  asked for on top of them.
-| {class: state}
+state: "state.lua\none csv.State per buffer" {class: state}
 
-fields: ||md
-  | Field | Holds |
-  |---|---|
-  | `columns` | Every source column, in display order, hidden ones among them |
-  | `rowid_column` | The row id the pipeline prepends, `column_id` -1 |
-  | `filters` | ANDed together |
-  | `sort_keys` | Most significant first |
-  | `marked` | Row ids |
-  | `marked_columns` | Column ids |
-  | `formats` | Keyed by column id |
-  | `selection` | The anchor cell, the head cell and the kind |
-  | `page`, `limit` | Which slice of rows |
-|| {class: data}
+fields: csv.State {
+  shape: sql_table
+  class: data
+  columns: every source column, hidden ones among them
+  rowid_column: column_id -1
+  filters: ANDed
+  sort_keys: most significant first
+  marked: row ids
+  marked_columns: column ids
+  formats: by column id
+  selection: anchor, head, kind
+  "page, limit": which slice of rows
+}
 
-columns: |md
-  ### columns.lua
-  What a column is: `name` as the file
-  spells it, a unique `label`, `column_id`,
-  `hidden`. A repeated name takes a `[n]`
-  suffix in its label, so `rename` can
-  address it.
-
-  Also which columns the table draws.
-  `display_columns` takes the visible ones
-  from `state.columns`. Hide, cut, paste and
-  swap all work on that one list.
-| {class: state}
-
-format: |md
-  ### format.lua
-  From a 600 row sample: int, float with a
-  decimal count, date, or text. The user
-  can override the width, the alignment
-  and the printf spec.
-| {class: state}
-
-selection: |md
-  ### selection.lua
-  `csv.Selection`: an `anchor` cell, a `head`
-  cell, and a `kind` saying which of the two
-  axes those cells bound. `row` takes every
-  column, `column` takes every row.
-
-  `buffer.render` clears it, so both ends
-  belong to the layout on screen.
-
-  `movement.lua` is what moves the head: a
-  shift keyed move, or any move made while
-  nvim is in a visual mode.
-| {class: state}
+columns: "columns.lua\nname, label, column_id, hidden, and which are drawn" {class: state}
+format: "format.lua\ntype, width, alignment, printf spec" {class: state}
+selection: "selection.lua\nbounds from the anchor, the head and the kind" {class: state}
 
 state -> fields
 state -> columns: identity, and which are drawn

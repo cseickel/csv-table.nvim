@@ -1,18 +1,10 @@
 --[[
-Color.
+Defines every highlight group the plugin uses.
 
-Every group this plugin draws with is defined here, and the table's own colors
-are drawn here too. A color follows from where a cell is and what its column
-holds, both of which `csv-table.layout` and `csv-table.format` already know, so
-nothing here searches the text.
-
-The decoration provider runs for the lines nvim is drawing, and its marks last
-for that draw, so a render that replaces every line is answered by the next
-draw asking again.
-
-A cell holding text reads in the normal foreground, and the border is the gaps
-between the cells. Every group here sets a foreground alone, which leaves the
-background to the row marks and the selection.
+Registers a decoration provider that draws extmarks for:
+- the borders
+- the header text
+- date cells, and number cells colored by sign
 ]]
 
 local buffer = require("csv-table.buffer")
@@ -24,8 +16,7 @@ local M = {}
 local namespace = vim.api.nvim_create_namespace("csv-syntax")
 
 -- Under the 4096 an extmark takes by default, so the marks and the selection
--- both draw over the coloring. One value covers every group here, which each
--- claim their own stretch of the line.
+-- draw over the coloring.
 local PRIORITY = 100
 
 local GROUPS = {
@@ -50,9 +41,9 @@ local function define_groups()
   end
 end
 
---- What each cell of a data row is colored by, keyed by column number. A number
---- is keyed by its kind rather than by a group, because the sign of the value
---- decides which of the two number groups it takes.
+--- The kind of every column that takes a color, keyed by column number. A number
+--- gets its kind rather than a group, since the sign of the value picks which of
+--- the two number groups it takes.
 ---@param buf csv.Buffer
 ---@return table<integer, "number"|"date">
 local function cell_kinds(buf)
@@ -69,7 +60,7 @@ local function cell_kinds(buf)
 end
 
 --- The group a cell takes, or nil when the cell holds nothing. `view` pads every
---- cell, so the value is whatever follows the padding.
+--- cell, so the value starts at the first non-space.
 ---@param kind "number"|"date"
 ---@param text string The cell as it is drawn, padding included.
 ---@return string|nil
@@ -98,8 +89,8 @@ local function draw(bufnr, row, from, to, group)
   })
 end
 
---- Draw the separators of one line: the gap between each pair of cells, and the
---- run at either end where the theme in use draws an outer border.
+--- Draw the gaps between the cells of one line, and the run at either end that
+--- holds the outer border.
 ---@param bufnr integer
 ---@param row integer
 ---@param line string
@@ -117,8 +108,8 @@ local function draw_borders(bufnr, row, line, ranges)
   end
 end
 
---- The layout and the cell kinds for the window nvim is drawing. `on_win` fills
---- this once, and every `on_line` for that window reads it.
+--- The layout and the column kinds for the window nvim is drawing. `on_win`
+--- fills it once and every `on_line` for that window reads it.
 ---@type { layout: csv.Layout, kinds: table<integer, "number"|"date"> }|nil
 local current_window = nil
 
@@ -137,9 +128,9 @@ end
 ---@param bufnr integer
 ---@param row integer 0-based.
 local function on_line(_, _, bufnr, row)
-  -- `on_win` decided this window has a table to color, so `current_window` is
-  -- set. Reading it unguarded would end every buffer's coloring for the session,
-  -- because nvim drops a provider that raises.
+  -- `on_win` already decided this window has a table, so `current_window` is
+  -- set. The guard is here because nvim drops a provider that raises, which
+  -- would end coloring for the session.
   if not current_window then
     return
   end
@@ -173,13 +164,13 @@ local function on_line(_, _, bufnr, row)
   end
 end
 
---- Define the groups and start coloring. One provider covers every window, so
---- `on_win` is what decides a window is showing a table.
+--- Define the groups and register the provider. One provider covers every
+--- window, so `on_win` is what decides a window is showing a table.
 ---@param group integer
 function M.setup(group)
   define_groups()
-  -- A colorscheme runs `highlight clear` before it defines anything, which
-  -- takes every group above with it.
+  -- A colorscheme runs `highlight clear` first, which takes every group above
+  -- with it.
   vim.api.nvim_create_autocmd("ColorScheme", { group = group, callback = define_groups })
   vim.api.nvim_set_decoration_provider(namespace, { on_win = on_win, on_line = on_line })
 end
