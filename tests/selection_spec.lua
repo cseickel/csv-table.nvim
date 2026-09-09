@@ -1,11 +1,9 @@
 local fixture = require("support.fixture")
-local layout = require("csv-table.layout")
 local parse = require("csv-table.reader.parse")
-local selection = require("csv-table.selection")
 
---- A three row, two column layout to pick cells out of.
----@return csv.Layout
----@return csv.State
+--- A three row, two column page to pick cells out of.
+---@return csv.Page
+---@return csv.Query
 ---@return csv.Column[]
 local function drawn()
   local view, source = fixture.duplicated_headers()
@@ -20,27 +18,35 @@ local function drawn()
     "└────┴─────┴─────┘",
     "",
   }
-  local result = parse.page(lines, { source[1], source[2] }, 1)
+  local result = parse.page(lines, {
+    columns = { source[1], source[2] },
+    first_row_number = 1,
+    file_version = "",
+  })
   return result, view, source
 end
 
----@param result csv.Layout
+---@param result csv.Page
 ---@param buffer_line integer
 ---@param column_number integer
 ---@return csv.Cell
 local function cell_at(result, buffer_line, column_number)
-  return {
-    row = layout.row_at_line(result, buffer_line),
-    column = layout.column_at(result, column_number),
-  }
+  return { row = result:row_at_line(buffer_line), column = result:column_at(column_number) }
 end
 
-describe("selection.set", function()
+---@param bounds csv.Bounds
+---@return integer rows
+---@return integer columns
+local function size(bounds)
+  return bounds.bottom - bounds.top + 1, bounds.right - bounds.left + 1
+end
+
+describe("query:select_cells", function()
   it("covers the rectangle between the two cells", function()
     local result, view = drawn()
-    selection.set(view, cell_at(result, 4, 1), cell_at(result, 6, 2), "cell")
+    view:select_cells(cell_at(result, 4, 1), cell_at(result, 6, 2), "cell")
 
-    local bounds = selection.bounds(view, result)
+    local bounds = view:selection_bounds(result)
     equals(bounds.top, 4)
     equals(bounds.bottom, 6)
     equals(bounds.left, 1)
@@ -50,29 +56,29 @@ describe("selection.set", function()
   it("covers one cell when the same cell is named twice", function()
     local result, view = drawn()
     local cell = cell_at(result, 5, 2)
-    selection.set(view, cell, cell, "cell")
+    view:select_cells(cell, cell, "cell")
 
-    local rows, cols = selection.size(selection.bounds(view, result))
+    local rows, cols = size(view:selection_bounds(result))
     equals(rows, 1)
     equals(cols, 1)
   end)
 
   it("orders the bounds however the two ends were given", function()
     local result, view = drawn()
-    selection.set(view, cell_at(result, 6, 2), cell_at(result, 4, 1), "cell")
+    view:select_cells(cell_at(result, 6, 2), cell_at(result, 4, 1), "cell")
 
-    local bounds = selection.bounds(view, result)
+    local bounds = view:selection_bounds(result)
     equals(bounds.top, 4)
     equals(bounds.left, 1)
   end)
 end)
 
-describe("selection.bounds by kind", function()
+describe("query:selection_bounds by kind", function()
   it("takes every column for a row selection", function()
     local result, view = drawn()
-    selection.set(view, cell_at(result, 4, 1), cell_at(result, 5, 1), "row")
+    view:select_cells(cell_at(result, 4, 1), cell_at(result, 5, 1), "row")
 
-    local bounds = selection.bounds(view, result)
+    local bounds = view:selection_bounds(result)
     equals(bounds.top, 4)
     equals(bounds.bottom, 5)
     equals(bounds.left, 1)
@@ -82,9 +88,9 @@ describe("selection.bounds by kind", function()
   it("takes every row for a column selection", function()
     local result, view = drawn()
     local cell = cell_at(result, 5, 2)
-    selection.set(view, cell, cell, "column")
+    view:select_cells(cell, cell, "column")
 
-    local bounds = selection.bounds(view, result)
+    local bounds = view:selection_bounds(result)
     equals(bounds.top, 4)
     equals(bounds.bottom, 6)
     equals(bounds.left, 2)
@@ -94,86 +100,75 @@ describe("selection.bounds by kind", function()
   it("takes the whole page", function()
     local result, view = drawn()
     local cell = cell_at(result, 5, 2)
-    selection.set(view, cell, cell, "page")
+    view:select_cells(cell, cell, "page")
 
-    local rows, cols = selection.size(selection.bounds(view, result))
+    local rows, cols = size(view:selection_bounds(result))
     equals(rows, 3)
     equals(cols, 2)
   end)
 
   it("answers for a row selection whose column has gone", function()
     local result, view, source = drawn()
-    selection.set(view, cell_at(result, 4, 1), cell_at(result, 5, 1), "row")
+    view:select_cells(cell_at(result, 4, 1), cell_at(result, 5, 1), "row")
     view.selection.head = { row = view.selection.head.row, column = source[3] }
 
-    equals(selection.bounds(view, result).bottom, 5)
+    equals(view:selection_bounds(result).bottom, 5)
   end)
 end)
 
-describe("selection.extend", function()
+describe("query:extend_selection", function()
   it("moves the head and leaves the anchor and the kind", function()
     local result, view = drawn()
-    selection.set(view, cell_at(result, 4, 1), cell_at(result, 4, 1), "row")
-    selection.extend(view, cell_at(result, 6, 2))
+    view:select_cells(cell_at(result, 4, 1), cell_at(result, 4, 1), "row")
+    view:extend_selection(cell_at(result, 6, 2))
 
     equals(view.selection.kind, "row")
-    local bounds = selection.bounds(view, result)
+    local bounds = view:selection_bounds(result)
     equals(bounds.top, 4)
     equals(bounds.bottom, 6)
   end)
 
   it("picks out the one cell when nothing is selected yet", function()
     local result, view = drawn()
-    selection.extend(view, cell_at(result, 5, 1))
+    view:extend_selection(cell_at(result, 5, 1))
 
     equals(view.selection.kind, "cell")
-    local rows, cols = selection.size(selection.bounds(view, result))
+    local rows, cols = size(view:selection_bounds(result))
     equals(rows, 1)
     equals(cols, 1)
   end)
 end)
 
-describe("selection.set_kind", function()
+describe("query:set_selection_kind", function()
   it("keeps both ends", function()
     local result, view = drawn()
-    selection.set(view, cell_at(result, 4, 1), cell_at(result, 5, 1), "cell")
-    selection.set_kind(view, "row")
+    view:select_cells(cell_at(result, 4, 1), cell_at(result, 5, 1), "cell")
+    view:set_selection_kind("row")
 
-    local bounds = selection.bounds(view, result)
+    local bounds = view:selection_bounds(result)
     equals(bounds.top, 4)
     equals(bounds.bottom, 5)
     equals(bounds.right, 2)
   end)
 end)
 
-describe("selection.clear", function()
+describe("query:clear_selection", function()
   it("leaves nothing to draw", function()
     local result, view = drawn()
-    selection.set(view, cell_at(result, 4, 1), cell_at(result, 4, 1), "cell")
-    selection.clear(view)
+    view:select_cells(cell_at(result, 4, 1), cell_at(result, 4, 1), "cell")
+    view:clear_selection()
 
-    equals(selection.is_set(view), false)
-    equals(selection.bounds(view, result), nil)
+    equals(view:has_selection(), false)
+    equals(view:selection_bounds(result), nil)
   end)
 end)
 
-describe("selection.bounds", function()
+describe("query:selection_bounds", function()
   it("answers nothing once an end has left the display", function()
     local result, view, source = drawn()
-    selection.set(view, cell_at(result, 4, 1), cell_at(result, 4, 1), "cell")
+    view:select_cells(cell_at(result, 4, 1), cell_at(result, 4, 1), "cell")
     view.selection.head = { row = view.selection.head.row, column = source[3] }
 
-    equals(selection.bounds(view, result), nil)
-  end)
-end)
-
-describe("selection.size", function()
-  it("counts the rows and the columns it covers", function()
-    local result, view = drawn()
-    selection.set(view, cell_at(result, 4, 1), cell_at(result, 6, 2), "cell")
-
-    local rows, cols = selection.size(selection.bounds(view, result))
-    equals(rows, 3)
-    equals(cols, 2)
+    equals(view:selection_bounds(result), nil)
   end)
 end)

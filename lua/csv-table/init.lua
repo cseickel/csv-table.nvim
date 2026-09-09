@@ -6,17 +6,16 @@ The entry point, where a spreadsheet file is caught before nvim reads it.
 - the `CsvTable` command opens a path as a table
 - `status` is the statusline: the sheet, the rows on the page, the filters, the
   marks, the sort and the cut columns
-- `apply_keymaps` binds the resolved keys to a buffer
 ]]
 
 local actions = require("csv-table.actions")
 local buffer = require("csv-table.buffer")
-local columns = require("csv-table.columns")
-local active_cell = require("csv-table.active_cell")
-local highlight = require("csv-table.highlight")
+local color = require("csv-table.buffer.color")
+local cursor = require("csv-table.buffer.cursor")
 local keymaps = require("csv-table.keymaps")
-local movement = require("csv-table.movement")
-local state = require("csv-table.state")
+local movement = require("csv-table.buffer.movement")
+local query = require("csv-table.query")
+local text = require("csv-table.utils.text")
 
 local M = {}
 
@@ -35,7 +34,9 @@ local function apply_keymaps(buf)
     else
       local action = actions.get_action(binding.action)
       if not action then
-        error(string.format("csv-table: key %q names unknown action %q", binding.key, binding.action))
+        error(
+          string.format("csv-table: key %q names unknown action %q", binding.key, binding.action)
+        )
       end
 
       vim.keymap.set(modes, binding.key, function()
@@ -44,10 +45,10 @@ local function apply_keymaps(buf)
     end
   end
 
-  -- A click lands exactly where it was pointed, and `csv-table.movement` needs
-  -- to know that, since any other move that ends up in the cell it started in
-  -- was a motion too small to leave the cell. The expression hands the key back
-  -- so nvim still does the click itself.
+  -- A click lands exactly where it was pointed, and `csv-table.buffer.movement`
+  -- needs to know that, since any other move that ends up in the cell it started
+  -- in was a motion too small to leave the cell. The expression hands the key
+  -- back so nvim still does the click itself.
   vim.keymap.set({ "n", "x" }, "<LeftMouse>", function()
     movement.click()
     return "<LeftMouse>"
@@ -57,21 +58,20 @@ end
 local SHEET_NAME_LENGTH = 10
 
 --- Which sheet of a workbook is on screen, and the key that changes it. Absent
---- for a source that has no sheets.
+--- for a file that has no sheets.
 ---@param buf csv.Buffer
 ---@return string|nil
 local function sheet_summary(buf)
-  local sheets = buf.state.sheets
-  if #sheets == 0 then
+  local file = buf.query.file
+  if #file.sheets == 0 then
     return nil
   end
 
-  local name = sheets[buf.state.sheet + 1] or ""
   return string.format(
     "sheet %d/%d %s · gS sheets",
-    buf.state.sheet + 1,
-    #sheets,
-    columns.truncate(name, SHEET_NAME_LENGTH)
+    file.sheet + 1,
+    #file.sheets,
+    text.truncate(file.sheets[file.sheet + 1] or "", SHEET_NAME_LENGTH)
   )
 end
 
@@ -79,12 +79,12 @@ end
 ---@param buf csv.Buffer
 ---@return string|nil
 local function sort_summary(buf)
-  if #buf.state.sort_keys == 0 then
+  if #buf.query.sort_keys == 0 then
     return nil
   end
 
   local parts = {}
-  for index, key in ipairs(buf.state.sort_keys) do
+  for index, key in ipairs(buf.query.sort_keys) do
     parts[index] = key.column.label .. (key.direction == "asc" and "▲" or "▼")
   end
   return "sort " .. table.concat(parts, " ")
@@ -94,43 +94,41 @@ end
 ---@param buf csv.Buffer
 ---@return string|nil
 local function clipboard_summary(buf)
-  if #buf.state.clipboard == 0 then
+  if #buf.query.clipboard == 0 then
     return nil
   end
 
   local names = {}
-  for index, column in ipairs(buf.state.clipboard) do
+  for index, column in ipairs(buf.query.clipboard) do
     names[index] = column.label
   end
   return "cut " .. table.concat(names, ",")
 end
 
---- How the page and everything applied to it read in a statusline. Empty for
---- any buffer that is not a table.
+--- How the page and everything applied to it read in a statusline. Empty for any
+--- buffer that is not a table.
 ---@param bufnr integer
 ---@return string
 function M.status(bufnr)
   local buf = buffer.get(bufnr)
-  if not buf or not buf.layout then
+  if not buf then
     return ""
   end
 
   local parts = { sheet_summary(buf) }
   local first, last = buffer.row_range(buf)
-  local total = buf.state.row_count
   if last < first then
     table.insert(parts, "no rows")
-  elseif total then
-    table.insert(parts, string.format("rows %d-%d of %d", first, last, total))
   else
-    table.insert(parts, string.format("rows %d-%d", first, last))
+    table.insert(parts, string.format("rows %d-%d of %d", first, last, buf.query.row_count))
   end
 
-  if #buf.state.filters > 0 then
-    table.insert(parts, #buf.state.filters == 1 and "1 filter" or (#buf.state.filters .. " filters"))
+  if #buf.query.filters > 0 then
+    local count = #buf.query.filters
+    table.insert(parts, count == 1 and "1 filter" or (count .. " filters"))
   end
 
-  local marked_count = vim.tbl_count(buf.state.marked)
+  local marked_count = vim.tbl_count(buf.query.marked)
   if marked_count > 0 then
     table.insert(parts, marked_count .. " marked")
   end
@@ -154,15 +152,15 @@ function M.setup(opts)
     if type(opts.page_size) ~= "number" or opts.page_size < 1 then
       error("csv-table: page_size must be a number of rows, 1 or more")
     end
-    state.page_size = math.floor(opts.page_size)
+    query.page_size = math.floor(opts.page_size)
   end
 
   -- One group for every autocommand that lasts the session, so a second `setup`
   -- replaces what the first left rather than adding to it. The ones a table
   -- buffer owns are in `csv-table-buffer`.
   local group = vim.api.nvim_create_augroup("csv-table", { clear = true })
-  highlight.setup(group)
-  active_cell.setup(group)
+  color.setup(group)
+  cursor.setup(group)
 
   vim.api.nvim_create_autocmd("BufReadCmd", {
     group = group,

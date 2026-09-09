@@ -1,13 +1,11 @@
 --[[
-Registers the actions that order the rows: sort_asc, sort_desc,
-add_sort_key_asc, add_sort_key_desc, remove_sort_key and clear_sort.
+Registers the actions that order the rows.
 
-Sorting by a column and adding it as a less significant key are separate keys,
-so the same column asked for twice means two different things.
+Sorting by a column and adding it as a less significant key are separate keys, so
+the same column asked for twice means two different things.
 ]]
 
 local buffer = require("csv-table.buffer")
-local state = require("csv-table.state")
 local utils = require("csv-table.actions.utils")
 
 ---@param direction "asc"|"desc"
@@ -15,7 +13,7 @@ local utils = require("csv-table.actions.utils")
 local function sort_action(direction)
   return function(buf)
     utils.on_column(buf, function(column)
-      state.sort_by(buf.state, column, direction)
+      buf.query:sort_by(column, direction)
     end)
   end
 end
@@ -25,23 +23,39 @@ end
 local function add_sort_key_action(direction)
   return function(buf)
     utils.on_column(buf, function(column)
-      state.add_sort_key(buf.state, column, direction)
+      buf.query:add_sort_key(column, direction)
     end)
   end
 end
 
-utils.register_action("sort_asc", "Sort by this column ascending, or clear that sort", sort_action("asc"))
-utils.register_action("sort_desc", "Sort by this column descending, or clear that sort", sort_action("desc"))
-utils.register_action("add_sort_key_asc", "Add this column to the sort, ascending", add_sort_key_action("asc"))
-utils.register_action("add_sort_key_desc", "Add this column to the sort, descending", add_sort_key_action("desc"))
+utils.register_action(
+  "sort_asc",
+  "Sort by this column ascending, or clear that sort",
+  sort_action("asc")
+)
+utils.register_action(
+  "sort_desc",
+  "Sort by this column descending, or clear that sort",
+  sort_action("desc")
+)
+utils.register_action(
+  "add_sort_key_asc",
+  "Add this column to the sort, ascending",
+  add_sort_key_action("asc")
+)
+utils.register_action(
+  "add_sort_key_desc",
+  "Add this column to the sort, descending",
+  add_sort_key_action("desc")
+)
 
 utils.register_action("remove_sort_key", "Drop this column from the sort", function(buf)
   utils.on_column(buf, function(column)
-    state.remove_sort_key(buf.state, column)
+    buf.query:remove_sort_key(column)
   end)
 end)
 
 utils.register_action("clear_sort", "Clear the sort entirely", function(buf)
-  state.clear_sort(buf.state)
+  buf.query:clear_sort()
   buffer.render(buf)
 end)

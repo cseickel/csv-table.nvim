@@ -1,30 +1,26 @@
 --[[
-Registers the actions that open a panel rather than changing the view:
-- show_cell, show_row, show_column
-- show_file_info
-- select_sheet
-- show_help
+Registers the actions that open a popup rather than changing the view.
 ]]
 
-local active_cell = require("csv-table.active_cell")
-local dialog = require("csv-table.dialog")
-local inspect = require("csv-table.inspect")
-local panel = require("csv-table.panel")
+local cursor = require("csv-table.buffer.cursor")
+local dialog = require("csv-table.popup.dialog")
+local panel = require("csv-table.popup.panel")
+local show = require("csv-table.popup.show")
 local utils = require("csv-table.actions.utils")
 
 utils.register_action("show_column", "Summarize this column", function(buf)
-  local column = active_cell.column(buf, 0)
+  local column = cursor.column(buf, 0)
   if column then
     panel.stats(buf, column)
   end
 end)
 
 utils.register_action("show_cell", "Show everything this cell holds", function(buf)
-  inspect.cell(buf)
+  show.cell(buf)
 end)
 
 utils.register_action("show_row", "Show pivoted row values", function(buf)
-  inspect.row(buf)
+  show.row(buf)
 end)
 
 utils.register_action("select_sheet", "Choose which sheet to read", function(buf)

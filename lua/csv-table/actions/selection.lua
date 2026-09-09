@@ -1,20 +1,14 @@
 --[[
-Registers the actions that pick cells out and yank them:
-- select_column, select_page, clear_selection, swap_selection_ends
-- extend_left, right, up, down, and the four that reach an edge
-- extend_to_click
-- eight yanks, one per format, and `yank_picker` to choose among them
+Registers the actions that pick cells out and export them.
 
 Starting and resuming a selection are not here. Nvim's own visual modes say the
 user is extending, and `movement` takes the head along with every move made in
 one, so `v`, `V` and `gv` all work with no action of ours.
 ]]
 
-local active_cell = require("csv-table.active_cell")
-local inspect = require("csv-table.inspect")
-local movement = require("csv-table.movement")
-local picker = require("csv-table.picker")
-local reader = require("csv-table.reader")
+local export = require("csv-table.buffer.export")
+local movement = require("csv-table.buffer.movement")
+local picker = require("csv-table.popup.picker")
 local utils = require("csv-table.actions.utils")
 
 local EDGE = utils.EDGE
@@ -24,9 +18,7 @@ local EDGE = utils.EDGE
 ---@return fun(buf: csv.Buffer)
 local function extender(rows, cells)
   return function(buf)
-    if buf.layout then
-      movement.extend(buf, 0, rows, cells)
-    end
+    movement.extend(buf, 0, rows, cells)
   end
 end
 
@@ -35,9 +27,6 @@ end
 ---@return fun(buf: csv.Buffer)
 local function selector(kind)
   return function(buf)
-    if not buf.layout or buf.layout.first_line > buf.layout.last_line then
-      return reader.report("there is nothing to select")
-    end
     movement.select(buf, 0, kind)
   end
 end
@@ -50,9 +39,7 @@ utils.register_action("clear_selection", "Select nothing", function(buf)
 end)
 
 utils.register_action("swap_selection_ends", "Move to the other end of the selection", function(buf)
-  if buf.layout then
-    movement.swap_ends(buf, 0)
-  end
+  movement.swap_ends(buf, 0)
 end)
 
 utils.register_action("extend_left", "Take the selection one column left", extender(0, -1))
@@ -60,52 +47,108 @@ utils.register_action("extend_right", "Take the selection one column right", ext
 utils.register_action("extend_up", "Take the selection one row up", extender(-1, 0))
 utils.register_action("extend_down", "Take the selection one row down", extender(1, 0))
 
-utils.register_action("extend_to_first_column", "Take the selection to the first column", extender(0, -EDGE))
-utils.register_action("extend_to_last_column", "Take the selection to the last column", extender(0, EDGE))
-utils.register_action("extend_to_first_row", "Take the selection to the top of the page", extender(-EDGE, 0))
-utils.register_action("extend_to_last_row", "Take the selection to the bottom of the page", extender(EDGE, 0))
+utils.register_action(
+  "extend_to_first_column",
+  "Take the selection to the first column",
+  extender(0, -EDGE)
+)
+utils.register_action(
+  "extend_to_last_column",
+  "Take the selection to the last column",
+  extender(0, EDGE)
+)
+utils.register_action(
+  "extend_to_first_row",
+  "Take the selection to the top of the page",
+  extender(-EDGE, 0)
+)
+utils.register_action(
+  "extend_to_last_row",
+  "Take the selection to the bottom of the page",
+  extender(EDGE, 0)
+)
 
 utils.register_action("extend_to_click", "Take the selection out to the click", function(buf)
   local position = vim.fn.getmousepos()
-  if not buf.layout or position.winid ~= vim.api.nvim_get_current_win() or position.column == 0 then
+  if position.winid ~= vim.api.nvim_get_current_win() or position.column == 0 then
     return
   end
 
-  local cell = active_cell.cell_at(buf, position.line, position.column - 1)
+  local cell = buf.page:cell_at(position.line, position.column - 1)
   if cell then
     movement.extend_to(buf, 0, cell)
   end
 end)
 
---- Every way the selected cells can reach the clipboard. `display` is the text
---- the buffer already holds, and the rest are written by xan from the file.
+--- Every way the selected cells reach the clipboard. `display` is the text the
+--- buffer already holds, and the rest are written by xan from the file.
 ---
---- `label` is what the picker offers, where the prompt has already said the
---- word yank. `description` is what the help panel shows beside the key, where
---- the line stands on its own.
+--- `label` is what the picker offers, where the prompt has already said the word
+--- yank. `description` is what the help panel shows beside the key, where the line
+--- stands on its own.
 ---@type { action: string, format: string, headers: boolean, label: string, description: string }[]
 local YANKS = {
-  { action = "yank_tsv", format = "tsv", headers = true,
-    label = "TSV", description = "Yank as tab separated values" },
-  { action = "yank_tsv_no_headers", format = "tsv", headers = false,
-    label = "TSV, no headers", description = "Yank as tab separated values, without the header row" },
-  { action = "yank_csv", format = "csv", headers = true,
-    label = "CSV", description = "Yank as CSV" },
-  { action = "yank_csv_no_headers", format = "csv", headers = false,
-    label = "CSV, no headers", description = "Yank as CSV, without the header row" },
-  { action = "yank_display", format = "display", headers = true,
-    label = "As displayed", description = "Yank the cells as they are drawn" },
-  { action = "yank_display_no_headers", format = "display", headers = false,
-    label = "As displayed, no headers", description = "Yank the cells as they are drawn, without the header row" },
-  { action = "yank_json", format = "json", headers = true,
-    label = "JSON", description = "Yank as JSON" },
-  { action = "yank_markdown", format = "markdown", headers = true,
-    label = "Markdown", description = "Yank as a markdown table" },
+  {
+    action = "yank_tsv",
+    format = "tsv",
+    headers = true,
+    label = "TSV",
+    description = "Yank as tab separated values",
+  },
+  {
+    action = "yank_tsv_no_headers",
+    format = "tsv",
+    headers = false,
+    label = "TSV, no headers",
+    description = "Yank as tab separated values, without the header row",
+  },
+  {
+    action = "yank_csv",
+    format = "csv",
+    headers = true,
+    label = "CSV",
+    description = "Yank as CSV",
+  },
+  {
+    action = "yank_csv_no_headers",
+    format = "csv",
+    headers = false,
+    label = "CSV, no headers",
+    description = "Yank as CSV, without the header row",
+  },
+  {
+    action = "yank_display",
+    format = "display",
+    headers = true,
+    label = "As displayed",
+    description = "Yank the cells as they are drawn",
+  },
+  {
+    action = "yank_display_no_headers",
+    format = "display",
+    headers = false,
+    label = "As displayed, no headers",
+    description = "Yank the cells as they are drawn, without the header row",
+  },
+  {
+    action = "yank_json",
+    format = "json",
+    headers = true,
+    label = "JSON",
+    description = "Yank as JSON",
+  },
+  {
+    action = "yank_markdown",
+    format = "markdown",
+    headers = true,
+    label = "Markdown",
+    description = "Yank as a markdown table",
+  },
 }
 
 for _, yank in ipairs(YANKS) do
   utils.register_action(yank.action, yank.description, function(buf)
-    inspect.yank(buf, yank.format, yank.headers)
+    export.yank(buf, yank.format, yank.headers)
   end)
 end
 
@@ -116,6 +159,6 @@ utils.register_action("yank_picker", "Choose a format and yank the selected cell
       return yank.label
     end,
   }, function(yank)
-    inspect.yank(buf, yank.format, yank.headers)
+    export.yank(buf, yank.format, yank.headers)
   end)
 end)

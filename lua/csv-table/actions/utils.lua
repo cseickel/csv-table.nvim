@@ -1,23 +1,17 @@
 --[[
 Holds the registry every action is written into.
 
-- `register_action` adds one, and refuses a name already taken
-- `get_action` and `get_all_actions` read the registry
-- `on_column` is the shape most actions take: change the active cell's column,
-  then render
-- `EDGE` is a step further than any table is wide or long
-
 A name registered twice stops the plugin loading, since which of the two a key
 would run is otherwise the order of a Lua table.
 ]]
 
 local buffer = require("csv-table.buffer")
-local active_cell = require("csv-table.active_cell")
+local cursor = require("csv-table.buffer.cursor")
 
 local M = {}
 
---- Further than any table is wide or long, so a step of this many rows or
---- cells reaches the edge without a second way of naming one.
+--- Further than any table is wide or long, so a step of this many rows or cells
+--- reaches the edge without a second way of naming one.
 M.EDGE = 1000000
 
 ---@class csv.Action
@@ -53,7 +47,7 @@ end
 ---@param buf csv.Buffer
 ---@param change fun(column: csv.Column)
 function M.on_column(buf, change)
-  local column = active_cell.column(buf, 0)
+  local column = cursor.column(buf, 0)
   if not column then
     return
   end

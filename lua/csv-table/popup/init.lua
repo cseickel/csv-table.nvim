@@ -1,10 +1,6 @@
 --[[
-Opens lines of text in a centered float, sized to the text and closing on `q`
-or Escape.
-
-- `open` builds the float
-- `close_on` binds more keys that close it
-- `close` closes one by id
+Opens lines of text in a centered float, sized to the text and closing on `q` or
+Escape.
 ]]
 
 local M = {}

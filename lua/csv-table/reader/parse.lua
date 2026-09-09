@@ -1,15 +1,17 @@
 --[[
-Reads the table `xan view` drew and builds the `csv.Layout` describing it.
+Reads the table `xan view` drew and builds the `csv.Page` describing it.
 
-`view` pads its output with a blank line at each end, and draws a top border,
-the header, a border, the rows, and a bottom border. The blank lines go and the
-rest reaches the buffer, so the table keeps its frame.
+`view` pads its output with a blank line at each end, and draws a top border, the
+header, a border, the rows, and a bottom border. The blank lines go and the rest
+reaches the buffer, so the table keeps its frame.
 
 The row ids come out of the first cell before that cell is cut away, so every
 range this returns describes the text the buffer will hold.
 
 Pure Lua, so it runs without nvim.
 ]]
+
+local page = require("csv-table.page")
 
 local M = {}
 
@@ -21,10 +23,10 @@ local function trim(value)
   return (value:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
---- The byte range of every cell on one line. The ends of the line bound the
---- first and last cells, and a zero width range is dropped, so a theme that
---- draws the outer border and one that leaves it off give the same count.
---- `view` pads every cell, so every real cell has width.
+--- The byte range of every cell on one line. The ends of the line bound the first
+--- and last cells, and a zero width range is dropped, so a theme that draws the
+--- outer border and one that leaves it off give the same count. `view` pads every
+--- cell, so every real cell has width.
 ---@param line string
 ---@return csv.CellRange[]
 local function scan(line)
@@ -64,9 +66,9 @@ local function same_ranges(left, right)
   return true
 end
 
---- Whether `line` is one of the three horizontal borders. Every theme draws
---- them from dashes and corners, and the header and the data rows are the lines
---- that hold a vertical separator.
+--- Whether `line` is one of the three horizontal borders. Every theme draws them
+--- from dashes and corners, and the header and the data rows are the lines that
+--- hold a vertical separator.
 ---@param line string
 ---@return boolean
 local function is_border_line(line)
@@ -92,13 +94,12 @@ local function byte_of_character(line, position)
   return #line + 1
 end
 
---- `line` without its first cell: the `width` characters the cell is drawn in
---- and the separator that closes them, left where they sit behind `leading`.
+--- `line` without its first cell: the `width` characters the cell is drawn in and
+--- the separator that closes them.
 ---
---- Counting characters is what lets one cut serve a border line as well as a
---- row. Every line spends the same number of characters on the cell, while a
---- border line spends three bytes on each of them and a row of digits spends
---- one.
+--- Counting characters is what lets one cut serve a border line as well as a row.
+--- Every line spends the same number of characters on the cell, while a border
+--- line spends three bytes on each of them and a row of digits spends one.
 ---@param line string
 ---@param border_width integer Characters of outer border ahead of the cell, 1 or 0.
 ---@param width integer Characters the cell is drawn in, padding included.
@@ -109,13 +110,12 @@ local function without_first_cell(line, border_width, width)
   return line:sub(1, from - 1) .. line:sub(to)
 end
 
---- Build the layout for one page out of what `xan view` printed.
+--- Build the page out of what `xan view` printed.
 ---@param output string[]
----@param display_columns csv.Column[] The columns drawn, in display order.
----@param first_row_number integer The number the first row of the page is drawn with.
----@return csv.Layout|nil layout
+---@param opts { columns: csv.Column[], first_row_number: integer, file_version: string }
+---@return csv.Page|nil
 ---@return string|nil error
-function M.page(output, display_columns, first_row_number)
+function M.page(output, opts)
   local lines = {}
   for _, line in ipairs(output) do
     if trim(line) ~= "" then
@@ -146,7 +146,7 @@ function M.page(output, display_columns, first_row_number)
     if row_id then
       local row = {
         row_id = row_id,
-        row_number = first_row_number + buffer_line - first_line,
+        row_number = opts.first_row_number + buffer_line - first_line,
         buffer_line = buffer_line,
       }
       rows_by_number[row.row_number] = row
@@ -160,11 +160,24 @@ function M.page(output, display_columns, first_row_number)
   end
 
   local column_number_by_id = {}
-  for column_number, column in ipairs(display_columns) do
+  for column_number, column in ipairs(opts.columns) do
     column_number_by_id[column.column_id] = column_number
   end
 
-  local layout = {
+  local ranges = scan(lines[header_line])
+  local ranges_by_line = {}
+
+  -- Every column is drawn at one display width, so the header's ranges answer for
+  -- most lines. A line holding a multi-byte character puts its separators at
+  -- other byte offsets, and only those lines are kept.
+  for buffer_line = first_line, last_line do
+    local line_ranges = scan(lines[buffer_line])
+    if not same_ranges(line_ranges, ranges) then
+      ranges_by_line[buffer_line] = line_ranges
+    end
+  end
+
+  return page.new({
     lines = lines,
     header_line = header_line,
     first_line = first_line,
@@ -172,23 +185,13 @@ function M.page(output, display_columns, first_row_number)
     rows_by_number = rows_by_number,
     rows_by_id = rows_by_id,
     rows_by_line = rows_by_line,
-    columns = display_columns,
+    columns = opts.columns,
     column_number_by_id = column_number_by_id,
-    ranges = scan(lines[header_line]),
-    ranges_by_line = {},
-  }
-
-  -- Every column is drawn at one display width, so the header's ranges answer
-  -- for most lines. A line holding a multi-byte character puts its separators
-  -- at other byte offsets, and only those lines are kept.
-  for buffer_line = first_line, last_line do
-    local ranges = scan(lines[buffer_line])
-    if not same_ranges(ranges, layout.ranges) then
-      layout.ranges_by_line[buffer_line] = ranges
-    end
-  end
-
-  return layout, nil
+    ranges = ranges,
+    ranges_by_line = ranges_by_line,
+    file_version = opts.file_version,
+  }),
+    nil
 end
 
 return M

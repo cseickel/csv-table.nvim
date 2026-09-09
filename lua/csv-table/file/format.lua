@@ -2,16 +2,9 @@
 Defines `csv.Format`, one per column: its kind, the decimals to print, and the
 width, alignment and printf spec the user has asked for.
 
-- `analyze` reads a sample of rows and decides int, float, date or text
-- `is_numeric` and `working_width` answer what a column reads as and how wide
-  it is drawn
-- `adjust_precision`, `set_spec` and `set_padding` take the user's overrides
-
-A CSV cell is text, so the sample is the only thing that says what a column
+A CSV cell is text, so a sample of rows is the only thing that says what a column
 holds.
 ]]
-
-local columns = require("csv-table.columns")
 
 local M = {}
 
@@ -28,8 +21,13 @@ local MAX_PRECISION = 6
 -- reaches the file as 199.589996338, which reads as nine decimals.
 local SIGNIFICANT_DIGITS = 7
 
---- Decimals a value needs once its float noise is gone, or nil when the value
---- is not a number.
+---@return csv.Format
+function M.plain()
+  return { kind = "text", precision = 0 }
+end
+
+--- Decimals a value needs once its float noise is gone, or nil when the value is
+--- not a number.
 ---@param value string
 ---@return integer|nil
 function M.decimals(value)
@@ -63,7 +61,6 @@ local DATE_PATTERNS = {
   "^%d%d:%d%d" .. DATE_BODY,
 }
 
---- Whether a value reads as a date or a time.
 ---@param value string
 ---@return boolean
 local function is_date(value)
@@ -84,10 +81,10 @@ local function percentile(sorted, fraction)
   return sorted[math.max(1, math.min(index, #sorted))]
 end
 
---- Decide how one column reads from its sampled values.
---- A single unparseable value makes the column text, so a column only reads as
---- a number, or as a date, when every sampled value is one. No value is both,
---- since none of the date shapes casts to a number.
+--- Decide how one column reads from its sampled values. A single unparseable
+--- value makes the column text, so a column only reads as a number, or as a
+--- date, when every sampled value is one. No value is both, since none of the
+--- date shapes casts to a number.
 ---@param values string[]
 ---@return csv.Format
 function M.analyze_column(values)
@@ -112,13 +109,13 @@ function M.analyze_column(values)
   end
 
   if not has_values then
-    return { kind = "text", precision = 0 }
+    return M.plain()
   end
   if all_dates then
     return { kind = "date", precision = 0 }
   end
   if not numeric then
-    return { kind = "text", precision = 0 }
+    return M.plain()
   end
 
   table.sort(decimals)
@@ -136,12 +133,12 @@ end
 --- Decide how every column reads. `csv-table.reader.commands` renames the
 --- columns to their ids before writing the sample, so a JSON key is a column id
 --- as a string.
----@param sample table<string, string>[] Sample rows, keyed by column id.
----@param source_columns csv.Column[]
+---@param sample table<string, string>[]
+---@param columns csv.Column[]
 ---@return table<integer, csv.Format>
-function M.analyze(sample, source_columns)
+function M.analyze(sample, columns)
   local formats = {}
-  for _, column in ipairs(source_columns) do
+  for _, column in ipairs(columns) do
     local key = tostring(column.column_id)
     local values = {}
     for index, row in ipairs(sample) do
@@ -151,19 +148,6 @@ function M.analyze(sample, source_columns)
     formats[column.column_id] = M.analyze_column(values)
   end
   return formats
-end
-
---- The format for `column`, creating a plain one if the sample never saw it.
----@param formats table<integer, csv.Format>
----@param column csv.Column
----@return csv.Format
-local function format_for(formats, column)
-  local format = formats[column.column_id]
-  if not format then
-    format = { kind = "text", precision = 0 }
-    formats[column.column_id] = format
-  end
-  return format
 end
 
 --- Whether a column holds numbers, which decides how it sorts, which side it
@@ -177,55 +161,10 @@ end
 --- The side a column's values sit on when the user has not chosen one.
 ---@param format csv.Format
 ---@return "left"|"right"
-local function natural_align(format)
+function M.natural_align(format)
   return M.is_numeric(format) and "right" or "left"
 end
 
---- The width the user is working from: the one they asked for, or the column as
---- it is drawn when they have not asked yet. The sample this module analyzes can
---- miss the longest value in the file, and the column is drawn to fit the
---- longest value on the page, so the drawn width is the only honest starting
---- point. Reading it back from the format afterwards is what keeps a run of
---- width presses stepping one at a time, since a render may not have landed.
----@param formats table<integer, csv.Format>
----@param column csv.Column
----@param drawn_width integer Characters the column is drawn in.
----@return integer
-function M.working_width(formats, column, drawn_width)
-  local format = formats[column.column_id]
-  return format and format.width or drawn_width
-end
-
---- Show more or fewer decimals. Asking for decimals on a column that is not a
---- number makes it a float, since that is what the request means.
----@param formats table<integer, csv.Format>
----@param column csv.Column
----@param delta integer
-function M.adjust_precision(formats, column, delta)
-  local format = format_for(formats, column)
-  format.precision = math.max(0, math.min(format.precision + delta, MAX_PRECISION))
-  format.kind = format.precision > 0 and "float" or "int"
-end
-
---- Use a printf specification instead of every other formatting rule. An empty
---- specification returns the column to the detected format.
----@param formats table<integer, csv.Format>
----@param column csv.Column
----@param spec string
-function M.set_spec(formats, column, spec)
-  format_for(formats, column).spec = spec ~= "" and spec or nil
-end
-
---- Pad every value of a column to `width` characters, cutting the longer ones.
---- Padding needs a side to pad towards, so an alignment the user has not chosen
---- settles to the side the column's kind reads on.
----@param formats table<integer, csv.Format>
----@param column csv.Column
----@param opts { width: integer, align: "left"|"center"|"right"|nil }
-function M.set_padding(formats, column, opts)
-  local format = format_for(formats, column)
-  format.width = math.max(1, opts.width)
-  format.align = opts.align or format.align or natural_align(format)
-end
+M.MAX_PRECISION = MAX_PRECISION
 
 return M

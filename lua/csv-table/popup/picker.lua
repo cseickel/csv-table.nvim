@@ -1,16 +1,15 @@
 --[[
 Puts a searchable list in front of the user through `vim.ui.select`, the one
-interface telescope, snacks, fzf-lua and nvim's own prompt all implement, so
-the plugin depends on none of them.
+interface telescope, snacks, fzf-lua and nvim's own prompt all implement, so the
+plugin depends on none of them.
 
-Enter is the only key `vim.ui.select` offers, so an entry has exactly one
-action.
+Enter is the only key `vim.ui.select` offers, so an entry has exactly one action.
 ]]
 
 local M = {}
 
---- Offer `items` and run `on_choice` for the one picked. Choosing nothing is
---- how a picker is closed, and means the user wants nothing to happen.
+--- Offer `items` and run `on_choice` for the one picked. Choosing nothing is how
+--- a picker is closed, and means the user wants nothing to happen.
 ---@generic T
 ---@param items T[]
 ---@param opts { prompt: string, format_item: fun(item: T): string }

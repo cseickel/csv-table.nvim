@@ -1,6 +1,6 @@
 --[[
-Loads every module beside it and hands out the actions they registered, so
-adding a module is enough to add its actions.
+Loads every module beside it and hands out the actions they registered, so adding
+a module is enough to add its actions.
 
 Registers the two actions that belong to no one topic:
 - `refresh` reads the file again
@@ -9,20 +9,19 @@ Registers the two actions that belong to no one topic:
 
 local buffer = require("csv-table.buffer")
 local utils = require("csv-table.actions.utils")
-local state = require("csv-table.state")
 
 utils.register_action("refresh", "Read the file again", function(buf)
   buffer.render(buf)
 end)
 
 utils.register_action("clear_all", "Clear filters, sort, marks and hidden columns", function(buf)
-  state.reset(buf.state)
+  buf.query:reset()
   buffer.render(buf)
 end)
 
 -- Requiring a module is what registers its actions, so the require stands alone.
--- The directory comes from this file's own path, which keeps the list to the
--- copy of the plugin that is running.
+-- The directory comes from this file's own path, which keeps the list to the copy
+-- of the plugin that is running.
 local directory = vim.fs.dirname(debug.getinfo(1, "S").source:sub(2))
 
 for name in vim.fs.dir(directory) do

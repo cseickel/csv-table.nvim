@@ -10,9 +10,8 @@ it offers is one that would leave rows on screen.
 ]]
 
 local buffer = require("csv-table.buffer")
+local popup = require("csv-table.popup")
 local reader = require("csv-table.reader")
-local state = require("csv-table.state")
-local window = require("csv-table.window")
 
 local M = {}
 
@@ -49,19 +48,14 @@ local TEXT_CHOICES = {
 local function checklist(values, checked)
   local lines = {}
   for index, entry in ipairs(values) do
-    lines[index] = string.format(
-      "  [%s] %-40s %s",
-      checked[index] and "x" or " ",
-      entry.value,
-      entry.count
-    )
+    lines[index] =
+      string.format("  [%s] %-40s %s", checked[index] and "x" or " ", entry.value, entry.count)
   end
   return lines
 end
 
---- Choose values from the column's own contents.
---- The float is an ordinary buffer, so `/` searches the list the way it
---- searches anything else.
+--- Choose values from the column's own contents. The float is an ordinary buffer,
+--- so `/` searches the list the way it searches anything else.
 ---@param buf csv.Buffer
 ---@param column csv.Column
 ---@param values csv.Frequency[]
@@ -71,7 +65,7 @@ local function pick_values(buf, column, values)
   end
 
   local checked = {}
-  local bufnr, winid = window.open(checklist(values, checked), {
+  local bufnr, winid = popup.open(checklist(values, checked), {
     title = column.label .. "  (space toggles, enter applies)",
     modifiable = true,
   })
@@ -95,13 +89,13 @@ local function pick_values(buf, column, values)
     for index in pairs(checked) do
       table.insert(filter_values, values[index].value)
     end
-    window.close(winid)
+    popup.close(winid)
 
     if #filter_values == 0 then
       return
     end
     table.sort(filter_values)
-    state.add_filter(buf.state, { type = "in", column = column, values = filter_values })
+    buf.query:add_filter({ type = "in", column = column, values = filter_values })
     buffer.render(buf)
   end, { buffer = bufnr, nowait = true })
 end
@@ -121,14 +115,14 @@ local function ask_for_value(buf, column, choice)
       if not number then
         return reader.report(answer .. " is not a number")
       end
-      state.add_filter(buf.state, {
+      buf.query:add_filter({
         type = "numeric",
         column = column,
         operator = choice.operator,
         value = number,
       })
     else
-      state.add_filter(buf.state, {
+      buf.query:add_filter({
         type = "string",
         column = column,
         operator = choice.operator,
@@ -142,28 +136,23 @@ end
 --- Choose which sheet of a workbook to read.
 ---@param buf csv.Buffer
 function M.sheets(buf)
-  local sheets = buf.state.sheets
-  if #sheets == 0 then
-    return reader.report(vim.fn.fnamemodify(buf.state.source, ":t") .. " has no sheets")
+  local file = buf.query.file
+  if #file.sheets == 0 then
+    return reader.report(vim.fn.fnamemodify(file.path, ":t") .. " has no sheets")
   end
 
   local lines = {}
-  for index, name in ipairs(sheets) do
-    lines[index] = string.format(
-      "  %s %d  %s",
-      index - 1 == buf.state.sheet and "▸" or " ",
-      index,
-      name
-    )
+  for index, name in ipairs(file.sheets) do
+    lines[index] = string.format("  %s %d  %s", index - 1 == file.sheet and "▸" or " ", index, name)
   end
 
-  local bufnr, winid = window.open(lines, { title = "Sheets" })
-  vim.api.nvim_win_set_cursor(winid, { buf.state.sheet + 1, 0 })
+  local bufnr, winid = popup.open(lines, { title = "Sheets" })
+  vim.api.nvim_win_set_cursor(winid, { file.sheet + 1, 0 })
 
   vim.keymap.set("n", "<CR>", function()
     local sheet = vim.api.nvim_win_get_cursor(winid)[1] - 1
-    window.close(winid)
-    if sheet ~= buf.state.sheet then
+    popup.close(winid)
+    if sheet ~= file.sheet then
       buffer.open_sheet(buf, sheet)
     end
   end, { buffer = bufnr, nowait = true })
@@ -173,7 +162,7 @@ end
 ---@param buf csv.Buffer
 ---@param column csv.Column
 function M.open(buf, column)
-  local choices = state.is_numeric(buf.state, column) and NUMERIC_CHOICES or TEXT_CHOICES
+  local choices = buf.query:is_numeric(column) and NUMERIC_CHOICES or TEXT_CHOICES
 
   local lines = {}
   for index, choice in ipairs(choices) do
@@ -183,29 +172,29 @@ function M.open(buf, column)
   table.insert(lines, "  v   choose from the values in this column")
   table.insert(lines, "  e   a moonblade expression")
 
-  local bufnr, winid = window.open(lines, { title = "Filter " .. column.label })
+  local bufnr, winid = popup.open(lines, { title = "Filter " .. column.label })
 
   for _, choice in ipairs(choices) do
     vim.keymap.set("n", choice.key, function()
-      window.close(winid)
+      popup.close(winid)
       ask_for_value(buf, column, choice)
     end, { buffer = bufnr, nowait = true })
   end
 
   vim.keymap.set("n", "v", function()
-    window.close(winid)
-    buf.reader:frequency(buf.state, column, reader.report, function(values)
+    popup.close(winid)
+    buf.query.reader:frequency(buf.query, column, function(values)
       pick_values(buf, column, values)
     end)
   end, { buffer = bufnr, nowait = true })
 
   vim.keymap.set("n", "e", function()
-    window.close(winid)
+    popup.close(winid)
     vim.ui.input({ prompt = "moonblade expression: " }, function(expression)
       if expression == nil or expression == "" then
         return
       end
-      state.add_filter(buf.state, { type = "expr", expression = expression })
+      buf.query:add_filter({ type = "expr", expression = expression })
       buffer.render(buf)
     end)
   end, { buffer = bufnr, nowait = true })
