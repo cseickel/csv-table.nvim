@@ -25,11 +25,17 @@ local state = require("csv-table.state")
 
 local M = {}
 
+---@class csv.RowValues
+---@field layout csv.Layout What was on screen when the row was read.
+---@field row_id integer
+---@field values string[] Every value of that row, in file order.
+
 ---@class csv.Buffer
 ---@field bufnr integer
 ---@field state csv.State
 ---@field layout csv.Layout|nil Absent until the first render succeeds.
 ---@field stamp string|nil What the file looked like when the layout was read.
+---@field row_values csv.RowValues|nil The last row `csv-table.inspect` read whole.
 
 ---@type table<integer, csv.Buffer>
 local buffers = {}

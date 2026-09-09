@@ -75,18 +75,33 @@ function M.count(state, on_error, on_count)
   end)
 end
 
---- One whole row of the source, keyed by display name, with every value as it
---- is in the file rather than as the table draws it.
+-- What `fmt --ascii` writes between two values and at the end of a record.
+local UNIT_SEPARATOR = "\31"
+local RECORD_SEPARATOR = "\30"
+
+--- Every value of one row of the source, in file order, so the column with id 0
+--- holds the first of them. Each value is what the file holds rather than what
+--- the table draws.
+---
+--- Nothing is escaped on the way here, so a value holding a separator of its own
+--- would split into two. The two separators are control characters, which is
+--- what makes that worth trading for values that arrive as they are written.
 ---@param state csv.State
 ---@param rowid integer
 ---@param on_error fun(message: string)
----@param on_row fun(row: table<string, string>)
-function M.row(state, rowid, on_error, on_row)
-  M.run_json_lines(commands.row(state, rowid), on_error, function(rows)
-    if #rows == 0 then
+---@param on_values fun(values: string[])
+function M.row(state, rowid, on_error, on_values)
+  M.run(commands.row(state, rowid), on_error, function(stdout)
+    if stdout == "" then
       return on_error("row " .. rowid .. " is no longer in the file")
     end
-    on_row(rows[1])
+
+    local record = (stdout:gsub(RECORD_SEPARATOR .. "$", ""))
+    local values = vim.split(record, UNIT_SEPARATOR, { plain = true })
+    -- The last value is the padding column `csv-table.commands` appends, which
+    -- belongs to no column of the file.
+    table.remove(values)
+    on_values(values)
   end)
 end
 

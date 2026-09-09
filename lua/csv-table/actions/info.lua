@@ -20,10 +20,7 @@ utils.register_action("show_column", "Summarize this column", function(buf)
 end)
 
 utils.register_action("show_cell", "Show everything this cell holds", function(buf)
-  local column = active_cell.column(buf, 0)
-  if column then
-    inspect.cell(buf, column)
-  end
+  inspect.cell(buf)
 end)
 
 utils.register_action("show_row", "Show pivoted row values", function(buf)

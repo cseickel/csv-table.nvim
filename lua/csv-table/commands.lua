@@ -104,7 +104,17 @@ function M.sample(path, sheet, column_count)
   }, " | "))
 end
 
---- The argv reading one whole row as a JSON object, keyed by column id.
+--- The stage that keeps every record at least two values wide. A record holding
+--- one empty value would be written as an empty line, so the writer quotes it and
+--- the value arrives as `""`. `csv-table.query` drops this column as it splits
+--- the record.
+local PADDING = "map " .. pipeline.quote('("") as csv_table_padding')
+
+--- The argv reading one whole row, the ASCII unit separator between its values
+--- and the record separator at the end. `--quote-never` writes each value as the
+--- file holds it, so a comma, a quote or a newline inside a value arrives whole
+--- and nothing has to be unescaped.
+---
 --- `enum` numbers rows by their position in the source before anything filters
 --- or sorts them, so a row id is the number of rows to skip.
 ---@param state csv.State
@@ -112,9 +122,10 @@ end
 ---@return string[]
 function M.row(state, rowid)
   return run(state.source, state.sheet, table.concat({
-    rename_to_ids(#state.columns),
     string.format("slice -s %d -l 1", rowid),
-    "to jsonl --strings '*'",
+    PADDING,
+    "behead",
+    "fmt --ascii --quote-never",
   }, " | "))
 end
 

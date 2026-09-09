@@ -25,16 +25,13 @@ local M = {}
 
 local GAP = "  "
 
---- What `column` holds in this row. `csv-table.commands` renames the columns to
---- their ids before writing the JSON, so the key is a column id as a string.
---- `to jsonl --strings '*'` writes every value as a string, so anything else
---- arriving here is a number or a null, and the cell reads as empty.
----@param row table<string, string>
+--- What `column` holds in the row `values` came from. The values are in file
+--- order and a column id is a position in that order counting from zero.
+---@param values string[]
 ---@param column csv.Column
 ---@return string
-local function value_of(row, column)
-  local value = row[tostring(column.column_id)]
-  return type(value) == "string" and value or ""
+local function value_of(values, column)
+  return values[column.column_id + 1] or ""
 end
 
 --- How one value reads in a panel, and whether it came out as JSON.
@@ -55,41 +52,53 @@ end
 --- Every column of the row, in file order, so a column hidden from the table is
 --- still answered for.
 ---@param buf csv.Buffer
----@param row table<string, string>
+---@param values string[]
 ---@return csv.NamedValue[]
-local function named_values(buf, row)
-  local values = {}
+local function named_values(buf, values)
+  local named = {}
   for index, column in ipairs(state.source_order(buf.state)) do
-    values[index] = { name = column.label, value = value_of(row, column) }
+    named[index] = { name = column.label, value = value_of(values, column) }
   end
-  return values
+  return named
 end
 
---- Read the row the active cell is in. The row's number goes to `on_row` too,
---- taken before xan runs, so a panel opened over a row the user has since left
---- still says which row it is showing. The number is the one on screen, which
---- is what the user can recognize.
+--- Read the row the active cell is in, and hand back the cell along with it.
+---
+--- The values stay on the buffer under the layout they were read with, so
+--- reading cell after cell along one row runs xan once, and a render drops them:
+--- every render reads the file again and parses a layout of its own. A read that
+--- returns after one files its values under the layout it started on, which no
+--- later read asks for.
+---
+--- The cell is the one under the cursor when the read starts, so a panel opened
+--- over a row the user has since left still shows the row it was asked for.
 ---@param buf csv.Buffer
----@param on_row fun(row: table<string, string>, number: integer)
-local function with_row(buf, on_row)
+---@param on_row fun(values: string[], cell: csv.Cell)
+local function read_row(buf, on_row)
   local cell = active_cell.cell(buf, 0)
   if not cell then
     return
   end
 
-  query.row(buf.state, cell.row.row_id, query.report, function(row)
-    on_row(row, cell.row.row_number)
+  local layout = buf.layout
+  local cached = buf.row_values
+  if cached and cached.layout == layout and cached.row_id == cell.row.row_id then
+    return on_row(cached.values, cell)
+  end
+
+  query.row(buf.state, cell.row.row_id, query.report, function(values)
+    buf.row_values = { layout = layout, row_id = cell.row.row_id, values = values }
+    on_row(values, cell)
   end)
 end
 
 --- Show what the active cell holds, at full length.
 ---@param buf csv.Buffer
----@param column csv.Column
-function M.cell(buf, column)
-  with_row(buf, function(row)
-    local lines, json = value_lines(value_of(row, column))
-    local bufnr = window.open(lines, { title = column.label, wrap = true })
-    if json then
+function M.cell(buf)
+  read_row(buf, function(values, cell)
+    local lines, is_json = value_lines(value_of(values, cell.column))
+    local bufnr = window.open(lines, { title = cell.column.label, wrap = true })
+    if is_json then
       vim.bo[bufnr].filetype = "json"
     end
   end)
@@ -218,16 +227,16 @@ end
 --- column being read is off the screen.
 ---@param buf csv.Buffer
 function M.row(buf)
-  with_row(buf, function(row, number)
-    local values = named_values(buf, row)
+  read_row(buf, function(values, cell)
+    local named = named_values(buf, values)
 
     local width = 0
-    for _, field in ipairs(values) do
+    for _, field in ipairs(named) do
       width = math.max(width, columns.text_length(field.name))
     end
 
-    picker.choose(values, {
-      prompt = "row " .. number,
+    picker.choose(named, {
+      prompt = "row " .. cell.row.row_number,
       format_item = function(field)
         local padding = string.rep(" ", width - columns.text_length(field.name))
         return field.name .. padding .. GAP .. field.value:gsub("%s+", " ")
