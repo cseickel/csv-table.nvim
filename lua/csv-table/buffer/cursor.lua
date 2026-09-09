@@ -177,7 +177,7 @@ end
 ---@param buffer csv.Buffer
 ---@param window integer
 ---@return csv.Cell|nil
-function M.active(buffer, window)
+function M.active_cell(buffer, window)
   local active = get(buffer, window)
   return active and { row = active.row, column = active.column } or nil
 end

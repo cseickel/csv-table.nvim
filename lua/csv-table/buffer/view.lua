@@ -48,7 +48,7 @@ vim.api.nvim_create_autocmd("WinClosed", {
 ---@param buffer csv.Buffer
 ---@param window integer
 function M.restore(buffer, window)
-  local cell = cursor.active(buffer, window)
+  local cell = cursor.active_cell(buffer, window)
   local view = views[window]
 
   vim.schedule(function()
