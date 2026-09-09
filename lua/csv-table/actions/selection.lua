@@ -2,12 +2,10 @@
 Registers the actions that pick cells out and export them.
 
 Starting and resuming a selection are not here. Nvim's own visual modes say the
-user is extending, and `movement` takes the head along with every move made in
-one, so `v`, `V` and `gv` all work with no action of ours.
+user is extending, and `csv-table.view.movement` takes the head along with every
+move made in one, so `v`, `V` and `gv` all work with no action of ours.
 ]]
 
-local export = require("csv-table.buffer.export")
-local movement = require("csv-table.buffer.movement")
 local picker = require("csv-table.popup.picker")
 local utils = require("csv-table.actions.utils")
 
@@ -15,31 +13,31 @@ local EDGE = utils.EDGE
 
 ---@param rows integer
 ---@param cells integer
----@return fun(buf: csv.Buffer)
+---@return fun(view: csv.View)
 local function extender(rows, cells)
-  return function(buf)
-    movement.extend(buf, 0, rows, cells)
+  return function(view)
+    view:extend(rows, cells)
   end
 end
 
 --- Pick out the block `kind` covers, anchored on the active cell.
 ---@param kind csv.SelectionKind
----@return fun(buf: csv.Buffer)
+---@return fun(view: csv.View)
 local function selector(kind)
-  return function(buf)
-    movement.select(buf, 0, kind)
+  return function(view)
+    view:select_kind(kind)
   end
 end
 
 utils.register_action("select_column", "Select this whole column", selector("column"))
 utils.register_action("select_page", "Select every cell on this page", selector("page"))
 
-utils.register_action("clear_selection", "Select nothing", function(buf)
-  movement.clear_selection(buf)
+utils.register_action("clear_selection", "Select nothing", function(view)
+  view:deselect()
 end)
 
-utils.register_action("swap_selection_ends", "Move to the other end of the selection", function(buf)
-  movement.swap_ends(buf, 0)
+utils.register_action("swap_selection_ends", "Move to the other end of the selection", function(view)
+  view:swap_ends()
 end)
 
 utils.register_action("extend_left", "Take the selection one column left", extender(0, -1))
@@ -68,15 +66,15 @@ utils.register_action(
   extender(EDGE, 0)
 )
 
-utils.register_action("extend_to_click", "Take the selection out to the click", function(buf)
+utils.register_action("extend_to_click", "Take the selection out to the click", function(view)
   local position = vim.fn.getmousepos()
-  if position.winid ~= vim.api.nvim_get_current_win() or position.column == 0 then
+  if position.winid ~= view.window or position.column == 0 then
     return
   end
 
-  local cell = buf.page:cell_at(position.line, position.column - 1)
+  local cell = view.buffer.page:cell_at(position.line, position.column - 1)
   if cell then
-    movement.extend_to(buf, 0, cell)
+    view:extend_to(cell)
   end
 end)
 
@@ -147,18 +145,18 @@ local YANKS = {
 }
 
 for _, yank in ipairs(YANKS) do
-  utils.register_action(yank.action, yank.description, function(buf)
-    export.yank(buf, yank.format, yank.headers)
+  utils.register_action(yank.action, yank.description, function(view)
+    view:yank({ format = yank.format, headers = yank.headers })
   end)
 end
 
-utils.register_action("yank_picker", "Choose a format and yank the selected cells", function(buf)
+utils.register_action("yank_picker", "Choose a format and yank the selected cells", function(view)
   picker.choose(YANKS, {
     prompt = "yank as",
     format_item = function(yank)
       return yank.label
     end,
   }, function(yank)
-    export.yank(buf, yank.format, yank.headers)
+    view:yank({ format = yank.format, headers = yank.headers })
   end)
 end)

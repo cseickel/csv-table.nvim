@@ -7,16 +7,15 @@ Registers the two actions that belong to no one topic:
 - `clear_all` drops the filters, sort, marks and hidden columns
 ]]
 
-local buffer = require("csv-table.buffer")
 local utils = require("csv-table.actions.utils")
 
-utils.register_action("refresh", "Read the file again", function(buf)
-  buffer.render(buf)
+utils.register_action("refresh", "Read the file again", function(view)
+  view.buffer:render()
 end)
 
-utils.register_action("clear_all", "Clear filters, sort, marks and hidden columns", function(buf)
-  buf.query:reset()
-  buffer.render(buf)
+utils.register_action("clear_all", "Clear filters, sort, marks and hidden columns", function(view)
+  view.buffer.query:reset()
+  view.buffer:render()
 end)
 
 -- Requiring a module is what registers its actions, so the require stands alone.

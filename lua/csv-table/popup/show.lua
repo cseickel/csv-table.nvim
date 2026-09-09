@@ -1,13 +1,11 @@
 --[[
-Shows what a cell or a row holds, read back from the file, since a value wider
-than its column is drawn cut and the text on screen cannot answer what a cell
-holds.
+Shows what a cell or a row holds, read back from the file, since a value wider than
+its column is drawn cut and the text on screen cannot answer what a cell holds.
 
 - `cell` opens what the active cell holds, at full length
 - `row` offers every column of the row to be searched, and copies the choice
 ]]
 
-local cursor = require("csv-table.buffer.cursor")
 local json = require("csv-table.utils.json")
 local picker = require("csv-table.popup.picker")
 local popup = require("csv-table.popup")
@@ -29,15 +27,16 @@ local function value_lines(value)
 end
 
 --- Show what the active cell holds, at full length.
----@param buf csv.Buffer
-function M.cell(buf)
-  local cell = cursor.active_cell(buf, 0)
+---@param view csv.View
+function M.cell(view)
+  local cell = view:active_cell()
   if not cell then
     return
   end
 
+  local query = view.buffer.query
   local ref = { row_id = cell.row.row_id, column_id = cell.column.column_id }
-  buf.query.reader:cell(buf.query, ref, function(value)
+  query.reader:cell(query, ref, function(value)
     local lines, is_json = value_lines(value)
     local bufnr = popup.open(lines, { title = cell.column.label, wrap = true })
     if is_json then
@@ -47,24 +46,25 @@ function M.cell(buf)
 end
 
 --- Search the active cell's row by column name or by value, and copy what is
---- chosen. A row is read by searching it once a file is wide enough that the
---- column being read is off the screen.
+--- chosen. A row is read by searching it once a file is wide enough that the column
+--- being read is off the screen.
 ---
---- The cell is read before xan runs, so a panel opened over a row the user has
---- since left still says which row it is showing.
----@param buf csv.Buffer
-function M.row(buf)
-  local cell = cursor.active_cell(buf, 0)
+--- The cell is read before xan runs, so a panel opened over a row the user has since
+--- left still says which row it is showing.
+---@param view csv.View
+function M.row(view)
+  local cell = view:active_cell()
   if not cell then
     return
   end
 
-  buf.query.reader:row_values(buf.query, cell.row.row_id, function(values)
-    -- Every column of the file, in file order, so a column hidden from the table
-    -- is still answered for.
+  local query = view.buffer.query
+  query.reader:row_values(query, cell.row.row_id, function(values)
+    -- Every column of the file, in file order, so a column hidden from the table is
+    -- still answered for.
     local named = {}
     local width = 0
-    for index, column in ipairs(buf.query.file.columns) do
+    for index, column in ipairs(query.file.columns) do
       named[index] = { name = column.label, value = values[column.column_id] or "" }
       width = math.max(width, text.length(column.label))
     end

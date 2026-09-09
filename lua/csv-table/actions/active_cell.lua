@@ -3,37 +3,34 @@ Registers the actions that move the active cell by whole cells.
 
 A count moves that many cells, so `5l` is five columns and `5G` is the row the
 gutter numbers 5. The default map binds only the keys where that count is the
-point, since a plain `j` is already a row and the snap in `movement` lands it on
-the right cell.
+point, since a plain `j` is already a row and the snap in `csv-table.view.movement`
+lands it on the right cell.
 ]]
 
-local cursor = require("csv-table.buffer.cursor")
-local movement = require("csv-table.buffer.movement")
 local utils = require("csv-table.actions.utils")
 
 ---@param rows integer
 ---@param cells integer
----@return fun(buf: csv.Buffer)
+---@return fun(view: csv.View)
 local function stepper(rows, cells)
-  return function(buf)
-    movement.step(buf, 0, rows * vim.v.count1, cells * vim.v.count1)
+  return function(view)
+    view:step(rows * vim.v.count1, cells * vim.v.count1)
   end
 end
 
 --- Go to the row numbered `count`, or to `edge` of the page when no count was
---- given. The count is the number the gutter shows, so what the user types is
---- what they read. A number belonging to another page clamps to the near end of
---- this one.
+--- given. The count is the number the gutter shows, so what the user types is what
+--- they read. A number belonging to another page clamps to the near end of this one.
 ---@param edge "first_line"|"last_line"
----@return fun(buf: csv.Buffer)
+---@return fun(view: csv.View)
 local function row_jump_action(edge)
-  return function(buf)
-    local cell = cursor.active_cell(buf, 0)
+  return function(view)
+    local cell = view:active_cell()
     if not cell then
       return
     end
 
-    local page = buf.page
+    local page = view.buffer.page
     local first = page:row_at_line(page.first_line)
     local last = page:row_at_line(page.last_line)
     local row = edge == "first_line" and first or last
@@ -41,7 +38,7 @@ local function row_jump_action(edge)
       local number = math.min(math.max(vim.v.count, first.row_number), last.row_number)
       row = page:row_by_number(number) or row
     end
-    movement.go_to(buf, 0, { row = row, column = cell.column })
+    view:go_to({ row = row, column = cell.column })
   end
 end
 

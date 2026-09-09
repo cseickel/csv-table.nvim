@@ -30,14 +30,14 @@ press: a key press {
   class: entry
 }
 
-run: "action.run(buf)" {class: entry}
+run: "action.run(view)" {class: entry}
 
-change: "buf.query:add_filter, sort_by, hide_column, turn_page\nchange what the user is asking for" {class: data}
-render: "buffer.render\nthe whole page is read again" {class: draw}
-move: "buffer.movement\nmoves the active cell, and the head of the selection" {class: draw}
-redraw: "buffer.color.redraw\nextmarks over the text already there" {class: draw}
+change: "view.buffer.query\nadd_filter, sort_by, hide_column, turn_page" {class: data}
+render: "Buffer:render\nruns the query and draws the page it returns" {class: draw}
+move: "View:step, go_to, extend, select_kind\nmoves the active cell and the head of the selection" {class: draw}
+redraw: "View:draw\nthe active cell and the selection, as extmarks in csv-view" {class: draw}
 float: "popup.panel, popup.show, popup.dialog\nopen a float, leaving the table alone" {class: ui}
-yank: "buffer.export.yank\nreads the values through the reader, writes the registers" {class: draw}
+yank: "View:yank\nreader:export writes the block, setreg puts it in + and the unnamed register" {class: draw}
 
 next: 04-read-path {
   shape: document
@@ -45,7 +45,7 @@ next: 04-read-path {
 }
 
 setup.apply -> press
-press -> run
+press -> run: "buf:view(0), the view for the current window"
 
 run -> change: sort, filter, mark, page, column
 change -> render

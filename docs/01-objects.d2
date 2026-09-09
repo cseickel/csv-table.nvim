@@ -20,6 +20,16 @@ classes: {
 
 buffer: "csv.Buffer\none per buffer nvim named after a spreadsheet" {class: draw}
 
+view: csv.View {
+  shape: sql_table
+  class: draw
+  window: the window this view belongs to
+  active: the cell the user is on, as row id and column id
+  "position, edge": where the real cursor is parked, and which end of the cell
+  "anchor, head, kind": the selection, both ends as row id and column id
+  viewport: what winsaveview last returned for the window
+}
+
 file: csv.File {
   shape: sql_table
   class: data
@@ -42,8 +52,7 @@ query: csv.Query {
   marked: row ids
   marked_columns: column ids
   clipboard: cut columns waiting to be pasted
-  selection: anchor, head, kind
-  "page_number, limit": which slice of rows
+  "page_number, limit": the page of the result, and the rows per page
   row_count: how many rows the filters leave
 }
 
@@ -73,6 +82,8 @@ empty: "file.empty and page.empty\nanswer every question with no columns and no 
 
 buffer -> query
 buffer -> page: what is drawn now
+buffer -> view: one per window that has shown the buffer
+view -> page: "cell_of turns a row id and column id\ninto the cell drawn now"
 query -> file
 query -> reader
 reader -> xan: spawns

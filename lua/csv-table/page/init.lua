@@ -56,6 +56,14 @@ function M.new(fields)
   return setmetatable(fields, Page)
 end
 
+--- What names `cell` across a render, since a row id and a column id outlive the
+--- page they were read from. `Page:cell_of` is the way back.
+---@param cell csv.Cell
+---@return csv.CellRef
+function M.ref_of(cell)
+  return { row_id = cell.row.row_id, column_id = cell.column.column_id }
+end
+
 --- A page nothing has been drawn on. `first_line` past `last_line` is what says
 --- it holds no rows, which is the same answer a filter leaving nothing gives.
 ---@return csv.Page
@@ -150,6 +158,21 @@ end
 ---@return csv.Column|nil
 function Page:column_at(column_number)
   return self.columns[column_number]
+end
+
+--- The cell `ref` names here, absent once the row or the column has left the page.
+---@param ref csv.CellRef|nil
+---@return csv.Cell|nil
+function Page:cell_of(ref)
+  if not ref then
+    return nil
+  end
+  local row = self:row_by_id(ref.row_id)
+  local column = self:column_by_id(ref.column_id)
+  if not row or not column then
+    return nil
+  end
+  return { row = row, column = column }
 end
 
 ---@param column_id integer

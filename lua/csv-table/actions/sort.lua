@@ -5,25 +5,24 @@ Sorting by a column and adding it as a less significant key are separate keys, s
 the same column asked for twice means two different things.
 ]]
 
-local buffer = require("csv-table.buffer")
 local utils = require("csv-table.actions.utils")
 
 ---@param direction "asc"|"desc"
----@return fun(buf: csv.Buffer)
+---@return fun(view: csv.View)
 local function sort_action(direction)
-  return function(buf)
-    utils.on_column(buf, function(column)
-      buf.query:sort_by(column, direction)
+  return function(view)
+    utils.on_column(view, function(column)
+      view.buffer.query:sort_by(column, direction)
     end)
   end
 end
 
 ---@param direction "asc"|"desc"
----@return fun(buf: csv.Buffer)
+---@return fun(view: csv.View)
 local function add_sort_key_action(direction)
-  return function(buf)
-    utils.on_column(buf, function(column)
-      buf.query:add_sort_key(column, direction)
+  return function(view)
+    utils.on_column(view, function(column)
+      view.buffer.query:add_sort_key(column, direction)
     end)
   end
 end
@@ -49,13 +48,13 @@ utils.register_action(
   add_sort_key_action("desc")
 )
 
-utils.register_action("remove_sort_key", "Drop this column from the sort", function(buf)
-  utils.on_column(buf, function(column)
-    buf.query:remove_sort_key(column)
+utils.register_action("remove_sort_key", "Drop this column from the sort", function(view)
+  utils.on_column(view, function(column)
+    view.buffer.query:remove_sort_key(column)
   end)
 end)
 
-utils.register_action("clear_sort", "Clear the sort entirely", function(buf)
-  buf.query:clear_sort()
-  buffer.render(buf)
+utils.register_action("clear_sort", "Clear the sort entirely", function(view)
+  view.buffer.query:clear_sort()
+  view.buffer:render()
 end)

@@ -1,12 +1,11 @@
 --[[
-Writes the selected cells to the clipboard.
+The `csv.View` method that writes the selected cells to the clipboard.
 
 Every format but `display` is written by the reader from the file, so a column
-narrow enough to have been drawn cut still exports whole. `display` is the text
-the buffer already holds, so a value drawn cut is exported cut.
+narrow enough to have been drawn cut still exports whole. `display` is the text the
+buffer already holds, so a value drawn cut is exported cut.
 ]]
 
-local cursor = require("csv-table.buffer.cursor")
 local report = require("csv-table.utils.report")
 
 local M = {}
@@ -19,37 +18,15 @@ local function to_registers(text)
   vim.fn.setreg('"', text)
 end
 
---- What an export takes: the selected cells while a selection is set, and the
---- active cell on its own otherwise.
----@param buf csv.Buffer
----@return csv.Bounds|nil
-local function bounds_of(buf)
-  local bounds = buf.query:selection_bounds(buf.page)
-  if bounds then
-    return bounds
-  end
-
-  local cell = cursor.active_cell(buf, 0)
-  if not cell then
-    return nil
-  end
-  local column_number = buf.page:column_number(cell.column)
-  return {
-    top = cell.row.buffer_line,
-    bottom = cell.row.buffer_line,
-    left = column_number,
-    right = column_number,
-  }
-end
-
 --- The rows and columns `bounds` covers, named the way the reader names them.
----@param buf csv.Buffer
 ---@param bounds csv.Bounds
 ---@return csv.Block|nil
-local function block_of(buf, bounds)
+local function block_of(self, bounds)
+  local drawn = self.buffer.page
+
   local columns = {}
   for column_number = bounds.left, bounds.right do
-    local column = buf.page:column_at(column_number)
+    local column = drawn:column_at(column_number)
     if not column then
       return nil
     end
@@ -58,7 +35,7 @@ local function block_of(buf, bounds)
 
   local row_ids = {}
   for buffer_line = bounds.top, bounds.bottom do
-    local row = buf.page:row_at_line(buffer_line)
+    local row = drawn:row_at_line(buffer_line)
     if not row then
       return nil
     end
@@ -73,24 +50,24 @@ end
 ---
 --- Each line is cut at its own cell ranges, because a line holding a multi-byte
 --- character has its separators at byte offsets the header does not share.
----@param buf csv.Buffer
 ---@param bounds csv.Bounds
 ---@param headers boolean
 ---@return string
-local function drawn_text(buf, bounds, headers)
+local function drawn_text(self, bounds, headers)
+  local drawn = self.buffer.page
   local lines = {}
 
   ---@param buffer_line integer
   local function cut(buffer_line)
-    local cells = buf.page:cell_ranges(buffer_line)
+    local cells = drawn:cell_ranges(buffer_line)
     local first, last = cells[bounds.left], cells[bounds.right]
     if first and last then
-      table.insert(lines, buf.page.lines[buffer_line]:sub(first.from + 1, last.to))
+      table.insert(lines, drawn.lines[buffer_line]:sub(first.from + 1, last.to))
     end
   end
 
   if headers then
-    cut(buf.page.header_line)
+    cut(drawn.header_line)
   end
   for buffer_line = bounds.top, bounds.bottom do
     cut(buffer_line)
@@ -98,13 +75,10 @@ local function drawn_text(buf, bounds, headers)
   return table.concat(lines, "\n")
 end
 
---- Export the selected cells in `format`, which is `tsv`, `csv`, `json`,
---- `markdown` or `display`.
----@param buf csv.Buffer
----@param format string
----@param headers boolean Whether to put the column names above the cells.
-function M.yank(buf, format, headers)
-  local bounds = bounds_of(buf)
+--- Copy the selected cells, or the active cell when nothing is selected.
+---@param opts { format: "tsv"|"csv"|"json"|"markdown"|"display", headers: boolean }
+function M.yank(self, opts)
+  local bounds = self:bounds() or self:active_bounds()
   if not bounds then
     return report.error("there is nothing to yank")
   end
@@ -115,20 +89,20 @@ function M.yank(buf, format, headers)
     vim.notify(string.format("csv-table: yanked %d rows by %d columns", rows, wide))
   end
 
-  if format == "display" then
-    to_registers(drawn_text(buf, bounds, headers))
+  if opts.format == "display" then
+    to_registers(drawn_text(self, bounds, opts.headers))
     return done()
   end
 
-  local block = block_of(buf, bounds)
+  local block = block_of(self, bounds)
   if not block then
     return report.error("the selected cells are no longer on display")
   end
 
-  buf.query.reader:export(buf.query, {
+  self.buffer.query.reader:export(self.buffer.query, {
     block = block,
-    format = format,
-    headers = headers,
+    format = opts.format,
+    headers = opts.headers,
   }, function(text)
     to_registers(text)
     done()

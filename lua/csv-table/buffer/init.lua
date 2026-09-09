@@ -1,27 +1,25 @@
 --[[
-Defines `csv.Buffer`, one per buffer nvim named after a spreadsheet: the query
-the user is building and the page it drew.
+Defines `csv.Buffer`, one per buffer nvim named after a spreadsheet: the query the
+user is building, the page it drew, and one `csv.View` per window showing it.
 
 A buffer is recorded the moment the read command fires, holding an empty file, an
 empty query and an empty page, so a second read command finds it rather than
-starting a second reader. The file, the query and the page are replaced as each
-one is read.
+starting a second reader. The file, the query and the page are replaced as each one
+is read.
 
 The buffer stays nomodifiable. Its text is xan's output, and writing it back over
 the file would destroy the file.
 ]]
 
 local color = require("csv-table.buffer.color")
-local cursor = require("csv-table.buffer.cursor")
 local file = require("csv-table.file")
 local guicursor = require("csv-table.buffer.guicursor")
-local movement = require("csv-table.buffer.movement")
 local page = require("csv-table.page")
 local query = require("csv-table.query")
 local reader = require("csv-table.reader")
 local report = require("csv-table.utils.report")
 local statuscolumn = require("csv-table.buffer.statuscolumn")
-local view = require("csv-table.buffer.view")
+local view = require("csv-table.view")
 
 local M = {}
 
@@ -30,7 +28,12 @@ local M = {}
 ---@field query csv.Query The file, the reader and everything asked of them.
 ---@field page csv.Page   What is drawn now.
 ---@field read_state csv.QueryState What the drawn page was read for.
+---@field views csv.View[] One per window that has shown this table.
+local Buffer = {}
+Buffer.__index = Buffer
 
+-- nvim names a buffer with a number, so every entry point starts from one and this
+-- is what turns it into the table that buffer holds.
 ---@type table<integer, csv.Buffer>
 local buffers = {}
 
@@ -53,10 +56,61 @@ local function replace_lines(bufnr, lines)
   vim.bo[bufnr].modifiable = false
 end
 
+--- The view a window with none of its own copies, which is the one in the window
+--- just left, since that is the window a split came from.
+---@param buffer csv.Buffer
+---@return csv.View|nil
+local function source_view(buffer)
+  local previous = vim.fn.win_getid(vim.fn.winnr("#"))
+  for _, held in ipairs(buffer.views) do
+    if held.window == previous then
+      return held
+    end
+  end
+  return buffer.views[1]
+end
+
+--- The view `window` has of this table. A window with none of its own takes over a
+--- closed window's view first, then one belonging to a window that has moved on to
+--- another buffer, and copies a view only when neither is there, so a split starts
+--- where the window it came from left off.
+---@param window integer 0 for the current window, as the API takes it.
+---@return csv.View
+function Buffer:view(window)
+  if window == 0 then
+    window = vim.api.nvim_get_current_win()
+  end
+
+  for _, held in ipairs(self.views) do
+    if held.window == window then
+      return held
+    end
+  end
+
+  for _, held in ipairs(self.views) do
+    if not vim.api.nvim_win_is_valid(held.window) then
+      held.window = window
+      return held
+    end
+  end
+
+  for _, held in ipairs(self.views) do
+    if not held:on_screen() then
+      held.window = window
+      return held
+    end
+  end
+
+  local source = source_view(self)
+  local made = source and source:clone(window) or view.new(self, window)
+  table.insert(self.views, made)
+  return made
+end
+
 -- Entering one of nvim's visual modes is what says the user is picking cells out,
 -- whichever key they entered it with. The pattern is the mode nvim came from and
--- the mode it went to, so `\22` is blockwise visual and a switch between two
--- visual modes matches as well.
+-- the mode it went to, so `\22` is blockwise visual and a switch between two visual
+-- modes matches as well.
 vim.api.nvim_create_autocmd("ModeChanged", {
   group = buffer_group,
   pattern = "*:[vV\22]",
@@ -68,9 +122,9 @@ vim.api.nvim_create_autocmd("ModeChanged", {
 
     local was = event.match:match("^(.*):")
     if was == "v" or was == "V" or was == "\22" then
-      return movement.change_kind(buffer)
+      return buffer:view(0):change_kind()
     end
-    movement.start_extending(buffer, 0)
+    buffer:view(0):start_extending()
   end,
 })
 
@@ -83,57 +137,78 @@ vim.api.nvim_create_autocmd("ModeChanged", {
   callback = function()
     local buffer = buffers[vim.api.nvim_get_current_buf()]
     if buffer then
-      movement.mark_selection(buffer)
+      buffer:view(0):mark_selection()
     end
   end,
 })
 
--- Each window holds its own active cell and one extmark draws it, so the window
--- entered takes the highlight with it.
+-- One namespace on the buffer draws the active cell and the selection, so the
+-- window entered takes them from the window left.
 vim.api.nvim_create_autocmd("WinEnter", {
   group = buffer_group,
   callback = function()
     local buffer = buffers[vim.api.nvim_get_current_buf()]
     if buffer then
-      cursor.restore(buffer, 0)
+      buffer:view(0):restore()
     end
   end,
 })
 
-vim.api.nvim_create_autocmd("WinClosed", {
+-- `WinScrolled` names the windows that scrolled in `v:event`, keyed by window, and
+-- the mouse wheel scrolls a window without entering it, so the current window is
+-- not the one to record. The `all` key it also holds is not a window.
+vim.api.nvim_create_autocmd("WinScrolled", {
   group = buffer_group,
-  callback = function(event)
-    cursor.drop_window(tonumber(event.match))
+  callback = function()
+    for name in pairs(vim.v.event) do
+      local window = tonumber(name)
+      if window and vim.api.nvim_win_is_valid(window) then
+        local buffer = buffers[vim.api.nvim_win_get_buf(window)]
+        if buffer then
+          buffer:view(window):remember()
+        end
+      end
+    end
   end,
 })
 
---- Run the query for `buffer` and draw the page it returns.
----@param buffer csv.Buffer
+--- Run the query and draw the page it returns.
 ---@param on_rendered fun()|nil Runs once the new text is in the buffer.
-function M.render(buffer, on_rendered)
-  buffer.query.reader:page(buffer.query, function(drawn)
-    if not vim.api.nvim_buf_is_valid(buffer.bufnr) then
+function Buffer:render(on_rendered)
+  self.query.reader:page(self.query, function(drawn)
+    if not vim.api.nvim_buf_is_valid(self.bufnr) then
       return
     end
 
     -- A page past the first that came back empty is a page past the end, which
     -- happens when the rows divide evenly into pages. Step back and draw the page
     -- that does have rows, so the user sees the view stay where it was.
-    if drawn:row_count() < 1 and buffer.query.page_number > 0 then
-      buffer.query:turn_page(-1)
-      return M.render(buffer, on_rendered)
+    if drawn:row_count() < 1 and self.query.page_number > 0 then
+      self.query:turn_page(-1)
+      return self:render(on_rendered)
     end
 
-    buffer.page = drawn
-    buffer.read_state = buffer.query:after_read(buffer.read_state, drawn)
-    replace_lines(buffer.bufnr, drawn.lines)
-    color.redraw(buffer)
-    -- Nothing here reads this. A winbar can pin the header line while the buffer
-    -- is scrolled past it, and this is where it finds which line that is.
-    vim.b[buffer.bufnr].table_header = drawn.header_line
+    self.page = drawn
+    local moved
+    self.read_state, moved = self.query:after_read(self.read_state, drawn)
+    replace_lines(self.bufnr, drawn.lines)
+    color.redraw(self)
+    -- Nothing here reads this. A winbar can pin the header line while the buffer is
+    -- scrolled past it, and this is where it finds which line that is.
+    vim.b[self.bufnr].table_header = drawn.header_line
 
-    for _, window in ipairs(vim.fn.win_findbuf(buffer.bufnr)) do
-      cursor.restore(buffer, window)
+    -- Every view, since a page that moved leaves the ends of a selection naming
+    -- rows nobody picked, and a window that stepped away comes back to this view.
+    if moved then
+      for _, held in ipairs(self.views) do
+        held:clear_selection()
+      end
+    end
+
+    for _, window in ipairs(vim.fn.win_findbuf(self.bufnr)) do
+      local shown = self:view(window)
+      shown:restore()
+      shown:draw()
     end
 
     if on_rendered then
@@ -144,63 +219,64 @@ end
 
 --- How wide `column` is drawn, in characters, or nil when it is hidden or nothing
 --- has been drawn yet.
----@param buffer csv.Buffer
 ---@param column csv.Column
 ---@return integer|nil
-function M.column_width(buffer, column)
-  local column_number = buffer.page:column_number(column)
-  return column_number and buffer.page:cell_width(column_number) or nil
+function Buffer:column_width(column)
+  local column_number = self.page:column_number(column)
+  return column_number and self.page:cell_width(column_number) or nil
 end
 
 --- The rows of the result on display, counting from one.
----@param buffer csv.Buffer
 ---@return integer first
 ---@return integer last
-function M.row_range(buffer)
-  local first = buffer.query:first_row_number()
-  return first, first + buffer.page:row_count() - 1
+function Buffer:row_range()
+  local first = self.query:first_row_number()
+  return first, first + self.page:row_count() - 1
 end
 
---- Read the file and draw it. Every query the user built names columns of the
---- sheet being left, so a fresh file gets a fresh query.
----@param buffer csv.Buffer
+--- Read the file and draw it. Every query the user built names columns of the file
+--- being left, so a fresh read gets a fresh query. The views stay: a row id is a
+--- position in the file, and a file read again holds the same rows in the same
+--- places.
 ---@param sheet integer|nil 0-based.
 ---@param on_ready fun(buffer: csv.Buffer)|nil
-local function load(buffer, sheet, on_ready)
-  local buffer_reader = buffer.query.reader
-  local path = buffer.query.file.path
+function Buffer:load(sheet, on_ready)
+  local buffer_reader = self.query.reader
+  local path = self.query.file.path
 
   file.open(buffer_reader, path, sheet, function(opened)
-    if not vim.api.nvim_buf_is_valid(buffer.bufnr) then
+    if not vim.api.nvim_buf_is_valid(self.bufnr) then
       return
     end
 
-    buffer.query = query.new(opened, buffer_reader, function()
+    self.query = query.new(opened, buffer_reader, function()
       vim.cmd.redrawstatus()
     end)
-    M.render(buffer)
+    self.read_state = self.query:state(page.empty())
+    self:render()
     if on_ready then
-      on_ready(buffer)
+      on_ready(self)
     end
   end)
 end
 
---- Read another sheet of the same workbook.
----@param buffer csv.Buffer
+--- Read another sheet of the same workbook. Another sheet is other data, so every
+--- row and column a view names is gone and the views go with them.
 ---@param sheet integer 0-based.
-function M.open_sheet(buffer, sheet)
-  load(buffer, sheet)
+function Buffer:open_sheet(sheet)
+  self.views = {}
+  self:load(sheet)
 end
 
---- A table is read by scrolling sideways, so wrapping would break every row into
---- a variable number of screen lines and unalign the columns. The gutter draws
---- the row number through `csv-table.buffer.statuscolumn`, which takes the place
---- of the line numbers.
+--- A table is read by scrolling sideways, so wrapping would break every row into a
+--- variable number of screen lines and unalign the columns. The gutter draws the row
+--- number through `csv-table.buffer.statuscolumn`, which takes the place of the line
+--- numbers.
 ---
 --- Each is set through `vim.wo[window][0]`, which is `:setlocal`: the value holds
 --- for this buffer in that window alone. `vim.wo[window]` is `:set`, which also
---- writes the value the window keeps for every buffer, and the next buffer shown
---- in the window would inherit it.
+--- writes the value the window keeps for every buffer, and the next buffer shown in
+--- the window would inherit it.
 ---@param bufnr integer
 local function set_window_options(bufnr)
   for _, window in ipairs(vim.fn.win_findbuf(bufnr)) do
@@ -212,8 +288,8 @@ local function set_window_options(bufnr)
   end
 end
 
---- Record the buffer and take over its options and autocommands. The file has
---- not been read, so the query is over an empty file and the page is empty.
+--- Record the buffer and take over its options and autocommands. The file has not
+--- been read, so the query is over an empty file and the page is empty.
 ---@param bufnr integer
 ---@param path string
 ---@return csv.Buffer
@@ -223,26 +299,27 @@ local function record(bufnr, path)
   vim.bo[bufnr].modifiable = false
 
   local empty = page.empty()
-  local buffer = {
+  local buffer = setmetatable({
     bufnr = bufnr,
     query = query.new(file.empty(path), reader.new(), function()
       vim.cmd.redrawstatus()
     end),
     page = empty,
-  }
+    views = {},
+  }, Buffer)
   buffer.read_state = buffer.query:state(empty)
   buffers[bufnr] = buffer
 
   set_window_options(bufnr)
-  -- Shown in a window again, which `:buffer` reaches without the read command or
-  -- `WinEnter` firing. The window has no active cell for this buffer until it is
-  -- parked here.
+
+  -- Shown in a window again, which `:buffer` reaches without firing the read
+  -- command or `WinEnter`.
   vim.api.nvim_create_autocmd("BufWinEnter", {
     group = buffer_group,
     buffer = bufnr,
     callback = function()
       set_window_options(bufnr)
-      cursor.restore(buffer, 0)
+      buffer:view(0):restore()
     end,
   })
 
@@ -252,10 +329,12 @@ local function record(bufnr, path)
     group = buffer_group,
     buffer = bufnr,
     callback = function()
-      if buffers[bufnr] then
-        movement.follow_cursor(buffers[bufnr], 0)
+      if not buffers[bufnr] then
+        return
       end
-      view.remember()
+      local shown = buffer:view(0)
+      shown:follow_cursor()
+      shown:remember()
     end,
   })
 
@@ -265,7 +344,6 @@ local function record(bufnr, path)
     callback = function()
       buffer.query.reader:cancel()
       buffers[bufnr] = nil
-      cursor.drop_buffer(bufnr)
     end,
   })
 
@@ -283,29 +361,29 @@ function M.attach(bufnr, on_ready)
   end
 
   -- `:edit` fires the read command again on a buffer already showing a table, and
-  -- means refresh. This command owns the whole read, so setting the filetype is
-  -- what tells whatever the user hangs off `FileType`.
+  -- means refresh. This command owns the whole read, so setting the filetype is what
+  -- tells whatever the user hangs off `FileType`.
   vim.bo[bufnr].filetype = "csv-table"
 
-  -- `guicursor` is global, so the buffer that decides it is the one the user is
-  -- in. A read can be for a buffer nobody is in, which is what `bufload` does,
-  -- and hiding the cursor for that one would hide it where the user is.
+  -- `guicursor` is global, so the buffer that decides it is the one the user is in.
+  -- A read can be for a buffer nobody is in, which is what `bufload` does, and
+  -- hiding the cursor for that one would hide it where the user is.
   guicursor.update(vim.api.nvim_get_current_buf())
 
   local buffer = buffers[bufnr]
   if buffer then
-    -- nvim empties the buffer before this runs, so the text has to go back
-    -- whatever happens. When the file is the one the page was read from, the
-    -- lines already in hand are that text, and xan has nothing to add.
+    -- nvim empties the buffer before this runs, so the text has to go back whatever
+    -- happens. When the file is the one the page was read from, the lines already in
+    -- hand are that text, and xan has nothing to add.
     local drawn = buffer.page
     if #drawn.lines > 0 and buffer.query.file:version() == drawn.file_version then
       replace_lines(bufnr, drawn.lines)
       color.redraw(buffer)
 
-      -- The active cell names a row of this page, which is the one still in
-      -- hand, so the user comes back to the cell they left.
+      -- Every view names rows of this page, which is the one still in hand, so each
+      -- window comes back to the cell it was left on.
       for _, window in ipairs(vim.fn.win_findbuf(bufnr)) do
-        view.restore(buffer, window)
+        buffer:view(window):restore_viewport()
       end
       return
     end
@@ -313,7 +391,7 @@ function M.attach(bufnr, on_ready)
     buffer = record(bufnr, path)
   end
 
-  load(buffer, buffer.query.file.sheet, on_ready)
+  buffer:load(buffer.query.file.sheet, on_ready)
 end
 
 return M

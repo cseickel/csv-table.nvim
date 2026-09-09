@@ -51,8 +51,12 @@ M.page_size = 1000
 --- What a completed table read was made for. `after_read` compares one of these
 --- against the query as it stands now.
 ---@class csv.QueryState
----@field filters csv.Filter[]
+---@field filters table[] Each filter with its column named by id.
 ---@field file_version string
+---@field sort { column_id: integer, direction: "asc"|"desc" }[]
+---@field page_number integer
+---@field limit integer
+---@field column_ids integer[] The columns on display, in display order.
 
 ---@class csv.Query
 ---@field file csv.File
@@ -65,7 +69,6 @@ M.page_size = 1000
 ---@field marked table<integer, boolean> Marked row ids.
 ---@field marked_columns table<integer, boolean> Marked column ids.
 ---@field columns_filtered_to_marks boolean
----@field selection csv.Selection|nil The cells picked out, absent when none are.
 ---@field page_number integer 0-based.
 ---@field limit integer Rows per page.
 ---@field row_count integer How many rows the filters leave.
@@ -74,10 +77,12 @@ Query.__index = Query
 
 for _, part in ipairs({
   "csv-table.query.columns",
-  "csv-table.query.selection",
   "csv-table.query.sort",
 }) do
   for name, method in pairs(require(part)) do
+    if Query[name] then
+      error("csv-table: two query modules define " .. name)
+    end
     Query[name] = method
   end
 end
@@ -104,7 +109,6 @@ function M.new(file, reader, on_changed)
     marked = {},
     marked_columns = {},
     columns_filtered_to_marks = false,
-    selection = nil,
     page_number = 0,
     limit = M.page_size,
     row_count = 0,
@@ -132,11 +136,49 @@ function Query:effective_filters()
   return resolved
 end
 
+--- A filter as a value two states can be compared by, which is the filter with its
+--- column named by id. A column is one object the whole session, and hiding one
+--- changes what it holds, so a state that kept the object would compare the column
+--- as it stands now against itself.
+---@param filter csv.Filter
+---@return table
+local function comparable(filter)
+  local fields = {}
+  for key, value in pairs(filter) do
+    fields[key] = key == "column" and value.column_id or value
+  end
+  return fields
+end
+
 --- What a page drawn now would have been read for.
 ---@param page csv.Page
 ---@return csv.QueryState
 function Query:state(page)
-  return { filters = self:effective_filters(), file_version = page.file_version }
+  local column_ids = {}
+  for index, column in ipairs(self:display_columns()) do
+    column_ids[index] = column.column_id
+  end
+
+  -- The ordering rather than the keys, so a state holds no reference into a list
+  -- the next sort will edit in place.
+  local sort = {}
+  for index, key in ipairs(self.sort_keys) do
+    sort[index] = { column_id = key.column.column_id, direction = key.direction }
+  end
+
+  local filters = {}
+  for index, filter in ipairs(self:effective_filters()) do
+    filters[index] = comparable(filter)
+  end
+
+  return {
+    filters = filters,
+    file_version = page.file_version,
+    sort = sort,
+    page_number = self.page_number,
+    limit = self.limit,
+    column_ids = column_ids,
+  }
 end
 
 --- Count the rows the filters leave.
@@ -147,16 +189,15 @@ function Query:count()
   end)
 end
 
---- Decide what a completed table read calls for, given the query the page before
---- it was read for.
+--- Decide what a completed table read calls for, given the query the page before it
+--- was read for. The count needs the rows the filters leave, and `moved` says
+--- whether anything naming a row or a column of the page before it still holds.
 ---@param previous csv.QueryState
 ---@param page csv.Page
----@return csv.QueryState
+---@return csv.QueryState current
+---@return boolean moved Whether the page draws different rows, or the same rows in a different order or under different columns.
 function Query:after_read(previous, page)
   local current = self:state(page)
-
-  -- Both ends of a selection name rows and columns of the page being replaced.
-  self:clear_selection()
 
   if
     previous.file_version ~= current.file_version
@@ -165,7 +206,7 @@ function Query:after_read(previous, page)
     self:count()
   end
 
-  return current
+  return current, not vim.deep_equal(previous, current)
 end
 
 ---@param column csv.Column
@@ -263,7 +304,6 @@ function Query:reset()
   self.clipboard = {}
   self.marked = {}
   self.marked_columns = {}
-  self.selection = nil
   self.page_number = 0
   self:show_all_columns()
 end

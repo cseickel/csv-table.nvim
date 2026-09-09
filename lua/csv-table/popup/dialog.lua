@@ -9,7 +9,6 @@ The value checklist is drawn through the filters already applied, so every value
 it offers is one that would leave rows on screen.
 ]]
 
-local buffer = require("csv-table.buffer")
 local popup = require("csv-table.popup")
 local report = require("csv-table.utils.report")
 
@@ -56,10 +55,10 @@ end
 
 --- Choose values from the column's own contents. The float is an ordinary buffer,
 --- so `/` searches the list the way it searches anything else.
----@param buf csv.Buffer
+---@param view csv.View
 ---@param column csv.Column
 ---@param values csv.Frequency[]
-local function pick_values(buf, column, values)
+local function pick_values(view, column, values)
   if #values == 0 then
     return report.error("no values in " .. column.label)
   end
@@ -95,16 +94,16 @@ local function pick_values(buf, column, values)
       return
     end
     table.sort(filter_values)
-    buf.query:add_filter({ type = "in", column = column, values = filter_values })
-    buffer.render(buf)
+    view.buffer.query:add_filter({ type = "in", column = column, values = filter_values })
+    view.buffer:render()
   end, { buffer = bufnr, nowait = true })
 end
 
 --- Ask for the value a comparison compares against, then apply it.
----@param buf csv.Buffer
+---@param view csv.View
 ---@param column csv.Column
 ---@param choice csv.Choice
-local function ask_for_value(buf, column, choice)
+local function ask_for_value(view, column, choice)
   vim.ui.input({ prompt = column.label .. " " .. choice.label .. ": " }, function(answer)
     if answer == nil or answer == "" then
       return
@@ -115,28 +114,28 @@ local function ask_for_value(buf, column, choice)
       if not number then
         return report.error(answer .. " is not a number")
       end
-      buf.query:add_filter({
+      view.buffer.query:add_filter({
         type = "numeric",
         column = column,
         operator = choice.operator,
         value = number,
       })
     else
-      buf.query:add_filter({
+      view.buffer.query:add_filter({
         type = "string",
         column = column,
         operator = choice.operator,
         value = answer,
       })
     end
-    buffer.render(buf)
+    view.buffer:render()
   end)
 end
 
 --- Choose which sheet of a workbook to read.
----@param buf csv.Buffer
-function M.sheets(buf)
-  local file = buf.query.file
+---@param view csv.View
+function M.sheets(view)
+  local file = view.buffer.query.file
   if #file.sheets == 0 then
     return report.error(vim.fn.fnamemodify(file.path, ":t") .. " has no sheets")
   end
@@ -153,16 +152,16 @@ function M.sheets(buf)
     local sheet = vim.api.nvim_win_get_cursor(winid)[1] - 1
     popup.close(winid)
     if sheet ~= file.sheet then
-      buffer.open_sheet(buf, sheet)
+      view.buffer:open_sheet(sheet)
     end
   end, { buffer = bufnr, nowait = true })
 end
 
 --- Open the dialog for `column`.
----@param buf csv.Buffer
+---@param view csv.View
 ---@param column csv.Column
-function M.open(buf, column)
-  local choices = buf.query:is_numeric(column) and NUMERIC_CHOICES or TEXT_CHOICES
+function M.open(view, column)
+  local choices = view.buffer.query:is_numeric(column) and NUMERIC_CHOICES or TEXT_CHOICES
 
   local lines = {}
   for index, choice in ipairs(choices) do
@@ -177,14 +176,15 @@ function M.open(buf, column)
   for _, choice in ipairs(choices) do
     vim.keymap.set("n", choice.key, function()
       popup.close(winid)
-      ask_for_value(buf, column, choice)
+      ask_for_value(view, column, choice)
     end, { buffer = bufnr, nowait = true })
   end
 
   vim.keymap.set("n", "v", function()
     popup.close(winid)
-    buf.query.reader:frequency(buf.query, column, function(values)
-      pick_values(buf, column, values)
+    local query = view.buffer.query
+    query.reader:frequency(query, column, function(values)
+      pick_values(view, column, values)
     end)
   end, { buffer = bufnr, nowait = true })
 
@@ -194,8 +194,8 @@ function M.open(buf, column)
       if expression == nil or expression == "" then
         return
       end
-      buf.query:add_filter({ type = "expr", expression = expression })
-      buffer.render(buf)
+      view.buffer.query:add_filter({ type = "expr", expression = expression })
+      view.buffer:render()
     end)
   end, { buffer = bufnr, nowait = true })
 end

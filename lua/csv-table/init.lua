@@ -13,7 +13,6 @@ local buffer = require("csv-table.buffer")
 local color = require("csv-table.buffer.color")
 local guicursor = require("csv-table.buffer.guicursor")
 local keymaps = require("csv-table.keymaps")
-local movement = require("csv-table.buffer.movement")
 local query = require("csv-table.query")
 local text = require("csv-table.utils.text")
 
@@ -40,17 +39,17 @@ local function apply_keymaps(buf)
       end
 
       vim.keymap.set(modes, binding.key, function()
-        action.run(buf)
+        action.run(buf:view(0))
       end, { buffer = buf.bufnr, desc = "csv-table: " .. action.description })
     end
   end
 
-  -- A click lands exactly where it was pointed, and `csv-table.buffer.movement`
-  -- needs to know that, since any other move that ends up in the cell it started
-  -- in was a motion too small to leave the cell. The expression hands the key
-  -- back so nvim still does the click itself.
+  -- A click lands exactly where it was pointed, and the view needs to know that,
+  -- since any other move that ends up in the cell it started in was a motion too
+  -- small to leave the cell. The expression hands the key back so nvim still does
+  -- the click itself.
   vim.keymap.set({ "n", "x" }, "<LeftMouse>", function()
-    movement.click()
+    buf:view(0):click()
     return "<LeftMouse>"
   end, { buffer = buf.bufnr, expr = true, desc = "csv-table: follow the click" })
 end
@@ -116,7 +115,7 @@ function M.status(bufnr)
   end
 
   local parts = { sheet_summary(buf) }
-  local first, last = buffer.row_range(buf)
+  local first, last = buf:row_range()
   if last < first then
     table.insert(parts, "no rows")
   else

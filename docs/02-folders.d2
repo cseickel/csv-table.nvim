@@ -24,7 +24,8 @@ keymaps: "keymaps.lua\nevery key and the action it names" {class: entry}
 actions: "actions/\none registry, filled by loading the modules beside it" {class: entry}
 
 popup: "popup/\neverything opened over the table: floats, pickers, panels, dialogs" {class: ui}
-buffer: "buffer/\neverything painted into the table: render, cursor, color, export" {class: draw}
+buffer: "buffer/\ncsv.Buffer: the query, the page, one csv.View per window\nrender, color, the gutter, the hidden cursor" {class: draw}
+view: "view/\ncsv.View: the active cell, the selection, the viewport, yank" {class: draw}
 
 file: "file/\ncsv.File: open a spreadsheet and read what its head says" {class: data}
 query: "query/\ncsv.Query: filters, sort, marks, columns, paging, the row count" {class: data}
@@ -41,7 +42,6 @@ init -> utils
 actions -> buffer
 actions -> popup
 popup -> actions: the help panel runs one
-popup -> buffer
 popup -> keymaps
 popup -> utils
 
@@ -50,6 +50,10 @@ buffer -> query
 buffer -> page
 buffer -> reader
 buffer -> utils
+buffer -> view
+
+view -> page
+view -> utils
 
 file -> reader
 file -> utils

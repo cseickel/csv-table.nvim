@@ -13,7 +13,7 @@ classes: {
   external: {style.fill: "#4a2d2d"}
 }
 
-render: "buffer.render" {class: draw}
+render: "Buffer:render" {class: draw}
 
 page_call: "reader:page(query)\nreads the columns and the file version once, here" {class: run}
 commands: "reader.commands.render\none xan process, no shell and no pipes" {class: run}
@@ -29,13 +29,14 @@ parse: "reader.parse.page\ncuts the row id cell out and records where every cell
 csvpage: "csv.Page" {class: data}
 
 store: "buffer.page = drawn" {class: draw}
-after: "query:after_read(read_state, page)\ndecides what this read calls for" {class: data}
+after: "Query:after_read(read_state, page)\nreturns the new read_state and whether the rows moved" {class: data}
 lines: "nvim_buf_set_lines\nthe drawn table becomes the buffer text" {class: draw}
-color: "buffer.color.redraw\nmarked rows, marked columns, the selection" {class: draw}
-restore: "buffer.cursor.restore\nthe active cell goes back to the column it was in" {class: draw}
+color: "buffer.color.redraw\nmarked rows, marked columns" {class: draw}
+restore: "View:restore, once per window showing the buffer\nthe active cell by row id and column id,\nor the cell under the parked cursor" {class: draw}
+draw: "View:draw\nthe active cell and the selection, in the current window" {class: draw}
 
 count: "reader:count(query)\nonly when the file version or the effective filters moved" {class: run}
-selection: "the selection is dropped\nboth ends name rows of the page being replaced" {class: data}
+selection: "View:clear_selection, on every view\nonly when the rows moved" {class: data}
 
 render -> page_call
 page_call -> commands
@@ -51,3 +52,4 @@ after -> selection
 after -> lines
 lines -> color
 color -> restore
+restore -> draw

@@ -70,8 +70,8 @@ end
 --- Search every action and run the one chosen, so a key is something to find
 --- rather than something to have memorised, and an action with no key is still
 --- one press away.
----@param buf csv.Buffer
-function M.help(buf)
+---@param view csv.View
+function M.help(view)
   local actions = require("csv-table.actions")
   local bindings = M.bindings()
 
@@ -86,20 +86,20 @@ function M.help(buf)
       return string.format("%-" .. width .. "s   %s", binding.key, binding.description)
     end,
   }, function(binding)
-    actions.get_action(binding.name).run(buf)
+    actions.get_action(binding.name).run(view)
   end)
 end
 
 --- How the current filters and sort read as sentences.
----@param buf csv.Buffer
+---@param query csv.Query
 ---@return string[]
-local function query_lines(buf)
+local function query_lines(query)
   local lines = {}
 
-  if #buf.query.filters == 0 then
+  if #query.filters == 0 then
     table.insert(lines, "  no filters")
   end
-  for _, filter in ipairs(buf.query.filters) do
+  for _, filter in ipairs(query.filters) do
     if filter.type == "marked" then
       table.insert(lines, "  marked rows only")
     elseif filter.type == "expr" then
@@ -118,10 +118,10 @@ local function query_lines(buf)
   end
 
   table.insert(lines, "")
-  if #buf.query.sort_keys == 0 then
+  if #query.sort_keys == 0 then
     table.insert(lines, "  no sort")
   end
-  for position, key in ipairs(buf.query.sort_keys) do
+  for position, key in ipairs(query.sort_keys) do
     table.insert(
       lines,
       string.format(
@@ -139,10 +139,10 @@ end
 --- One line per column: how it is read, how it is shown, and what is in it. The
 --- statistics arrive in column order rather than by name, because two columns may
 --- share a name and a lookup would then describe both.
----@param buf csv.Buffer
+---@param query csv.Query
 ---@param stats table<string, string>[] One row per column, row id column first.
 ---@return string[]
-local function column_lines(buf, stats)
+local function column_lines(query, stats)
   local lines = {
     string.format(
       "  %-24s %-6s %-4s %-8s %12s %12s %12s %10s",
@@ -159,8 +159,8 @@ local function column_lines(buf, stats)
 
   -- `commands.stats` puts the columns in file order behind the row id, so a
   -- column's row among the results is one past its place in that list.
-  for index, column in ipairs(buf.query.file.columns) do
-    local column_format = buf.query.file:format_of(column)
+  for index, column in ipairs(query.file.columns) do
+    local column_format = query.file:format_of(column)
     local summary = stats[index + 1] or {}
     table.insert(
       lines,
@@ -182,34 +182,36 @@ local function column_lines(buf, stats)
 end
 
 --- Describe the file and the query over it.
----@param buf csv.Buffer
-function M.info(buf)
-  buf.query.reader:stats(buf.query, nil, function(stats)
-    local pages = math.max(math.ceil(buf.query.row_count / buf.query.limit), 1)
+---@param view csv.View
+function M.info(view)
+  local query = view.buffer.query
+  query.reader:stats(query, nil, function(stats)
+    local pages = math.max(math.ceil(query.row_count / query.limit), 1)
     local lines = {
-      "  " .. buf.query.file.path,
+      "  " .. query.file.path,
       string.format(
         "  %d rows, %d columns, page %d of %d",
-        buf.query.row_count,
-        #buf.query.file.columns,
-        buf.query.page_number + 1,
+        query.row_count,
+        #query.file.columns,
+        query.page_number + 1,
         pages
       ),
       "",
     }
-    vim.list_extend(lines, query_lines(buf))
+    vim.list_extend(lines, query_lines(query))
     table.insert(lines, "")
-    vim.list_extend(lines, column_lines(buf, stats))
+    vim.list_extend(lines, column_lines(query, stats))
 
     popup.open(lines, { title = "csv info" })
   end)
 end
 
 --- Every statistic xan reports for one column.
----@param buf csv.Buffer
+---@param view csv.View
 ---@param column csv.Column
-function M.stats(buf, column)
-  buf.query.reader:stats(buf.query, column, function(rows)
+function M.stats(view, column)
+  local query = view.buffer.query
+  query.reader:stats(query, column, function(rows)
     local summary = rows[1]
     local lines = {}
     for _, field in ipairs(STAT_FIELDS) do

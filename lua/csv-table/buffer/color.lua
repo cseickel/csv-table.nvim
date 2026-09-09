@@ -4,11 +4,11 @@ the two ways they reach the screen.
 
 - a decoration provider paints the borders, the header and the typed cells, which
   are decided by the text on the line and so are redrawn on every scroll
-- extmarks paint the marked rows, the marked columns and the selection, which are
-  decided by the query and so are redrawn when it changes
+- extmarks paint the marked rows and the marked columns, which are decided by the
+  query and so are redrawn when it changes
 
-`csv-table.buffer.cursor` paints the active cell and the flash, since both follow
-the cursor rather than the text, and it takes their priority from here.
+`csv-table.view` paints the active cell and the selection, which belong to one
+window rather than to the buffer.
 ]]
 
 local format = require("csv-table.file.format")
@@ -17,12 +17,13 @@ local M = {}
 
 local syntax_namespace = vim.api.nvim_create_namespace("csv-syntax")
 local marks_namespace = vim.api.nvim_create_namespace("csv-marks")
+local flash_namespace = vim.api.nvim_create_namespace("csv-flash")
 
--- The stack, bottom to top. An extmark takes 4096 by default, which is what the
--- marks and the flash sit on.
+local FLASH_MILLISECONDS = 250
+
+-- The bottom of the stack. An extmark takes 4096 by default, which is what the
+-- marks and the flash sit on, and `csv-table.view` paints above both.
 M.SYNTAX_PRIORITY = 100
-M.SELECTION_PRIORITY = 4200
-M.CELL_PRIORITY = 4300
 
 local GROUPS = {
   CsvBorder = { fg = "#444444" },
@@ -200,35 +201,45 @@ local function draw_marks(buf)
   end
 end
 
---- Draw the selected cells. The selected columns are next to each other, so one
---- extmark per line spans the first column's left edge to the last one's right.
----@param buf csv.Buffer
-local function draw_selection(buf)
-  local bounds = buf.query:selection_bounds(buf.page)
-  if not bounds then
-    return
-  end
-
-  for line = bounds.top, bounds.bottom do
-    local cells = buf.page:cell_ranges(line)
-    local first, last = cells[bounds.left], cells[bounds.right]
-    if first and last then
-      vim.api.nvim_buf_set_extmark(buf.bufnr, marks_namespace, line - 1, first.from, {
-        end_col = last.to,
-        hl_group = "CsvSelection",
-        priority = M.SELECTION_PRIORITY,
-      })
-    end
-  end
-end
-
---- Draw the marks and the selection again, which is what a change to either or
---- to the page below them costs.
+--- Draw the marks again, which is what a change to them or to the page below them
+--- costs.
 ---@param buf csv.Buffer
 function M.redraw(buf)
   vim.api.nvim_buf_clear_namespace(buf.bufnr, marks_namespace, 0, -1)
   draw_marks(buf)
-  draw_selection(buf)
+end
+
+--- Highlight one column of every row briefly. A redraw clears extmarks, so this
+--- only holds while the text it describes is the text on screen.
+---@param buf csv.Buffer
+---@param column csv.Column
+function M.flash_column(buf, column)
+  local column_number = buf.page:column_number(column)
+  if not column_number then
+    return
+  end
+
+  vim.api.nvim_buf_clear_namespace(buf.bufnr, flash_namespace, 0, -1)
+  local function flash(buffer_line)
+    local from, to = buf.page:cell_bounds(buffer_line, column_number)
+    if from then
+      vim.api.nvim_buf_set_extmark(buf.bufnr, flash_namespace, buffer_line - 1, from, {
+        end_col = to,
+        hl_group = "CsvFlash",
+      })
+    end
+  end
+
+  flash(buf.page.header_line)
+  for buffer_line = buf.page.first_line, buf.page.last_line do
+    flash(buffer_line)
+  end
+
+  vim.defer_fn(function()
+    if vim.api.nvim_buf_is_valid(buf.bufnr) then
+      vim.api.nvim_buf_clear_namespace(buf.bufnr, flash_namespace, 0, -1)
+    end
+  end, FLASH_MILLISECONDS)
 end
 
 --- Define the groups and register the provider. One provider covers every window,
