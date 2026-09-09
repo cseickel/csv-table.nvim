@@ -5,7 +5,7 @@ Defines `csv.Column`: the header text, a label unique across the file, the
 - `from_names` builds `state.columns` from `xan headers`
 - `display_columns` takes the visible ones, in the order the user put them
 - hide, cut, paste, swap, show_all and show_marked_only reorder that one list
-- `text_length`, `truncate` and `string_literal` measure and cut text
+- `text_length` and `truncate` measure and cut text
 
 A position in `state.columns` is the display order and `column_id` is the file
 order, so every xan stage takes the id and the drawn table takes the position.
@@ -80,13 +80,6 @@ function M.truncate(value, length)
     kept[#kept + 1] = character
   end
   return table.concat(kept) .. "…"
-end
-
---- Render a moonblade string literal.
----@param value string
----@return string
-function M.string_literal(value)
-  return '"' .. value:gsub("\\", "\\\\"):gsub('"', '\\"') .. '"'
 end
 
 -- Which columns the table draws -----------------------------------------------

@@ -13,7 +13,7 @@ screen rather than the file on disk.
 
 local keymaps = require("csv-table.keymaps")
 local picker = require("csv-table.picker")
-local query = require("csv-table.query")
+local reader = require("csv-table.reader")
 local view_state = require("csv-table.state")
 local window = require("csv-table.window")
 
@@ -172,8 +172,8 @@ end
 --- Describe the file and the view over it.
 ---@param buf csv.Buffer
 function M.info(buf)
-  query.count(buf.state, query.report, function(count)
-    query.stats(buf.state, nil, query.report, function(stats)
+  reader.count(buf.state, reader.report, function(count)
+    reader.stats(buf.state, nil, reader.report, function(stats)
       local pages = math.max(math.ceil(count / buf.state.limit), 1)
       local lines = {
         "  " .. buf.state.source,
@@ -194,7 +194,7 @@ end
 ---@param buf csv.Buffer
 ---@param column csv.Column
 function M.stats(buf, column)
-  query.stats(buf.state, column, query.report, function(rows)
+  reader.stats(buf.state, column, reader.report, function(rows)
     local summary = rows[1]
     local lines = {}
     for _, field in ipairs(STAT_FIELDS) do

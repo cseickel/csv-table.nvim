@@ -14,7 +14,7 @@ number. Pure Lua, so it runs without nvim.
 ]]
 
 local columns = require("csv-table.columns")
-local expression = require("csv-table.expression")
+local expression = require("csv-table.reader.expression")
 
 -- Taken off the module as a bare function, since `format` here names a column's
 -- format.
@@ -151,11 +151,11 @@ end
 ---@return string
 local function display_stage(state, display_columns, positions)
   local clauses = {
-    string.format("col(0) as %s", columns.string_literal(state.rowid_column.name)),
+    string.format("col(0) as %s", expression.string_literal(state.rowid_column.name)),
   }
 
   for _, column in ipairs(display_columns) do
-    local header = columns.string_literal(header_text(state, column))
+    local header = expression.string_literal(header_text(state, column))
     local reference = string.format("col(%d)", positions[column.column_id])
     local format = state.formats[column.column_id]
     local expr = format and expression.value_expression(reference, format) or reference

@@ -2,6 +2,7 @@
 Writes the moonblade expressions xan takes, since filters and formatting reach
 it as expressions rather than flags.
 
+- `string_literal` quotes one value, which every expression below is built from
 - `filter` renders one `csv.Filter`, and `all_filters` ANDs them together
 - `value_expression` writes a column's printf and padding
 
@@ -9,14 +10,20 @@ String comparison uses `eq` where numeric comparison uses `==`, and a cast that
 fails aborts the whole run, so anything that can fail is wrapped in `try`.
 ]]
 
-local columns = require("csv-table.columns")
-
 local M = {}
 
 local NUMERIC_CONVERSION = "%%[-+ #%d%.]*[diouxXeEfgGaA]"
 
+--- Render a moonblade string literal.
+---@param value string
+---@return string
+function M.string_literal(value)
+  return '"' .. value:gsub("\\", "\\\\"):gsub('"', '\\"') .. '"'
+end
+
 --- Render one filter. `positions` says where each column sits in the stream the
---- filter reads, which `csv-table.pipeline` fixed with its opening `select`.
+--- filter reads, which `csv-table.reader.pipeline` fixed with its opening
+--- `select`.
 ---@param filter csv.Filter
 ---@param state csv.State
 ---@param positions table<integer, integer>
@@ -37,7 +44,7 @@ function M.filter(filter, state, positions)
 
     local literals = {}
     for index, rowid in ipairs(rowids) do
-      literals[index] = columns.string_literal(tostring(rowid))
+      literals[index] = M.string_literal(tostring(rowid))
     end
     return string.format("(col(0) in [%s])", table.concat(literals, ", "))
   end
@@ -53,12 +60,12 @@ function M.filter(filter, state, positions)
   if filter.type == "in" then
     local literals = {}
     for index, value in ipairs(filter.values) do
-      literals[index] = columns.string_literal(value)
+      literals[index] = M.string_literal(value)
     end
     return string.format("(%s in [%s])", column, table.concat(literals, ", "))
   end
 
-  local value = columns.string_literal(filter.value)
+  local value = M.string_literal(filter.value)
   if filter.operator == "eq" or filter.operator == "ne" then
     return string.format("(%s %s %s)", column, filter.operator, value)
   end
@@ -91,7 +98,7 @@ function M.value_expression(reference, format)
 
   if format.spec then
     local argument = format.spec:match(NUMERIC_CONVERSION) and ("float(" .. reference .. ")") or reference
-    expr = string.format("printf(%s, %s)", columns.string_literal(format.spec), argument)
+    expr = string.format("printf(%s, %s)", M.string_literal(format.spec), argument)
   elseif format.kind == "float" then
     expr = string.format('printf("%%.%df", float(%s))', format.precision, reference)
   end

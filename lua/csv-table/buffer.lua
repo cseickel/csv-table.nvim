@@ -11,13 +11,13 @@ The buffer stays nomodifiable. Its text is xan's output, and writing it back
 over the file would destroy the file.
 ]]
 
-local commands = require("csv-table.commands")
 local active_cell = require("csv-table.active_cell")
 local columns = require("csv-table.columns")
 local layout = require("csv-table.layout")
 local movement = require("csv-table.movement")
 local overlay = require("csv-table.overlay")
-local query = require("csv-table.query")
+local reader = require("csv-table.reader")
+local commands = require("csv-table.reader.commands")
 local selection = require("csv-table.selection")
 local source = require("csv-table.source")
 local statuscolumn = require("csv-table.statuscolumn")
@@ -174,7 +174,7 @@ local function count_rows(buffer)
   end
 
   local counted = buffer.state
-  query.count(buffer.state, query.report, function(count)
+  reader.count(buffer.state, reader.report, function(count)
     -- The state is replaced when another sheet is opened, so the answer lands
     -- on the state that asked for it.
     counted.row_count = count
@@ -198,7 +198,7 @@ function M.render(buffer, on_rendered)
   local stamp = file_stamp(buffer.state.source)
 
   local argv = commands.render(buffer.state, display_columns)
-  query.run(argv, query.report, function(stdout)
+  reader.run(argv, reader.report, function(stdout)
     if not vim.api.nvim_buf_is_valid(buffer.bufnr) then
       return
     end
@@ -209,7 +209,7 @@ function M.render(buffer, on_rendered)
       first_row_number
     )
     if not parsed then
-      return query.report(err)
+      return reader.report(err)
     end
 
     -- A page past the first that came back empty is a page past the end, which
@@ -265,7 +265,7 @@ function M.open_sheet(buffer, sheet)
 
     buffer.state = state.new(source_info)
     M.render(buffer)
-  end, query.report)
+  end, reader.report)
 end
 
 --- The rows of the result on display, counting from one.
@@ -315,7 +315,7 @@ function M.attach(bufnr, on_ready)
 
   local path = vim.api.nvim_buf_get_name(bufnr)
   if path == "" then
-    return query.report("buffer has no file name")
+    return reader.report("buffer has no file name")
   end
 
   vim.bo[bufnr].buftype = "nowrite"
@@ -388,7 +388,7 @@ function M.attach(bufnr, on_ready)
     if on_ready then
       on_ready(buffer)
     end
-  end, query.report)
+  end, reader.report)
 end
 
 return M

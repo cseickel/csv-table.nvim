@@ -11,9 +11,9 @@ All of it comes from xan, so `inspect` answers a callback.
 ]]
 
 local columns = require("csv-table.columns")
-local commands = require("csv-table.commands")
+local commands = require("csv-table.reader.commands")
 local format = require("csv-table.format")
-local query = require("csv-table.query")
+local reader = require("csv-table.reader")
 
 local M = {}
 
@@ -63,7 +63,7 @@ end
 ---@param on_done fun(source: csv.Source)
 ---@param on_error fun(message: string)
 local function inspect_sheet(path, sheet, sheets, on_done, on_error)
-  query.run(commands.headers(path, sheet), on_error, function(stdout)
+  reader.run(commands.headers(path, sheet), on_error, function(stdout)
     local names = lines_of(stdout)
     if #names == 0 then
       return on_error("no columns in " .. path)
@@ -72,7 +72,7 @@ local function inspect_sheet(path, sheet, sheets, on_done, on_error)
     local source_columns = columns.from_names(names)
 
     local argv = commands.sample(path, sheet, #source_columns)
-    query.run_json_lines(argv, on_error, function(sample)
+    reader.run_json_lines(argv, on_error, function(sample)
       on_done({
         path = path,
         columns = source_columns,
@@ -100,7 +100,7 @@ function M.inspect(path, sheet, on_done, on_error)
     return inspect_sheet(path, sheet, {}, on_done, on_error)
   end
 
-  query.run(commands.sheets(path), on_error, function(stdout)
+  reader.run(commands.sheets(path), on_error, function(stdout)
     inspect_sheet(path, sheet, lines_of(stdout), on_done, on_error)
   end)
 end

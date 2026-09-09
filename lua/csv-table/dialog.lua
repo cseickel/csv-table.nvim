@@ -10,7 +10,7 @@ it offers is one that would leave rows on screen.
 ]]
 
 local buffer = require("csv-table.buffer")
-local query = require("csv-table.query")
+local reader = require("csv-table.reader")
 local state = require("csv-table.state")
 local window = require("csv-table.window")
 
@@ -67,7 +67,7 @@ end
 ---@param values csv.Frequency[]
 local function pick_values(buf, column, values)
   if #values == 0 then
-    return query.report("no values in " .. column.label)
+    return reader.report("no values in " .. column.label)
   end
 
   local checked = {}
@@ -119,7 +119,7 @@ local function ask_for_value(buf, column, choice)
     if choice.type == "numeric" then
       local number = tonumber(answer)
       if not number then
-        return query.report(answer .. " is not a number")
+        return reader.report(answer .. " is not a number")
       end
       state.add_filter(buf.state, {
         type = "numeric",
@@ -144,7 +144,7 @@ end
 function M.sheets(buf)
   local sheets = buf.state.sheets
   if #sheets == 0 then
-    return query.report(vim.fn.fnamemodify(buf.state.source, ":t") .. " has no sheets")
+    return reader.report(vim.fn.fnamemodify(buf.state.source, ":t") .. " has no sheets")
   end
 
   local lines = {}
@@ -194,7 +194,7 @@ function M.open(buf, column)
 
   vim.keymap.set("n", "v", function()
     window.close(winid)
-    query.frequency(buf.state, column, query.report, function(values)
+    reader.frequency(buf.state, column, reader.report, function(values)
       pick_values(buf, column, values)
     end)
   end, { buffer = bufnr, nowait = true })

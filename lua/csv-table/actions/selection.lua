@@ -14,7 +14,7 @@ local active_cell = require("csv-table.active_cell")
 local inspect = require("csv-table.inspect")
 local movement = require("csv-table.movement")
 local picker = require("csv-table.picker")
-local query = require("csv-table.query")
+local reader = require("csv-table.reader")
 local utils = require("csv-table.actions.utils")
 
 local EDGE = utils.EDGE
@@ -36,7 +36,7 @@ end
 local function selector(kind)
   return function(buf)
     if not buf.layout or buf.layout.first_line > buf.layout.last_line then
-      return query.report("there is nothing to select")
+      return reader.report("there is nothing to select")
     end
     movement.select(buf, 0, kind)
   end

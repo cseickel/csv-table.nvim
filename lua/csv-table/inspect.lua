@@ -16,7 +16,7 @@ local active_cell = require("csv-table.active_cell")
 local json = require("csv-table.json")
 local layout_module = require("csv-table.layout")
 local picker = require("csv-table.picker")
-local query = require("csv-table.query")
+local reader = require("csv-table.reader")
 local selection = require("csv-table.selection")
 local state = require("csv-table.state")
 local window = require("csv-table.window")
@@ -86,7 +86,7 @@ local function read_row(buf, on_row)
     return on_row(cached.values, cell)
   end
 
-  query.row(buf.state, cell.row.row_id, query.report, function(values)
+  reader.row(buf.state, cell.row.row_id, reader.report, function(values)
     buf.row_values = { layout = layout, row_id = cell.row.row_id, values = values }
     on_row(values, cell)
   end)
@@ -172,7 +172,8 @@ local function drawn_text(buf, bounds, headers)
 end
 
 --- Yank the selected cells in `format`, which is one of the names
---- `csv-table.commands` writes: `tsv`, `csv`, `json`, `markdown`, or `display`.
+--- `csv-table.reader.commands` writes: `tsv`, `csv`, `json`, `markdown`, or
+--- `display`.
 ---
 --- Every format but `display` reads the values from the file through xan, so a
 --- column narrow enough to have been drawn cut still yanks whole, and a value
@@ -183,7 +184,7 @@ end
 function M.yank(buf, format, headers)
   local bounds = yank_bounds(buf)
   if not bounds then
-    return query.report("there is nothing to yank")
+    return reader.report("there is nothing to yank")
   end
 
   local rows = bounds.bottom - bounds.top + 1
@@ -201,7 +202,7 @@ function M.yank(buf, format, headers)
   for column_number = bounds.left, bounds.right do
     local column = layout_module.column_at(buf.layout, column_number)
     if not column then
-      return query.report("the selected columns are no longer on display")
+      return reader.report("the selected columns are no longer on display")
     end
     yanked[#yanked + 1] = column
   end
@@ -210,13 +211,13 @@ function M.yank(buf, format, headers)
   for buffer_line = bounds.top, bounds.bottom do
     local row = layout_module.row_at_line(buf.layout, buffer_line)
     if not row then
-      return query.report("the selected rows are no longer on display")
+      return reader.report("the selected rows are no longer on display")
     end
     rowids[#rowids + 1] = row.row_id
   end
 
   local opts = { rowids = rowids, columns = yanked, headers = headers, format = format }
-  query.yank(buf.state, opts, query.report, function(text)
+  reader.yank(buf.state, opts, reader.report, function(text)
     to_registers(text)
     done()
   end)

@@ -1,8 +1,8 @@
 local columns = require("csv-table.columns")
-local commands = require("csv-table.commands")
-local expression = require("csv-table.expression")
+local commands = require("csv-table.reader.commands")
+local expression = require("csv-table.reader.expression")
 local fixture = require("support.fixture")
-local pipeline = require("csv-table.pipeline")
+local pipeline = require("csv-table.reader.pipeline")
 local state = require("csv-table.state")
 
 --- The pipeline string for the current state, with every column on display.

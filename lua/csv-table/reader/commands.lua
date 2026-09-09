@@ -11,8 +11,8 @@ A source that is not already CSV takes a `from` stage in front, so every stage
 below it sees CSV whatever the file on disk holds.
 ]]
 
-local columns = require("csv-table.columns")
-local pipeline = require("csv-table.pipeline")
+local expression = require("csv-table.reader.expression")
+local pipeline = require("csv-table.reader.pipeline")
 local view_state = require("csv-table.state")
 
 local M = {}
@@ -106,7 +106,7 @@ end
 
 --- The stage that keeps every record at least two values wide. A record holding
 --- one empty value would be written as an empty line, so the writer quotes it and
---- the value arrives as `""`. `csv-table.query` drops this column as it splits
+--- the value arrives as `""`. `csv-table.reader` drops this column as it splits
 --- the record.
 local PADDING = "map " .. pipeline.quote('("") as csv_table_padding')
 
@@ -194,7 +194,7 @@ local function keeping_stage(opts)
   for index, column in ipairs(opts.columns) do
     -- The row id leads the stream, so the first yanked column sits at 1.
     if named then
-      kept[index] = string.format("col(%d) as %s", index, columns.string_literal(column.label))
+      kept[index] = string.format("col(%d) as %s", index, expression.string_literal(column.label))
     else
       kept[index] = index
     end

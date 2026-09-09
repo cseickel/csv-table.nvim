@@ -133,9 +133,9 @@ function M.analyze_column(values)
   return { kind = "float", precision = math.min(precision, MAX_PRECISION) }
 end
 
---- Decide how every column reads. `csv-table.commands` renames the columns to
---- their ids before writing the sample, so a JSON key is a column id as a
---- string.
+--- Decide how every column reads. `csv-table.reader.commands` renames the
+--- columns to their ids before writing the sample, so a JSON key is a column id
+--- as a string.
 ---@param sample table<string, string>[] Sample rows, keyed by column id.
 ---@param source_columns csv.Column[]
 ---@return table<integer, csv.Format>

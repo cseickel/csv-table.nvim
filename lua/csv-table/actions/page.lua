@@ -9,7 +9,7 @@ the first count arrives.
 ]]
 
 local buffer = require("csv-table.buffer")
-local query = require("csv-table.query")
+local reader = require("csv-table.reader")
 local state = require("csv-table.state")
 local utils = require("csv-table.actions.utils")
 
@@ -47,7 +47,7 @@ utils.register_action("last_page", "Show the last page", function(buf)
     return buffer.render(buf)
   end
 
-  query.count(buf.state, query.report, function(count)
+  reader.count(buf.state, reader.report, function(count)
     buf.state.row_count = count
     state.goto_page(buf.state, math.max(math.ceil(count / buf.state.limit) - 1, 0))
     buffer.render(buf)

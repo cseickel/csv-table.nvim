@@ -6,9 +6,13 @@ Runs xan and decodes what comes back.
 - `count`, `row`, `yank`, `frequency` and `stats` each run one command and
   return the value it asked for
 - `report` is how every failure reaches the user
+
+This is the way in to the rest of the folder. `commands`, `pipeline` and
+`expression` beside it write the argv and the moonblade xan takes, and nothing
+outside these four files names xan or reads what it prints.
 ]]
 
-local commands = require("csv-table.commands")
+local commands = require("csv-table.reader.commands")
 
 local M = {}
 
@@ -98,8 +102,8 @@ function M.row(state, rowid, on_error, on_values)
 
     local record = (stdout:gsub(RECORD_SEPARATOR .. "$", ""))
     local values = vim.split(record, UNIT_SEPARATOR, { plain = true })
-    -- The last value is the padding column `csv-table.commands` appends, which
-    -- belongs to no column of the file.
+    -- The last value is the padding column `csv-table.reader.commands` appends,
+    -- which belongs to no column of the file.
     table.remove(values)
     on_values(values)
   end)
