@@ -72,7 +72,11 @@ M.page_size = 1000
 local Query = {}
 Query.__index = Query
 
-for _, part in ipairs({ "csv-table.query.columns", "csv-table.query.selection" }) do
+for _, part in ipairs({
+  "csv-table.query.columns",
+  "csv-table.query.selection",
+  "csv-table.query.sort",
+}) do
   for name, method in pairs(require(part)) do
     Query[name] = method
   end
@@ -168,65 +172,6 @@ end
 ---@return boolean
 function Query:is_numeric(column)
   return self.file:is_numeric(column)
-end
-
--- Sorting ---------------------------------------------------------------------
-
---- Sort by one column alone. Asking again for the direction it already has clears
---- the sort, which is how a sort is undone.
----@param column csv.Column
----@param direction "asc"|"desc"
-function Query:sort_by(column, direction)
-  local only = #self.sort_keys == 1 and self.sort_keys[1]
-  if only and only.column.column_id == column.column_id and only.direction == direction then
-    self.sort_keys = {}
-  else
-    self.sort_keys = {
-      { column = column, direction = direction, numeric = self:is_numeric(column) },
-    }
-  end
-  self.page_number = 0
-end
-
---- Add a less significant sort key, or change the direction of one already
---- present. Asking again for the direction it already has removes that key.
----@param column csv.Column
----@param direction "asc"|"desc"
-function Query:add_sort_key(column, direction)
-  for index, key in ipairs(self.sort_keys) do
-    if key.column.column_id == column.column_id then
-      if key.direction == direction then
-        table.remove(self.sort_keys, index)
-      else
-        key.direction = direction
-      end
-      self.page_number = 0
-      return
-    end
-  end
-
-  table.insert(self.sort_keys, {
-    column = column,
-    direction = direction,
-    numeric = self:is_numeric(column),
-  })
-  self.page_number = 0
-end
-
----@param column csv.Column
-function Query:remove_sort_key(column)
-  for index, key in ipairs(self.sort_keys) do
-    if key.column.column_id == column.column_id then
-      table.remove(self.sort_keys, index)
-      self.page_number = 0
-      return
-    end
-  end
-end
-
-function Query:clear_sort()
-  self.sort_keys = {}
-  self.page_number = 0
 end
 
 -- Filters ---------------------------------------------------------------------

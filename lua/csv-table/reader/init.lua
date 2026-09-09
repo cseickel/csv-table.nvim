@@ -11,8 +11,8 @@ read what it prints, and no module outside these five names xan.
 ]]
 
 local commands = require("csv-table.reader.commands")
-local file = require("csv-table.file")
 local parse = require("csv-table.reader.parse")
+local report = require("csv-table.utils.report")
 
 local M = {}
 
@@ -48,12 +48,6 @@ function M.new()
   return setmetatable({ handle = nil, pending = nil, row = nil }, Reader)
 end
 
---- How every failure reaches the user.
----@param message string
-function M.report(message)
-  vim.notify("csv-table: " .. message, vim.log.levels.ERROR)
-end
-
 --- Drop the callbacks of the run in flight and kill it.
 function Reader:cancel()
   self.pending = nil
@@ -86,10 +80,10 @@ function Reader:run(argv, on_output)
 
     local message = vim.trim(result.stderr or "")
     if message ~= "" then
-      return M.report(message)
+      return report.error(message)
     end
     if result.code ~= 0 then
-      return M.report(argv[1] .. " exited " .. result.code)
+      return report.error(argv[1] .. " exited " .. result.code)
     end
     pending.on_output(result.stdout)
   end))
@@ -104,7 +98,7 @@ function Reader:run_json_lines(argv, on_rows)
     for line in stdout:gmatch("[^\r\n]+") do
       local decoded, row = pcall(vim.json.decode, line)
       if not decoded then
-        return M.report("xan returned output that is not JSON")
+        return report.error("xan returned output that is not JSON")
       end
       table.insert(rows, row)
     end
@@ -121,7 +115,7 @@ end
 function Reader:page(query, on_page)
   local display_columns = query:display_columns()
   local first_row_number = query:first_row_number()
-  local version = file.version(query.file.path)
+  local version = query.file:version()
 
   self:run(commands.render(query, display_columns), function(stdout)
     local drawn, err = parse.page(vim.split(stdout, "\n", { plain = true }), {
@@ -130,7 +124,7 @@ function Reader:page(query, on_page)
       file_version = version,
     })
     if not drawn then
-      return M.report(err)
+      return report.error(err)
     end
 
     -- The file has just been read, so whatever was read from it before is old.
@@ -146,7 +140,7 @@ function Reader:count(query, on_count)
   self:run(commands.count(query), function(stdout)
     local count = tonumber(vim.trim(stdout))
     if not count then
-      return M.report("xan count returned " .. vim.trim(stdout))
+      return report.error("xan count returned " .. vim.trim(stdout))
     end
     on_count(count)
   end)
@@ -169,7 +163,7 @@ local function read_row(self, query, row_id, on_values)
 
   self:run(commands.row(query, row_id), function(stdout)
     if stdout == "" then
-      return M.report("row " .. row_id .. " is no longer in the file")
+      return report.error("row " .. row_id .. " is no longer in the file")
     end
 
     local record = (stdout:gsub(RECORD_SEPARATOR .. "$", ""))
@@ -242,7 +236,7 @@ end
 function Reader:stats(query, column, on_stats)
   self:run_json_lines(commands.stats(query, column), function(rows)
     if #rows == 0 then
-      return M.report("xan stats returned nothing")
+      return report.error("xan stats returned nothing")
     end
     on_stats(rows)
   end)

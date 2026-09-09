@@ -1,0 +1,58 @@
+direction: down
+
+title: The folders, and what each one requires {
+  near: top-center
+  shape: text
+  style.font-size: 24
+}
+
+rule: "Every arrow means the folder above requires the folder below.\nA function that changes an object lives in that object's folder." {
+  shape: text
+  style.font-size: 18
+}
+
+classes: {
+  entry: {style.fill: "#3d2d4a"}
+  data: {style.fill: "#2d2d4a"}
+  run: {style.fill: "#4a4a2d"}
+  draw: {style.fill: "#2d4a2d"}
+  ui: {style.fill: "#3d3d3d"}
+}
+
+init: "init.lua\nsetup, the BufReadCmd, the CsvTable command, the statusline" {class: entry}
+keymaps: "keymaps.lua\nevery key and the action it names" {class: entry}
+actions: "actions/\none registry, filled by loading the modules beside it" {class: entry}
+
+popup: "popup/\neverything opened over the table: floats, pickers, panels, dialogs" {class: ui}
+buffer: "buffer/\neverything painted into the table: render, cursor, color, export" {class: draw}
+
+file: "file/\ncsv.File: open a spreadsheet and read what its head says" {class: data}
+query: "query/\ncsv.Query: filters, sort, marks, columns, paging, the row count" {class: data}
+reader: "reader/\nthe only folder that names xan" {class: run}
+page: "page/\ncsv.Page: the drawn table and where every cell sits" {class: data}
+utils: "utils/\ntext widths, json indenting, the error notifier" {class: ui}
+
+init -> actions
+init -> buffer
+init -> keymaps
+init -> query
+init -> utils
+
+actions -> buffer
+actions -> popup
+popup -> actions: the help panel runs one
+popup -> buffer
+popup -> keymaps
+popup -> utils
+
+buffer -> file
+buffer -> query
+buffer -> page
+buffer -> reader
+buffer -> utils
+
+file -> reader
+file -> utils
+reader -> page
+reader -> utils
+page -> utils

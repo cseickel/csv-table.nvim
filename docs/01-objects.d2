@@ -1,0 +1,79 @@
+direction: down
+
+title: The objects, and who holds each one {
+  near: top-center
+  shape: text
+  style.font-size: 24
+}
+
+sentence: "A Reader executes a Query against a File and returns a Page" {
+  shape: text
+  style.font-size: 18
+}
+
+classes: {
+  data: {style.fill: "#2d2d4a"}
+  run: {style.fill: "#4a4a2d"}
+  draw: {style.fill: "#2d4a2d"}
+  external: {style.fill: "#4a2d2d"}
+}
+
+buffer: "csv.Buffer\none per buffer nvim named after a spreadsheet" {class: draw}
+
+file: csv.File {
+  shape: sql_table
+  class: data
+  path: the spreadsheet being read
+  sheet: which sheet, 0 for a file without them
+  sheets: every sheet name
+  columns: every column, in file order
+  formats: kind, decimals, width and align, by column id
+  rowid_column: the id the pipeline prepends, column_id -1
+}
+
+query: csv.Query {
+  shape: sql_table
+  class: data
+  file: the file it reads
+  reader: what runs it
+  columns: every column in display order, hidden ones among them
+  filters: ANDed together
+  sort_keys: most significant first
+  marked: row ids
+  marked_columns: column ids
+  clipboard: cut columns waiting to be pasted
+  selection: anchor, head, kind
+  "page_number, limit": which slice of rows
+  row_count: how many rows the filters leave
+}
+
+page: csv.Page {
+  shape: sql_table
+  class: data
+  lines: the buffer text, borders included
+  header_line: the line the header is drawn on
+  "first_line, last_line": the data lines, first past last when empty
+  rows: row id, row number and buffer line, looked up three ways
+  columns: the columns drawn, in display order
+  ranges: the byte range of every cell
+  file_version: what the file looked like when this page was read
+}
+
+reader: "csv.Reader\none xan at a time, a new run cancelling the last" {class: run}
+
+xan: xan {
+  class: external
+  shape: cloud
+}
+
+empty: "file.empty and page.empty\nanswer every question with no columns and no data,\nso nothing waits on the first read" {
+  shape: text
+  class: data
+}
+
+buffer -> query
+buffer -> page: what is drawn now
+query -> file
+query -> reader
+reader -> xan: spawns
+xan -> page: parsed by reader.parse

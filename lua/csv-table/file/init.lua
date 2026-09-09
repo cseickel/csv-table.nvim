@@ -10,6 +10,7 @@ downstream asks whether the read has happened.
 
 local commands = require("csv-table.reader.commands")
 local format = require("csv-table.file.format")
+local report = require("csv-table.utils.report")
 
 local M = {}
 
@@ -110,14 +111,13 @@ function M.empty(path)
   })
 end
 
---- What `path` looks like on disk, as a value two reads can be compared by. A
---- file written again in the same second keeps its modification time, so the
+--- What the file looks like on disk now, as a value two reads can be compared by.
+--- A file written again in the same second keeps its modification time, so the
 --- size comes along. A file out of reach has no version, and an empty string
 --- never matches a version a read recorded.
----@param path string
 ---@return string
-function M.version(path)
-  local stat = vim.uv.fs_stat(path)
+function File:version()
+  local stat = vim.uv.fs_stat(self.path)
   if not stat then
     return ""
   end
@@ -133,7 +133,7 @@ end
 ---@param on_file fun(file: csv.File)
 function M.open(reader, path, sheet, on_file)
   if vim.fn.executable("xan") == 0 then
-    return reader.report("xan is not on PATH")
+    return report.error("xan is not on PATH")
   end
   sheet = sheet or 0
 
@@ -154,7 +154,7 @@ function M.open(reader, path, sheet, on_file)
     reader:run(commands.headers(path, sheet), function(stdout)
       local names = lines_of(stdout)
       if #names == 0 then
-        return reader.report("no columns in " .. path)
+        return report.error("no columns in " .. path)
       end
 
       local columns = M.columns_from_names(names)

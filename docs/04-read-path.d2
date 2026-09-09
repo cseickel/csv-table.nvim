@@ -1,0 +1,53 @@
+direction: down
+
+title: One read, from render to drawn lines {
+  near: top-center
+  shape: text
+  style.font-size: 24
+}
+
+classes: {
+  data: {style.fill: "#2d2d4a"}
+  run: {style.fill: "#4a4a2d"}
+  draw: {style.fill: "#2d4a2d"}
+  external: {style.fill: "#4a2d2d"}
+}
+
+render: "buffer.render" {class: draw}
+
+page_call: "reader:page(query)\nreads the columns and the file version once, here" {class: run}
+commands: "reader.commands.render\none xan process, no shell and no pipes" {class: run}
+pipeline: "reader.pipeline.build\nselect, enum, filter, sort, slice, select -e, view" {class: run}
+expression: "reader.expression\nthe moonblade the filters and the formats need" {class: run}
+
+xan: xan {
+  class: external
+  shape: cloud
+}
+
+parse: "reader.parse.page\ncuts the row id cell out and records where every cell sits" {class: run}
+csvpage: "csv.Page" {class: data}
+
+store: "buffer.page = drawn" {class: draw}
+after: "query:after_read(read_state, page)\ndecides what this read calls for" {class: data}
+lines: "nvim_buf_set_lines\nthe drawn table becomes the buffer text" {class: draw}
+color: "buffer.color.redraw\nmarked rows, marked columns, the selection" {class: draw}
+restore: "buffer.cursor.restore\nthe active cell goes back to the column it was in" {class: draw}
+
+count: "reader:count(query)\nonly when the file version or the effective filters moved" {class: run}
+selection: "the selection is dropped\nboth ends name rows of the page being replaced" {class: data}
+
+render -> page_call
+page_call -> commands
+commands -> pipeline
+pipeline -> expression
+page_call -> xan: spawns
+xan -> parse: the drawn table
+parse -> csvpage
+csvpage -> store
+store -> after
+after -> count
+after -> selection
+after -> lines
+lines -> color
+color -> restore

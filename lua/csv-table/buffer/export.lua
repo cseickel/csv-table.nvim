@@ -7,7 +7,7 @@ the buffer already holds, so a value drawn cut is exported cut.
 ]]
 
 local cursor = require("csv-table.buffer.cursor")
-local reader = require("csv-table.reader")
+local report = require("csv-table.utils.report")
 
 local M = {}
 
@@ -106,7 +106,7 @@ end
 function M.yank(buf, format, headers)
   local bounds = bounds_of(buf)
   if not bounds then
-    return reader.report("there is nothing to yank")
+    return report.error("there is nothing to yank")
   end
 
   local rows = bounds.bottom - bounds.top + 1
@@ -122,7 +122,7 @@ function M.yank(buf, format, headers)
 
   local block = block_of(buf, bounds)
   if not block then
-    return reader.report("the selected cells are no longer on display")
+    return report.error("the selected cells are no longer on display")
   end
 
   buf.query.reader:export(buf.query, {

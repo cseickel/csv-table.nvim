@@ -1,0 +1,58 @@
+direction: down
+
+title: What a key press runs {
+  near: top-center
+  shape: text
+  style.font-size: 24
+}
+
+classes: {
+  entry: {style.fill: "#3d2d4a"}
+  data: {style.fill: "#2d2d4a"}
+  draw: {style.fill: "#2d4a2d"}
+  ui: {style.fill: "#3d3d3d"}
+}
+
+setup: Bound once, when the buffer is attached {
+  style.fill: "#1a1a2a"
+
+  map: "keymaps.map\nevery key and the action it names" {class: entry}
+  resolve: "keymaps.resolve\nfollows BUILT_IN_ into the user's own config" {class: entry}
+  registry: "actions.utils.register_action\none registry, keyed by name" {class: entry}
+  apply: "init.apply_keymaps\nbinds each key to this buffer" {class: entry}
+
+  map -> resolve -> apply
+  registry -> apply: the action the name finds
+}
+
+press: a key press {
+  shape: oval
+  class: entry
+}
+
+run: "action.run(buf)" {class: entry}
+
+change: "buf.query:add_filter, sort_by, hide_column, turn_page\nchange what the user is asking for" {class: data}
+render: "buffer.render\nthe whole page is read again" {class: draw}
+move: "buffer.movement\nmoves the active cell, and the head of the selection" {class: draw}
+redraw: "buffer.color.redraw\nextmarks over the text already there" {class: draw}
+float: "popup.panel, popup.show, popup.dialog\nopen a float, leaving the table alone" {class: ui}
+yank: "buffer.export.yank\nreads the values through the reader, writes the registers" {class: draw}
+
+next: 04-read-path {
+  shape: document
+  class: draw
+}
+
+setup.apply -> press
+press -> run
+
+run -> change: sort, filter, mark, page, column
+change -> render
+render -> next
+
+run -> move: motion, extend, select
+move -> redraw
+
+run -> float: "show_cell, show_row, show_column,\nshow_file_info, select_sheet, show_help"
+run -> yank: y and Y

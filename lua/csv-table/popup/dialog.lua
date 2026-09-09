@@ -11,7 +11,7 @@ it offers is one that would leave rows on screen.
 
 local buffer = require("csv-table.buffer")
 local popup = require("csv-table.popup")
-local reader = require("csv-table.reader")
+local report = require("csv-table.utils.report")
 
 local M = {}
 
@@ -61,7 +61,7 @@ end
 ---@param values csv.Frequency[]
 local function pick_values(buf, column, values)
   if #values == 0 then
-    return reader.report("no values in " .. column.label)
+    return report.error("no values in " .. column.label)
   end
 
   local checked = {}
@@ -113,7 +113,7 @@ local function ask_for_value(buf, column, choice)
     if choice.type == "numeric" then
       local number = tonumber(answer)
       if not number then
-        return reader.report(answer .. " is not a number")
+        return report.error(answer .. " is not a number")
       end
       buf.query:add_filter({
         type = "numeric",
@@ -138,7 +138,7 @@ end
 function M.sheets(buf)
   local file = buf.query.file
   if #file.sheets == 0 then
-    return reader.report(vim.fn.fnamemodify(file.path, ":t") .. " has no sheets")
+    return report.error(vim.fn.fnamemodify(file.path, ":t") .. " has no sheets")
   end
 
   local lines = {}

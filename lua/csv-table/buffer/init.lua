@@ -14,11 +14,14 @@ the file would destroy the file.
 local color = require("csv-table.buffer.color")
 local cursor = require("csv-table.buffer.cursor")
 local file = require("csv-table.file")
+local guicursor = require("csv-table.buffer.guicursor")
 local movement = require("csv-table.buffer.movement")
 local page = require("csv-table.page")
 local query = require("csv-table.query")
 local reader = require("csv-table.reader")
+local report = require("csv-table.utils.report")
 local statuscolumn = require("csv-table.buffer.statuscolumn")
+local view = require("csv-table.buffer.view")
 
 local M = {}
 
@@ -49,35 +52,6 @@ local function replace_lines(bufnr, lines)
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
   vim.bo[bufnr].modifiable = false
 end
-
---- Where each window is looking, as `winsaveview` reports it, so a buffer that is
---- emptied and filled again can be put back the way the user left it.
----@type table<integer, table>
-local views = {}
-
-local function remember_view()
-  views[vim.api.nvim_get_current_win()] = vim.fn.winsaveview()
-end
-
--- `WinScrolled` reports a window rather than a buffer, so it is registered once
--- and asks whether the window it names is showing a table.
-vim.api.nvim_create_autocmd("WinScrolled", {
-  group = buffer_group,
-  callback = function()
-    if vim.bo.filetype == "csv-table" then
-      remember_view()
-    end
-  end,
-})
-
--- nvim reuses window handles, so a view left behind would describe the next
--- window to take the number.
-vim.api.nvim_create_autocmd("WinClosed", {
-  group = buffer_group,
-  callback = function(event)
-    views[tonumber(event.match)] = nil
-  end,
-})
 
 -- Entering one of nvim's visual modes is what says the user is picking cells out,
 -- whichever key they entered it with. The pattern is the mode nvim came from and
@@ -114,32 +88,6 @@ vim.api.nvim_create_autocmd("ModeChanged", {
   end,
 })
 
---- Look at `window` the way it was left. The active cell goes back first, so nvim
---- has the cursor on the right line before the view is asked for, and the view
---- then decides which part of the table is on screen.
----
---- Scheduled, because `:edit` puts the cursor on line 1 once the read command it
---- fired has returned, and this has to land after that.
----@param buffer csv.Buffer
----@param window integer
-local function restore_view(buffer, window)
-  local cell = cursor.active(buffer, window)
-  local view = views[window]
-
-  vim.schedule(function()
-    if not vim.api.nvim_win_is_valid(window) or vim.api.nvim_win_get_buf(window) ~= buffer.bufnr then
-      return
-    end
-
-    cursor.move_to(buffer, window, cell)
-    if view then
-      vim.api.nvim_win_call(window, function()
-        vim.fn.winrestview(view)
-      end)
-    end
-  end)
-end
-
 --- Run the query for `buffer` and draw the page it returns.
 ---@param buffer csv.Buffer
 ---@param on_rendered fun()|nil Runs once the new text is in the buffer.
@@ -161,7 +109,8 @@ function M.render(buffer, on_rendered)
     buffer.read_state = buffer.query:after_read(buffer.read_state, drawn)
     replace_lines(buffer.bufnr, drawn.lines)
     color.redraw(buffer)
-    -- `init.status` pins this line while the buffer is scrolled past it.
+    -- Nothing here reads this. A winbar can pin the header line while the buffer
+    -- is scrolled past it, and this is where it finds which line that is.
     vim.b[buffer.bufnr].table_header = drawn.header_line
 
     local window = vim.fn.bufwinid(buffer.bufnr)
@@ -284,7 +233,7 @@ local function record(bufnr, path)
       if buffers[bufnr] then
         movement.follow_cursor(buffers[bufnr], 0)
       end
-      remember_view()
+      view.remember()
     end,
   })
 
@@ -308,7 +257,7 @@ end
 function M.attach(bufnr, on_ready)
   local path = vim.api.nvim_buf_get_name(bufnr)
   if path == "" then
-    return reader.report("buffer has no file name")
+    return report.error("buffer has no file name")
   end
 
   -- `:edit` fires the read command again on a buffer already showing a table, and
@@ -319,7 +268,7 @@ function M.attach(bufnr, on_ready)
   -- `guicursor` is global, so the buffer that decides it is the one the user is
   -- in. A read can be for a buffer nobody is in, which is what `bufload` does,
   -- and hiding the cursor for that one would hide it where the user is.
-  cursor.update_guicursor(vim.api.nvim_get_current_buf())
+  guicursor.update(vim.api.nvim_get_current_buf())
 
   local buffer = buffers[bufnr]
   if buffer then
@@ -327,7 +276,7 @@ function M.attach(bufnr, on_ready)
     -- whatever happens. When the file is the one the page was read from, the
     -- lines already in hand are that text, and xan has nothing to add.
     local drawn = buffer.page
-    if #drawn.lines > 0 and file.version(path) == drawn.file_version then
+    if #drawn.lines > 0 and buffer.query.file:version() == drawn.file_version then
       replace_lines(bufnr, drawn.lines)
       color.redraw(buffer)
 
@@ -335,7 +284,7 @@ function M.attach(bufnr, on_ready)
       -- hand, so the user comes back to the cell they left.
       local window = vim.fn.bufwinid(bufnr)
       if window ~= -1 then
-        restore_view(buffer, window)
+        view.restore(buffer, window)
       end
       return
     end

@@ -1,0 +1,44 @@
+direction: right
+
+title: Every color drawn into a table {
+  near: top-center
+  shape: text
+  style.font-size: 24
+}
+
+classes: {
+  define: {style.fill: "#2d2d4a"}
+  draw: {style.fill: "#2d4a2d"}
+  data: {style.fill: "#3d3d3d"}
+}
+
+groups: "buffer.color\nGROUPS defines every group and the order they stack in\nset with default = true, so a colorscheme wins\nset again on ColorScheme, which clears them" {class: define}
+
+provider: "buffer.color, decoration provider\non_win then on_line, ephemeral extmarks\nredrawn on every scroll, since the text decides them\nthe csv-syntax namespace" {class: draw}
+
+marks: "buffer.color.redraw\nthe csv-marks namespace, cleared and drawn again\nredrawn when the query changes, since the query decides them" {class: draw}
+
+cell: "buffer.cursor\nthe csv-active-cell namespace, redrawn on every move\nthe csv-flash namespace, cleared after 250ms" {class: draw}
+
+gutter: "buffer.statuscolumn\n%#CsvRowNumber# inside the statuscolumn text, no extmark" {class: draw}
+
+cursor: "buffer.guicursor\none guicursor entry for n-v-o, no extmark" {class: draw}
+
+groups -> provider: "CsvBorder, CsvHeader,\nCsvDate, CsvNumberPositive,\nCsvNumberNegative"
+groups -> marks: "CsvMarkedRow, CsvMarkedColumn,\nCsvSelection"
+groups -> cell: "CsvActiveCell, CsvFlash"
+groups -> gutter: "CsvRowNumber"
+groups -> cursor: "CsvHiddenCursor"
+
+stack: Which extmark draws over which {
+  shape: sql_table
+  class: data
+  "4300": the active cell
+  "4200": the selection
+  "4096": marked rows, marked columns, flash
+  "100": the cell colors
+}
+
+cell -> stack
+marks -> stack
+provider -> stack

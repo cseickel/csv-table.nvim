@@ -8,7 +8,6 @@ number. Pure Lua, so it runs without nvim.
 ]]
 
 local expression = require("csv-table.reader.expression")
-local format = require("csv-table.file.format")
 local text = require("csv-table.utils.text")
 
 local M = {}
@@ -169,7 +168,7 @@ local function right_aligned(query, display_columns)
   local positions = {}
   for index, column in ipairs(display_columns) do
     local column_format = query.file.formats[column.column_id]
-    if format.is_numeric(column_format) and not column_format.align then
+    if query:is_numeric(column) and not column_format.align then
       -- The closing `select -e` puts the row id at 0, so the first displayed
       -- column is at 1, which is this loop's own index.
       table.insert(positions, index)

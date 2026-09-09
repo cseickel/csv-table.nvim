@@ -18,7 +18,7 @@ source: "The file\na,b,c" {class: shape_after}
 select: "select 0,2\nthe carried columns, by file position" {class: stage}
 enum: "enum -c id\nprepends the row id" {class: stage}
 fixed: "id,a,c\nthe shape is now fixed" {class: shape_after}
-filter: "filter <expression>\nthe filters ANDed, as moonblade" {class: stage}
+filter: "filter <expression>\nthe effective filters ANDed, as moonblade" {class: stage}
 narrowing: "count, stats, frequency\nopen their own pipelines" {class: post}
 sort: "sort -s 2 -R\none stage per key, least significant first" {class: stage}
 slice: "slice -s 0 -l 1000\nthe page" {class: stage}
@@ -26,12 +26,12 @@ display: "select -e ...\nwidths, formats and header text" {class: stage}
 after_display: "id,a,c ▼" {class: shape_after}
 view: "view -t table ...\ndraws each column at the width it already has" {class: stage}
 
-drawn: "┌────┬────┬─────┐\n│ id │ a  │ c ▼ │\n├────┼────┼─────┤\n│  0 │ 10 │   3 │\n│  2 │ 30 │   2 │\n└────┴────┴─────┘" {
+drawn: "┌────┬────┬─────┐\n│ id │ a  │ c ▼ │\n├────┼────┼─────┤\n│  0 │ 10 │   3 │\n│  2 │ 30 │   2 │\n└────┴────┴─────┘" {
   class: shape_after
   style.font: mono
 }
 
-parse: "layout.parse\nstrips row id column and stores it" {class: post}
+parse: "reader.parse.page\nstrips the row id cell and files each row under its id" {class: post}
 
 source -> select
 select -> enum
