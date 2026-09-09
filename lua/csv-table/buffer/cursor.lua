@@ -16,14 +16,28 @@ local FLASH_MILLISECONDS = 250
 local PREVIEW = 8
 
 ---@class csv.ActiveCell
----@field bufnr integer
 ---@field position integer[] Line and byte column, as nvim reports a cursor.
----@field row csv.Row
----@field column csv.Column
+---@field ref csv.CellRef
 ---@field edge "left"|"right" Which end of the cell the cursor is parked at.
 
----@type table<integer, csv.ActiveCell>
+--- Keyed by buffer, then by window. The cell belongs to the table, and the window
+--- only tells two views of the same table apart.
+---@type table<integer, table<integer, csv.ActiveCell>>
 local active_cells = {}
+
+--- The cell `ref` names on the page drawn now, absent once the row or the column
+--- has left it.
+---@param page csv.Page
+---@param ref csv.CellRef
+---@return csv.Cell|nil
+local function resolve(page, ref)
+  local row = page:row_by_id(ref.row_id)
+  local column = page:column_by_id(ref.column_id)
+  if not row or not column then
+    return nil
+  end
+  return { row = row, column = column }
+end
 
 ---@param window integer 0 for the current window, as the API takes it.
 ---@return integer
@@ -38,11 +52,8 @@ end
 ---@param window integer
 ---@return csv.ActiveCell|nil
 local function get(buffer, window)
-  local active = active_cells[window_id(window)]
-  if active and active.bufnr == buffer.bufnr then
-    return active
-  end
-  return nil
+  local windows = active_cells[buffer.bufnr]
+  return windows and windows[window_id(window)] or nil
 end
 
 --- The last column is set to 0, so the right border is at the edge of the screen
@@ -71,19 +82,22 @@ end
 ---@param column_number integer
 local function park_cursor(buffer, window, row, column_number)
   local range = buffer.page:cell_ranges(row.buffer_line)[column_number]
-  if not range then
+  local column = buffer.page:column_at(column_number)
+  if not range or not column then
     return
   end
 
-  local edge = "left"
+  -- The column alone, so a render that drops the row still keeps the end the
+  -- cursor was parked at.
   local previous = get(buffer, window)
-  if previous then
-    local was = buffer.page:column_number(previous.column)
-    if was and column_number > was then
-      edge = "right"
-    elseif was and column_number == was then
-      edge = previous.edge
-    end
+  local previous_column = previous and buffer.page:column_by_id(previous.ref.column_id)
+  local was = previous_column and buffer.page:column_number(previous_column)
+
+  local edge = "left"
+  if was and column_number > was then
+    edge = "right"
+  elseif was == column_number then
+    edge = previous.edge
   end
 
   vim.wo[window][0].sidescrolloff = scroll_off(buffer, column_number)
@@ -91,30 +105,39 @@ local function park_cursor(buffer, window, row, column_number)
     row.buffer_line,
     edge == "right" and range.to - 1 or range.from,
   })
-  active_cells[window_id(window)] = {
-    bufnr = buffer.bufnr,
+  local windows = active_cells[buffer.bufnr] or {}
+  active_cells[buffer.bufnr] = windows
+  windows[window_id(window)] = {
     position = vim.api.nvim_win_get_cursor(window),
-    row = row,
-    column = buffer.page:column_at(column_number),
+    ref = { row_id = row.row_id, column_id = column.column_id },
     edge = edge,
   }
 
-  vim.api.nvim_buf_clear_namespace(buffer.bufnr, cell_namespace, 0, -1)
-  vim.api.nvim_buf_set_extmark(buffer.bufnr, cell_namespace, row.buffer_line - 1, range.from, {
-    end_col = range.to,
-    hl_group = "CsvActiveCell",
-    priority = color.CELL_PRIORITY,
-  })
+  -- The highlight is one extmark on the buffer, so it belongs to the window the
+  -- user is in. `csv-table.buffer` hands it over on `WinEnter`.
+  if window_id(window) == vim.api.nvim_get_current_win() then
+    vim.api.nvim_buf_clear_namespace(buffer.bufnr, cell_namespace, 0, -1)
+    vim.api.nvim_buf_set_extmark(buffer.bufnr, cell_namespace, row.buffer_line - 1, range.from, {
+      end_col = range.to,
+      hl_group = "CsvActiveCell",
+      priority = color.CELL_PRIORITY,
+    })
+  end
 end
 
---- Drop the record for `bufnr`, once the buffer is gone. nvim reuses buffer
+--- Drop every record for `bufnr`, once the buffer is gone. nvim reuses buffer
 --- numbers, so a record left behind would describe the next buffer.
 ---@param bufnr integer
-function M.destroy(bufnr)
-  for window, active in pairs(active_cells) do
-    if active.bufnr == bufnr then
-      active_cells[window] = nil
-    end
+function M.drop_buffer(bufnr)
+  active_cells[bufnr] = nil
+end
+
+--- Drop what every buffer holds for `window`, once the window is gone. nvim
+--- reuses window handles, so a record left behind would describe the next window.
+---@param window integer
+function M.drop_window(window)
+  for _, windows in pairs(active_cells) do
+    windows[window] = nil
   end
 end
 
@@ -132,11 +155,12 @@ function M.cursor_moved(buffer, window)
   return position[1] ~= active.position[1] or position[2] ~= active.position[2]
 end
 
---- The cell the real cursor is in.
+--- The cell the real cursor is in. The cursor is hidden and parked inside the
+--- active cell, so this is here to read a move nvim made on its own.
 ---@param buffer csv.Buffer
 ---@param window integer
 ---@return csv.Cell|nil
-function M.cell(buffer, window)
+function M.physical_cell(buffer, window)
   local position = vim.api.nvim_win_get_cursor(window)
   return buffer.page:cell_at(position[1], position[2])
 end
@@ -155,14 +179,14 @@ end
 ---@param window integer
 ---@return csv.Cell|nil
 function M.moved_cell(buffer, window)
-  local landed = M.cell(buffer, window)
+  local landed = M.physical_cell(buffer, window)
   local active = get(buffer, window)
   if not landed or not active then
     return landed
   end
 
-  local stayed = landed.row.row_id == active.row.row_id
-    and landed.column.column_id == active.column.column_id
+  local stayed = landed.row.row_id == active.ref.row_id
+    and landed.column.column_id == active.ref.column_id
   local byte = vim.api.nvim_win_get_cursor(window)[2]
   if not stayed or byte == active.position[2] then
     return landed
@@ -172,14 +196,15 @@ function M.moved_cell(buffer, window)
   return buffer.page:step_cell(landed, { rows = 0, columns = columns })
 end
 
---- The cell that is active in `window`, which is where the plugin last put the
---- cursor.
+--- The cell that is active in `window`, which is the one drawn in `CsvActiveCell`
+--- and the one every action runs on. Absent once its row or column has left the
+--- page.
 ---@param buffer csv.Buffer
 ---@param window integer
 ---@return csv.Cell|nil
 function M.active_cell(buffer, window)
   local active = get(buffer, window)
-  return active and { row = active.row, column = active.column } or nil
+  return active and resolve(buffer.page, active.ref) or nil
 end
 
 --- Make `cell` active and park the real cursor in it.
@@ -206,34 +231,36 @@ end
 ---@param columns integer
 ---@return csv.Cell|nil
 function M.step(buffer, window, rows, columns)
-  local cell = M.cell(buffer, window)
+  local cell = M.active_cell(buffer, window)
   if not cell then
     return nil
   end
   return M.move_to(buffer, window, buffer.page:step_cell(cell, { rows = rows, columns = columns }))
 end
 
---- Put the active cell back in the column it was in before a render. The new text
---- has its own column widths, so the byte the cursor is on may now be in another
---- column, and the column is what says where the user was.
+--- Put the active cell back after a render, taking the row and the column by id,
+--- so a sort or a filter that keeps them takes the user along. Either id that has
+--- left the page falls back to where the cursor is parked: its line for the row,
+--- its byte for the column.
 ---@param buffer csv.Buffer
 ---@param window integer
 ---@return csv.Cell|nil
 function M.restore(buffer, window)
-  local cell = M.cell(buffer, window)
+  local cell = M.physical_cell(buffer, window)
   local active = get(buffer, window)
-  if cell and active and buffer.page:column_number(active.column) then
-    cell.column = active.column
+  if cell and active then
+    cell.row = buffer.page:row_by_id(active.ref.row_id) or cell.row
+    cell.column = buffer.page:column_by_id(active.ref.column_id) or cell.column
   end
   return M.move_to(buffer, window, cell)
 end
 
---- The column the active cell is in, or nil before the first render.
+--- The column the active cell is in.
 ---@param buffer csv.Buffer
 ---@param window integer
 ---@return csv.Column|nil
 function M.column(buffer, window)
-  local cell = M.cell(buffer, window)
+  local cell = M.active_cell(buffer, window)
   return cell and cell.column or nil
 end
 

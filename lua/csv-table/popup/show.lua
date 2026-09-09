@@ -31,7 +31,7 @@ end
 --- Show what the active cell holds, at full length.
 ---@param buf csv.Buffer
 function M.cell(buf)
-  local cell = cursor.cell(buf, 0)
+  local cell = cursor.active_cell(buf, 0)
   if not cell then
     return
   end
@@ -54,7 +54,7 @@ end
 --- since left still says which row it is showing.
 ---@param buf csv.Buffer
 function M.row(buf)
-  local cell = cursor.cell(buf, 0)
+  local cell = cursor.active_cell(buf, 0)
   if not cell then
     return
   end

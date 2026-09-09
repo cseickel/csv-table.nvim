@@ -152,6 +152,13 @@ function Page:column_at(column_number)
   return self.columns[column_number]
 end
 
+---@param column_id integer
+---@return csv.Column|nil
+function Page:column_by_id(column_id)
+  local column_number = self.column_number_by_id[column_id]
+  return column_number and self.columns[column_number] or nil
+end
+
 --- Where `column` is drawn, present while it is on display.
 ---@param column csv.Column
 ---@return integer|nil column_number

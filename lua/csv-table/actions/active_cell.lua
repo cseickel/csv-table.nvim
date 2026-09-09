@@ -28,7 +28,7 @@ end
 ---@return fun(buf: csv.Buffer)
 local function row_jump_action(edge)
   return function(buf)
-    local cell = cursor.cell(buf, 0)
+    local cell = cursor.active_cell(buf, 0)
     if not cell then
       return
     end

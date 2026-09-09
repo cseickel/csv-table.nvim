@@ -10,7 +10,7 @@ local cursor = require("csv-table.buffer.cursor")
 local utils = require("csv-table.actions.utils")
 
 utils.register_action("toggle_mark_row", "Mark or unmark this row", function(buf)
-  local cell = cursor.cell(buf, 0)
+  local cell = cursor.active_cell(buf, 0)
   if not cell then
     return
   end

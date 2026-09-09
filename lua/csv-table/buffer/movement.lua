@@ -121,7 +121,7 @@ function M.follow_cursor(buf, window)
     return
   end
   if was_click then
-    return M.go_to(buf, window, cursor.cell(buf, window))
+    return M.go_to(buf, window, cursor.physical_cell(buf, window))
   end
   M.go_to(buf, window, cursor.moved_cell(buf, window))
 end
@@ -135,7 +135,7 @@ local function anchor_here(buf, window, kind)
   if buf.query:has_selection() then
     return true
   end
-  local cell = cursor.cell(buf, window)
+  local cell = cursor.active_cell(buf, window)
   if not cell then
     return false
   end
@@ -196,7 +196,7 @@ function M.start_extending(buf, window)
 
   local other = vim.fn.getpos("v")
   local anchor = buf.page:cell_at(other[2], other[3] - 1)
-  local head = cursor.cell(buf, window)
+  local head = cursor.physical_cell(buf, window)
   if anchor and head then
     buf.query:select_cells(anchor, head, kind_of_mode())
     -- `gv` moves the cursor to a corner, and the active cell has to come along,
@@ -236,7 +236,7 @@ end
 ---@param window integer
 ---@param kind csv.SelectionKind
 function M.select(buf, window, kind)
-  local cell = cursor.cell(buf, window)
+  local cell = cursor.active_cell(buf, window)
   if not cell then
     return
   end

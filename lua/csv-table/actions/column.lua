@@ -19,7 +19,7 @@ local utils = require("csv-table.actions.utils")
 ---@param on_focused fun(column: csv.Column)|nil Runs once the column is active again.
 local function follow(buf, column, on_focused)
   buffer.render(buf, function()
-    local cell = cursor.cell(buf, 0)
+    local cell = cursor.active_cell(buf, 0)
     if not cell or not buf.page:column_number(column) then
       return
     end

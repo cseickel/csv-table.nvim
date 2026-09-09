@@ -88,6 +88,25 @@ vim.api.nvim_create_autocmd("ModeChanged", {
   end,
 })
 
+-- Each window holds its own active cell and one extmark draws it, so the window
+-- entered takes the highlight with it.
+vim.api.nvim_create_autocmd("WinEnter", {
+  group = buffer_group,
+  callback = function()
+    local buffer = buffers[vim.api.nvim_get_current_buf()]
+    if buffer then
+      cursor.restore(buffer, 0)
+    end
+  end,
+})
+
+vim.api.nvim_create_autocmd("WinClosed", {
+  group = buffer_group,
+  callback = function(event)
+    cursor.drop_window(tonumber(event.match))
+  end,
+})
+
 --- Run the query for `buffer` and draw the page it returns.
 ---@param buffer csv.Buffer
 ---@param on_rendered fun()|nil Runs once the new text is in the buffer.
@@ -113,8 +132,7 @@ function M.render(buffer, on_rendered)
     -- is scrolled past it, and this is where it finds which line that is.
     vim.b[buffer.bufnr].table_header = drawn.header_line
 
-    local window = vim.fn.bufwinid(buffer.bufnr)
-    if window ~= -1 then
+    for _, window in ipairs(vim.fn.win_findbuf(buffer.bufnr)) do
       cursor.restore(buffer, window)
     end
 
@@ -216,11 +234,15 @@ local function record(bufnr, path)
   buffers[bufnr] = buffer
 
   set_window_options(bufnr)
+  -- Shown in a window again, which `:buffer` reaches without the read command or
+  -- `WinEnter` firing. The window has no active cell for this buffer until it is
+  -- parked here.
   vim.api.nvim_create_autocmd("BufWinEnter", {
     group = buffer_group,
     buffer = bufnr,
     callback = function()
       set_window_options(bufnr)
+      cursor.restore(buffer, 0)
     end,
   })
 
@@ -243,7 +265,7 @@ local function record(bufnr, path)
     callback = function()
       buffer.query.reader:cancel()
       buffers[bufnr] = nil
-      cursor.destroy(bufnr)
+      cursor.drop_buffer(bufnr)
     end,
   })
 
@@ -282,8 +304,7 @@ function M.attach(bufnr, on_ready)
 
       -- The active cell names a row of this page, which is the one still in
       -- hand, so the user comes back to the cell they left.
-      local window = vim.fn.bufwinid(bufnr)
-      if window ~= -1 then
+      for _, window in ipairs(vim.fn.win_findbuf(bufnr)) do
         view.restore(buffer, window)
       end
       return
