@@ -54,7 +54,7 @@ M.page_size = 1000
 ---@field sheet integer         0-based sheet being read, 0 for a source without sheets.
 ---@field sheets string[]       Every sheet name, empty for a source without sheets.
 ---@field columns csv.Column[]  Every source column, in display order, hidden ones among them.
----@field rowid_column csv.Column The prepended row id, which `layout.parse` cuts back out.
+---@field rowid_column csv.Column The prepended row id, which `parse.page` cuts back out.
 ---@field row_count integer|nil How many rows the filters leave, once xan has counted them.
 ---@field filters csv.Filter[]  ANDed together.
 ---@field sort_keys csv.SortKey[] Most significant key first.
