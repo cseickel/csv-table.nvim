@@ -13,7 +13,6 @@ All of it comes from xan, so `inspect` answers a callback.
 local columns = require("csv-table.columns")
 local commands = require("csv-table.reader.commands")
 local format = require("csv-table.format")
-local reader = require("csv-table.reader")
 
 local M = {}
 
@@ -55,53 +54,50 @@ local function lines_of(stdout)
   return lines
 end
 
---- Inspect one sheet of `path` and hand back everything needed to build a
---- pipeline for it.
----@param path string
----@param sheet integer 0-based, ignored by a source without sheets.
----@param sheets string[] Every sheet name, already listed.
----@param on_done fun(source: csv.Source)
----@param on_error fun(message: string)
-local function inspect_sheet(path, sheet, sheets, on_done, on_error)
-  reader.run(commands.headers(path, sheet), on_error, function(stdout)
-    local names = lines_of(stdout)
-    if #names == 0 then
-      return on_error("no columns in " .. path)
-    end
-
-    local source_columns = columns.from_names(names)
-
-    local argv = commands.sample(path, sheet, #source_columns)
-    reader.run_json_lines(argv, on_error, function(sample)
-      on_done({
-        path = path,
-        columns = source_columns,
-        rowid_name = prepended_name(names),
-        formats = format.analyze(sample, source_columns),
-        sheet = sheet,
-        sheets = sheets,
-      })
-    end)
-  end)
-end
-
---- Inspect `path` and hand back everything needed to build a pipeline for it.
+--- Inspect `path` through `reader` and hand back everything needed to build a
+--- pipeline for it. The sheet names are listed first where the file has any, so
+--- the headers and the sample are read from the sheet that was asked for.
+---@param reader csv.Reader
 ---@param path string
 ---@param sheet integer|nil 0-based, defaulting to the first sheet.
 ---@param on_done fun(source: csv.Source)
 ---@param on_error fun(message: string)
-function M.inspect(path, sheet, on_done, on_error)
+function M.inspect(reader, path, sheet, on_done, on_error)
   if vim.fn.executable("xan") == 0 then
     return on_error("xan is not on PATH")
   end
-
   sheet = sheet or 0
-  if not commands.has_sheets(path) then
-    return inspect_sheet(path, sheet, {}, on_done, on_error)
+
+  ---@param sheets string[]
+  local function inspect_sheet(sheets)
+    reader:run(commands.headers(path, sheet), on_error, function(stdout)
+      local names = lines_of(stdout)
+      if #names == 0 then
+        return on_error("no columns in " .. path)
+      end
+
+      local source_columns = columns.from_names(names)
+
+      local argv = commands.sample(path, sheet, #source_columns)
+      reader:run_json_lines(argv, on_error, function(sample)
+        on_done({
+          path = path,
+          columns = source_columns,
+          rowid_name = prepended_name(names),
+          formats = format.analyze(sample, source_columns),
+          sheet = sheet,
+          sheets = sheets,
+        })
+      end)
+    end)
   end
 
-  reader.run(commands.sheets(path), on_error, function(stdout)
-    inspect_sheet(path, sheet, lines_of(stdout), on_done, on_error)
+  if not commands.has_sheets(path) then
+    return inspect_sheet({})
+  end
+
+  reader:run(commands.sheets(path), on_error, function(stdout)
+    inspect_sheet(lines_of(stdout))
   end)
 end
 

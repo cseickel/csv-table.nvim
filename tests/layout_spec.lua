@@ -1,6 +1,7 @@
 local columns = require("csv-table.columns")
 local fixture = require("support.fixture")
 local layout = require("csv-table.layout")
+local parse = require("csv-table.reader.parse")
 
 --- What `xan view -t table` draws for two rows of one column, blank padding and
 --- all.
@@ -24,14 +25,14 @@ end
 ---@return csv.Column[] source_columns
 local function parsed(first_row_number)
   local _, source = fixture.duplicated_headers()
-  local result, err = layout.parse(drawn(), { source[1] }, first_row_number)
+  local result, err = parse.page(drawn(), { source[1] }, first_row_number)
   truthy(result or err)
   return result, source
 end
 
-describe("layout.parse", function()
+describe("parse.page", function()
   it("refuses text that is missing its borders", function()
-    local result, err = layout.parse({ "just", "some", "text", "here" }, {}, 1)
+    local result, err = parse.page({ "just", "some", "text", "here" }, {}, 1)
     equals(result, nil)
     equals(err, "xan view did not produce a table")
   end)

@@ -1,5 +1,6 @@
 local fixture = require("support.fixture")
 local layout = require("csv-table.layout")
+local parse = require("csv-table.reader.parse")
 local selection = require("csv-table.selection")
 
 --- A three row, two column layout to pick cells out of.
@@ -19,7 +20,7 @@ local function drawn()
     "└────┴─────┴─────┘",
     "",
   }
-  local result = layout.parse(lines, { source[1], source[2] }, 1)
+  local result = parse.page(lines, { source[1], source[2] }, 1)
   return result, view, source
 end
 

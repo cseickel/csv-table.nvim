@@ -172,8 +172,8 @@ end
 --- Describe the file and the view over it.
 ---@param buf csv.Buffer
 function M.info(buf)
-  reader.count(buf.state, reader.report, function(count)
-    reader.stats(buf.state, nil, reader.report, function(stats)
+  buf.reader:count(buf.state, reader.report, function(count)
+    buf.reader:stats(buf.state, nil, reader.report, function(stats)
       local pages = math.max(math.ceil(count / buf.state.limit), 1)
       local lines = {
         "  " .. buf.state.source,
@@ -194,7 +194,7 @@ end
 ---@param buf csv.Buffer
 ---@param column csv.Column
 function M.stats(buf, column)
-  reader.stats(buf.state, column, reader.report, function(rows)
+  buf.reader:stats(buf.state, column, reader.report, function(rows)
     local summary = rows[1]
     local lines = {}
     for _, field in ipairs(STAT_FIELDS) do

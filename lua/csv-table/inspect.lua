@@ -64,12 +64,6 @@ end
 
 --- Read the row the active cell is in, and hand back the cell along with it.
 ---
---- The values stay on the buffer under the layout they were read with, so
---- reading cell after cell along one row runs xan once, and a render drops them:
---- every render reads the file again and parses a layout of its own. A read that
---- returns after one files its values under the layout it started on, which no
---- later read asks for.
----
 --- The cell is the one under the cursor when the read starts, so a panel opened
 --- over a row the user has since left still shows the row it was asked for.
 ---@param buf csv.Buffer
@@ -80,14 +74,7 @@ local function read_row(buf, on_row)
     return
   end
 
-  local layout = buf.layout
-  local cached = buf.row_values
-  if cached and cached.layout == layout and cached.row_id == cell.row.row_id then
-    return on_row(cached.values, cell)
-  end
-
-  reader.row(buf.state, cell.row.row_id, reader.report, function(values)
-    buf.row_values = { layout = layout, row_id = cell.row.row_id, values = values }
+  buf.reader:row_values(buf.state, cell.row.row_id, reader.report, function(values)
     on_row(values, cell)
   end)
 end
@@ -217,7 +204,7 @@ function M.yank(buf, format, headers)
   end
 
   local opts = { rowids = rowids, columns = yanked, headers = headers, format = format }
-  reader.yank(buf.state, opts, reader.report, function(text)
+  buf.reader:yank(buf.state, opts, reader.report, function(text)
     to_registers(text)
     done()
   end)

@@ -12,12 +12,10 @@ over the file would destroy the file.
 ]]
 
 local active_cell = require("csv-table.active_cell")
-local columns = require("csv-table.columns")
 local layout = require("csv-table.layout")
 local movement = require("csv-table.movement")
 local overlay = require("csv-table.overlay")
 local reader = require("csv-table.reader")
-local commands = require("csv-table.reader.commands")
 local selection = require("csv-table.selection")
 local source = require("csv-table.source")
 local statuscolumn = require("csv-table.statuscolumn")
@@ -25,17 +23,12 @@ local state = require("csv-table.state")
 
 local M = {}
 
----@class csv.RowValues
----@field layout csv.Layout What was on screen when the row was read.
----@field row_id integer
----@field values string[] Every value of that row, in file order.
-
 ---@class csv.Buffer
 ---@field bufnr integer
 ---@field state csv.State
+---@field reader csv.Reader The one xan this buffer has running.
 ---@field layout csv.Layout|nil Absent until the first render succeeds.
 ---@field stamp string|nil What the file looked like when the layout was read.
----@field row_values csv.RowValues|nil The last row `csv-table.inspect` read whole.
 
 ---@type table<integer, csv.Buffer>
 local buffers = {}
@@ -174,7 +167,7 @@ local function count_rows(buffer)
   end
 
   local counted = buffer.state
-  reader.count(buffer.state, reader.report, function(count)
+  buffer.reader:count(buffer.state, reader.report, function(count)
     -- The state is replaced when another sheet is opened, so the answer lands
     -- on the state that asked for it.
     counted.row_count = count
@@ -190,26 +183,11 @@ end
 ---@param on_rendered fun()|nil Runs once the new text is in the buffer.
 function M.render(buffer, on_rendered)
   selection.clear(buffer.state)
-
-  -- The command and the layout read this one snapshot, so they agree even when
-  -- a second render starts while this one is waiting on xan.
-  local display_columns = columns.display_columns(buffer.state)
-  local first_row_number = state.first_row_number(buffer.state)
   local stamp = file_stamp(buffer.state.source)
 
-  local argv = commands.render(buffer.state, display_columns)
-  reader.run(argv, reader.report, function(stdout)
+  buffer.reader:page(buffer.state, reader.report, function(parsed)
     if not vim.api.nvim_buf_is_valid(buffer.bufnr) then
       return
-    end
-
-    local parsed, err = layout.parse(
-      vim.split(stdout, "\n", { plain = true }),
-      display_columns,
-      first_row_number
-    )
-    if not parsed then
-      return reader.report(err)
     end
 
     -- A page past the first that came back empty is a page past the end, which
@@ -258,7 +236,7 @@ end
 ---@param buffer csv.Buffer
 ---@param sheet integer 0-based.
 function M.open_sheet(buffer, sheet)
-  source.inspect(buffer.state.source, sheet, function(source_info)
+  source.inspect(buffer.reader, buffer.state.source, sheet, function(source_info)
     if not vim.api.nvim_buf_is_valid(buffer.bufnr) then
       return
     end
@@ -367,18 +345,28 @@ function M.attach(bufnr, on_ready)
   -- and hiding the cursor for that one would hide it where the user is.
   active_cell.update_guicursor(vim.api.nvim_get_current_buf())
 
-  source.inspect(path, nil, function(source_info)
+  -- The reader is made before the file is read, because reading it is the first
+  -- thing it does.
+  local buffer_reader = reader.new()
+
+  source.inspect(buffer_reader, path, nil, function(source_info)
     if not vim.api.nvim_buf_is_valid(bufnr) then
       return
     end
 
-    local buffer = { bufnr = bufnr, state = state.new(source_info), layout = nil }
+    local buffer = {
+      bufnr = bufnr,
+      state = state.new(source_info),
+      reader = buffer_reader,
+      layout = nil,
+    }
     buffers[bufnr] = buffer
 
     vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
       group = buffer_group,
       buffer = bufnr,
       callback = function()
+        buffer_reader:cancel()
         buffers[bufnr] = nil
         active_cell.destroy(bufnr)
       end,

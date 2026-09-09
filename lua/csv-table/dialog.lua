@@ -194,7 +194,7 @@ function M.open(buf, column)
 
   vim.keymap.set("n", "v", function()
     window.close(winid)
-    reader.frequency(buf.state, column, reader.report, function(values)
+    buf.reader:frequency(buf.state, column, reader.report, function(values)
       pick_values(buf, column, values)
     end)
   end, { buffer = bufnr, nowait = true })

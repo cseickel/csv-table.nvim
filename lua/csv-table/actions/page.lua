@@ -47,7 +47,7 @@ utils.register_action("last_page", "Show the last page", function(buf)
     return buffer.render(buf)
   end
 
-  reader.count(buf.state, reader.report, function(count)
+  buf.reader:count(buf.state, reader.report, function(count)
     buf.state.row_count = count
     state.goto_page(buf.state, math.max(math.ceil(count / buf.state.limit) - 1, 0))
     buffer.render(buf)
