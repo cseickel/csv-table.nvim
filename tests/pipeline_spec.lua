@@ -4,24 +4,24 @@ local fixture = require("support.fixture")
 local pipeline = require("csv-table.reader.pipeline")
 
 --- The pipeline string for the current query, with every column on display.
----@param view csv.Query
+---@param query csv.Query
 ---@return string
-local function built(view)
-  return pipeline.build(view, view:display_columns())
+local function built(query)
+  return pipeline.build(query, query:display_columns())
 end
 
 --- The filter expression the current query renders to.
----@param view csv.Query
+---@param query csv.Query
 ---@return string
-local function filters_of(view)
-  local _, positions = pipeline.carried_columns(view, view:display_columns())
-  return expression.all_filters(view:effective_filters(), positions)
+local function filters_of(query)
+  local _, positions = pipeline.carried_columns(query, query:display_columns())
+  return expression.all_filters(query:effective_filters(), positions)
 end
 
 describe("pipeline.carried_columns", function()
   it("lands the row id at zero and each column at its place in the list", function()
-    local view = fixture.duplicated_headers()
-    local carried, positions = pipeline.carried_columns(view, view:display_columns())
+    local query = fixture.duplicated_headers()
+    local carried, positions = pipeline.carried_columns(query, query:display_columns())
 
     equals(#carried, 3)
     equals(positions[0], 1)
@@ -30,26 +30,26 @@ describe("pipeline.carried_columns", function()
   end)
 
   it("carries a hidden column that a sort key names", function()
-    local view, source = fixture.duplicated_headers()
-    view:hide_column(source[3])
-    view:sort_by(source[3], "desc")
+    local query, source = fixture.duplicated_headers()
+    query:hide_column(source[3])
+    query:sort_by(source[3], "desc")
 
-    local carried = pipeline.carried_columns(view, view:display_columns())
+    local carried = pipeline.carried_columns(query, query:display_columns())
     equals(#carried, 3)
     equals(carried[3].column_id, 2)
   end)
 
   it("carries a hidden column that a filter names", function()
-    local view, source = fixture.duplicated_headers()
-    view:hide_column(source[2])
-    view:add_filter({
+    local query, source = fixture.duplicated_headers()
+    query:hide_column(source[2])
+    query:add_filter({
       type = "string",
       column = source[2],
       operator = "contains",
       value = "x",
     })
 
-    local carried = pipeline.carried_columns(view, view:display_columns())
+    local carried = pipeline.carried_columns(query, query:display_columns())
     equals(#carried, 3)
     equals(carried[3].column_id, 1)
   end)
@@ -57,138 +57,171 @@ end)
 
 describe("pipeline.build", function()
   it("opens by selecting the carried columns and prepending the row id", function()
-    local view = fixture.duplicated_headers()
-    matches(built(view), "^select '0,1,2' | enum %-c 'id'")
+    local query = fixture.duplicated_headers()
+    matches(built(query), "^select '0,1,2' | enum %-c 'id'")
   end)
 
   it("sorts by the position the opening select fixed", function()
-    local view, source = fixture.duplicated_headers()
-    view:sort_by(source[3], "desc")
-    matches(built(view), "sort %-s 3 %-R")
+    local query, source = fixture.duplicated_headers()
+    query:sort_by(source[3], "desc")
+    matches(built(query), "sort %-s 3 %-R")
   end)
 
   it("sorts numerically when the column holds numbers", function()
-    local view, source = fixture.duplicated_headers()
-    view.file.formats[source[1].column_id] = { kind = "int", precision = 0 }
-    view:sort_by(source[1], "asc")
-    matches(built(view), "sort %-s 1 %-N")
+    local query, source = fixture.duplicated_headers()
+    query.file.formats[source[1].column_id] = { kind = "int", precision = 0 }
+    query:sort_by(source[1], "asc")
+    matches(built(query), "sort %-s 1 %-N")
   end)
 
   it("applies the sort keys least significant first", function()
-    local view, source = fixture.duplicated_headers()
-    view:sort_by(source[1], "asc")
-    view:add_sort_key(source[3], "asc")
+    local query, source = fixture.duplicated_headers()
+    query:sort_by(source[1], "asc")
+    query:add_sort_key(source[3], "asc")
 
-    local pipeline_string = built(view)
+    local pipeline_string = built(query)
     local significant = pipeline_string:find("sort %-s 1")
     local minor = pipeline_string:find("sort %-s 3")
     truthy(minor < significant)
   end)
 
   it("slices the page the query asks for", function()
-    local view = fixture.duplicated_headers()
-    view.page_number = 2
-    view.limit = 100
-    matches(built(view), "slice %-s 200 %-l 100")
+    local query = fixture.duplicated_headers()
+    query.page_number = 2
+    query.limit = 100
+    matches(built(query), "slice %-s 200 %-l 100")
   end)
 
   it("closes by naming the row id and each displayed column", function()
-    local view = fixture.duplicated_headers()
-    matches(built(view), 'select %-e \'col%(0%) as "id"')
-    matches(built(view), 'col%(1%) || " " as "a%[0%]"')
+    local query = fixture.duplicated_headers()
+    matches(built(query), 'select %-e \'col%(0%) as "id"')
+    matches(built(query), 'col%(1%) || " " as "a%[0%]"')
   end)
 
   it("leaves a hidden column out of the closing select", function()
-    local view, source = fixture.duplicated_headers()
-    view:hide_column(source[3])
-    view:sort_by(source[3], "desc")
+    local query, source = fixture.duplicated_headers()
+    query:hide_column(source[3])
+    query:sort_by(source[3], "desc")
 
-    local pipeline_string = built(view)
+    local pipeline_string = built(query)
     matches(pipeline_string, "sort %-s 3")
     lacks(pipeline_string, 'as "a%[1%]')
   end)
 
   it("marks a sorted column in its header", function()
-    local view, source = fixture.duplicated_headers()
-    view:sort_by(source[1], "asc")
-    matches(built(view), 'as "a%[0%] ▲"')
+    local query, source = fixture.duplicated_headers()
+    query:sort_by(source[1], "asc")
+    matches(built(query), 'as "a%[0%] ▲"')
   end)
 
   it("numbers the arrows when several keys are in play", function()
-    local view, source = fixture.duplicated_headers()
-    view:sort_by(source[1], "asc")
-    view:add_sort_key(source[3], "desc")
+    local query, source = fixture.duplicated_headers()
+    query:sort_by(source[1], "asc")
+    query:add_sort_key(source[3], "desc")
 
-    local pipeline_string = built(view)
+    local pipeline_string = built(query)
     matches(pipeline_string, 'as "a%[0%] ▲1"')
     matches(pipeline_string, 'as "a%[1%] ▼2"')
   end)
 
   it("cuts a header down to the width the user pinned", function()
-    local view, source = fixture.duplicated_headers()
-    view.file.formats[source[1].column_id] = {
+    local query, source = fixture.duplicated_headers()
+    query.file.formats[source[1].column_id] = {
       kind = "text",
       precision = 0,
       width = 3,
       align = "left",
     }
-    matches(built(view), 'as "a%[…"')
+    matches(built(query), 'as "a%[…"')
   end)
 
   it("right aligns the numeric columns by their drawn position", function()
-    local view, source = fixture.duplicated_headers()
-    view.file.formats[source[2].column_id] = { kind = "float", precision = 2 }
-    matches(built(view), "%-r '2'")
+    local query, source = fixture.duplicated_headers()
+    query.file.formats[source[2].column_id] = { kind = "float", precision = 2 }
+    matches(built(query), "%-r '2'")
+  end)
+
+  it("caps a column nobody pinned at 200 characters", function()
+    local query = fixture.duplicated_headers()
+    matches(built(query), "%-%-cols 267")
+  end)
+
+  it("gives a pinned column the width to be drawn whole", function()
+    local query, source = fixture.duplicated_headers()
+    query.file.formats[source[1].column_id] = {
+      kind = "text",
+      precision = 0,
+      width = 900,
+      align = "left",
+    }
+    matches(built(query), "%-%-cols 1200")
+  end)
+
+  it("takes the widest pin, since the cap is per column", function()
+    local query, source = fixture.duplicated_headers()
+    query.file.formats[source[1].column_id] = {
+      kind = "text",
+      precision = 0,
+      width = 900,
+      align = "left",
+    }
+    query.file.formats[source[2].column_id] = {
+      kind = "text",
+      precision = 0,
+      width = 300,
+      align = "left",
+    }
+    matches(built(query), "%-%-cols 1200")
   end)
 end)
 
 describe("expression.all_filters", function()
   it("addresses a column by the position the opening select fixed", function()
-    local view, source = fixture.duplicated_headers()
-    view:add_filter({
+    local query, source = fixture.duplicated_headers()
+    query:add_filter({
       type = "string",
       column = source[3],
       operator = "contains",
       value = "x",
     })
-    equals(filters_of(view), 'contains(col(3), "x")')
+    equals(filters_of(query), 'contains(col(3), "x")')
   end)
 
   it("wraps a numeric comparison so a value that fails to cast drops out", function()
-    local view, source = fixture.duplicated_headers()
-    view:add_filter({
+    local query, source = fixture.duplicated_headers()
+    query:add_filter({
       type = "numeric",
       column = source[1],
       operator = ">=",
       value = 10,
     })
-    equals(filters_of(view), "try(col(1) >= 10)")
+    equals(filters_of(query), "try(col(1) >= 10)")
   end)
 
   it("reads the marked rows off the row id at zero", function()
-    local view = fixture.duplicated_headers()
-    view:toggle_mark(7)
-    view:toggle_mark(3)
-    view:add_filter({ type = "marked" })
-    equals(filters_of(view), '(col(0) in ["3", "7"])')
+    local query = fixture.duplicated_headers()
+    query:toggle_mark(7)
+    query:toggle_mark(3)
+    query:add_filter({ type = "marked" })
+    equals(filters_of(query), '(col(0) in ["3", "7"])')
   end)
 
   it("ANDs several filters together", function()
-    local view, source = fixture.duplicated_headers()
-    view:add_filter({ type = "expr", expression = "true" })
-    view:add_filter({
+    local query, source = fixture.duplicated_headers()
+    query:add_filter({ type = "expr", expression = "true" })
+    query:add_filter({
       type = "in",
       column = source[1],
       values = { "x", "y" },
     })
-    equals(filters_of(view), '(true) && (col(1) in ["x", "y"])')
+    equals(filters_of(query), '(true) && (col(1) in ["x", "y"])')
   end)
 end)
 
 describe("commands.row", function()
   it("writes the row unquoted, with the ascii separators between its values", function()
-    local view = fixture.duplicated_headers()
-    local argv = commands.row(view, 7)
+    local query = fixture.duplicated_headers()
+    local argv = commands.row(query, 7)
 
     matches(argv[3], "slice %-s 7 %-l 1")
     matches(argv[3], "behead")
@@ -197,15 +230,15 @@ describe("commands.row", function()
   end)
 
   it("pads the record, so a single empty value does not come back quoted", function()
-    local view = fixture.duplicated_headers()
-    matches(commands.row(view, 0)[3], 'map .%(""%) as csv_table_padding')
+    local query = fixture.duplicated_headers()
+    matches(commands.row(query, 0)[3], 'map .%(""%) as csv_table_padding')
   end)
 end)
 
 describe("commands.export", function()
   it("carries the exported columns and drops the row id at the end", function()
-    local view, source = fixture.duplicated_headers()
-    local argv = commands.export(view, {
+    local query, source = fixture.duplicated_headers()
+    local argv = commands.export(query, {
       block = { row_ids = { 1, 2 }, columns = { source[1], source[3] } },
       headers = true,
       format = "tsv",
@@ -217,8 +250,8 @@ describe("commands.export", function()
   end)
 
   it("takes a run of consecutive rows in one slice", function()
-    local view, source = fixture.duplicated_headers()
-    local argv = commands.export(view, {
+    local query, source = fixture.duplicated_headers()
+    local argv = commands.export(query, {
       block = { row_ids = { 4, 5, 6 }, columns = { source[1] } },
       headers = true,
       format = "tsv",
@@ -227,8 +260,8 @@ describe("commands.export", function()
   end)
 
   it("puts scattered rows back in the order they are drawn", function()
-    local view, source = fixture.duplicated_headers()
-    local argv = commands.export(view, {
+    local query, source = fixture.duplicated_headers()
+    local argv = commands.export(query, {
       block = { row_ids = { 9, 2 }, columns = { source[1] } },
       headers = true,
       format = "tsv",
@@ -240,8 +273,8 @@ describe("commands.export", function()
   end)
 
   it("beheads the output when the headers are unwanted", function()
-    local view, source = fixture.duplicated_headers()
-    local argv = commands.export(view, {
+    local query, source = fixture.duplicated_headers()
+    local argv = commands.export(query, {
       block = { row_ids = { 1 }, columns = { source[1] } },
       headers = false,
       format = "tsv",
@@ -250,8 +283,8 @@ describe("commands.export", function()
   end)
 
   it("writes CSV with no writer stage of its own", function()
-    local view, source = fixture.duplicated_headers()
-    local argv = commands.export(view, {
+    local query, source = fixture.duplicated_headers()
+    local argv = commands.export(query, {
       block = { row_ids = { 1 }, columns = { source[1] } },
       headers = true,
       format = "csv",
@@ -262,8 +295,8 @@ describe("commands.export", function()
   end)
 
   it("names the columns by their labels for json, so a repeated header keeps both", function()
-    local view, source = fixture.duplicated_headers()
-    local argv = commands.export(view, {
+    local query, source = fixture.duplicated_headers()
+    local argv = commands.export(query, {
       block = { row_ids = { 1 }, columns = { source[1], source[3] } },
       headers = true,
       format = "json",
@@ -274,8 +307,8 @@ describe("commands.export", function()
   end)
 
   it("writes a markdown table", function()
-    local view, source = fixture.duplicated_headers()
-    local argv = commands.export(view, {
+    local query, source = fixture.duplicated_headers()
+    local argv = commands.export(query, {
       block = { row_ids = { 1 }, columns = { source[1] } },
       headers = true,
       format = "markdown",

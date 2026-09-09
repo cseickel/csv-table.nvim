@@ -198,6 +198,31 @@ function M.narrowing_stages(query, wanted)
   return stages, positions
 end
 
+--- The widest a column is drawn when the user has pinned no width. One cell holding
+--- a long value would otherwise draw every row of the page at its length.
+local WIDEST_COLUMN = 200
+
+--- `xan view -e` draws a column at three quarters of `--cols`, whatever the number
+--- of columns.
+local COLUMN_SHARE = 0.75
+
+--- What `--cols` has to be for the widest column to be drawn whole. `xan view` sizes
+--- columns against a terminal, and this writes to a pipe, so without a number xan
+--- takes 80 columns and cuts every column at 60.
+---@param query csv.Query
+---@param display_columns csv.Column[]
+---@return integer
+local function view_cols(query, display_columns)
+  local widest = WIDEST_COLUMN
+  for _, column in ipairs(display_columns) do
+    local column_format = query.file.formats[column.column_id]
+    if column_format and column_format.width then
+      widest = math.max(widest, column_format.width)
+    end
+  end
+  return math.ceil(widest / COLUMN_SHARE)
+end
+
 --- Build the argument for `xan run`.
 ---@param query csv.Query
 ---@param display_columns csv.Column[] The columns to draw, in display order.
@@ -218,9 +243,14 @@ function M.build(query, display_columns)
   -- `-M` hides the meta info
   -- `-e` draws every column at the width its content already has
   -- `-A` shows all rows instead of the 100 row default
+  -- `--cols` caps how wide one column is drawn, which xan otherwise takes from a
+  -- terminal
   -- `-t table` is named, since `XAN_VIEW_ARGS` can change the default theme and
   -- the syntax file is written for this one
-  local view = "view --color never -M -I --repeat-headers never -e -A -t table"
+  local view = string.format(
+    "view --color never -M -I --repeat-headers never -e -A -t table --cols %d",
+    view_cols(query, display_columns)
+  )
   local aligned = right_aligned(query, display_columns)
   if aligned then
     view = view .. " -r " .. M.quote(aligned)

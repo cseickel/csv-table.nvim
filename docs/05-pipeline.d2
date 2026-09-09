@@ -24,7 +24,7 @@ sort: "sort -s 2 -R\none stage per key, least significant first" {class: stage}
 slice: "slice -s 0 -l 1000\nthe page" {class: stage}
 display: "select -e ...\nwidths, formats and header text" {class: stage}
 after_display: "id,a,c ▼" {class: shape_after}
-view: "view -t table ...\ndraws each column at the width it already has" {class: stage}
+view: "view -t table ...\ndraws each column at its own width, capped by --cols" {class: stage}
 
 # Padded with U+00A0. d2 writes no xml:space, so SVG collapses a run of ordinary
 # spaces and the cells come out narrower than the borders above them.
