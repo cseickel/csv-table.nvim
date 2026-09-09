@@ -17,7 +17,7 @@ setup: Bound once, when the buffer is attached {
   style.fill: "#1a1a2a"
 
   map: "keymaps.map\nevery key and the action it names" {class: entry}
-  resolve: "keymaps.resolve\nfollows BUILT_IN_ into the user's own config" {class: entry}
+  resolve: "keymaps.resolve\nfinds the key the user has given each BUILT_IN_ command" {class: entry}
   registry: "actions.utils.register_action\none registry, keyed by name" {class: entry}
   apply: "init.apply_keymaps\nbinds each key to this buffer" {class: entry}
 
@@ -36,8 +36,8 @@ change: "view.buffer.query\nadd_filter, sort_by, hide_column, turn_page" {class:
 render: "Buffer:render\nruns the query and draws the page it returns" {class: draw}
 move: "View:step, go_to, extend, select_kind\nmoves the active cell and the head of the selection" {class: draw}
 redraw: "View:draw\nthe active cell and the selection, as extmarks in csv-view" {class: draw}
-float: "popup.panel, popup.show, popup.dialog\nopen a float, leaving the table alone" {class: ui}
-yank: "View:yank\nreader:export writes the block, setreg puts it in + and the unnamed register" {class: draw}
+float: "popup.panel, popup.show, popup.dialog\nopen a float over the table" {class: ui}
+yank: "View:yank\nreader:export writes the block\nsetreg puts it in + and the unnamed register" {class: draw}
 
 next: 04-read-path {
   shape: document

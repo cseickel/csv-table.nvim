@@ -164,6 +164,10 @@ end
 vim.o.statusline = "%{%v:lua.csv_table_status()%}"
 ```
 
+## Winbar
+
+`b:table_header` holds the buffer line the header row is drawn on, set again on every render. A winbar can read it to keep the header on screen once the table has scrolled past it. Nothing inside the plugin reads it.
+
 ## Highlights
 
 The following highlight groups are defined by the plugin:
@@ -207,6 +211,8 @@ All mappings are buffer-local in a csv-table buffer. Hit `?` to open a list of a
 Column one is the row number: the row's position in the table as filtered and sorted, counted from 1. It is a position in the view rather than a line of the file, so after a sort the first row on screen is row 1 whichever line of the file it came from. Numbering runs on across pages, so with a page size of 1000 the second page starts at 1001.
 
 The table has an active cell, the way a spreadsheet does. It is drawn with `CsvActiveCell` and the real cursor is hidden while a table buffer is current. The active cell is always a data cell, never a border, the row number, the header, or past the table.
+
+Open the same table in two windows and each window keeps its own active cell and its own selection. Only the window you are in draws them. A split starts on the cell the window it came from was on, and a window you come back to is on the cell you left it on.
 
 The keys above are the only motions the plugin maps, because they are the ones where a count has to be counted in cells. `5l` is five cells, and `5gg` and `5G` go to the row numbered 5, which is the number drawn in column one. A number belonging to another page stops at the near end of this one.
 
@@ -353,7 +359,7 @@ The selection survives leaving visual mode, so `y` from normal mode still yanks 
 
 `o` is the plugin's rather than nvim's, because nvim's `o` moves the cursor to an end of the range nvim is drawing, and every move in visual mode takes the head of the selection to the cursor.
 
-A move without shift moves the active cell and leaves the selection where it was, so you can walk away, look at something, and come back. The next shifted move extends from the same anchor to wherever you are now. The shifted arrows and the `<C-S-Arrow>` set extend the selection and walk the active cell along, in visual mode or out of it, and with nothing selected they start from the active cell. `<S-LeftMouse>` takes the selection out to the cell you clicked and leaves the active cell where it is. A selection stops at the page, and turning the page loses it.
+A move without shift moves the active cell and leaves the selection where it was, so you can walk away, look at something, and come back. The next shifted move extends from the same anchor to wherever you are now. The shifted arrows and the `<C-S-Arrow>` set extend the selection and walk the active cell along, in visual mode or out of it, and with nothing selected they start from the active cell. `<S-LeftMouse>` takes the selection out to the cell you clicked and leaves the active cell where it is. A selection stops at the edges of the page. It clears when the rows on the page change or the columns are reordered, so a sort, a filter, a page turn and a hidden column all lose it. Changing how a column is drawn keeps it, and so does marking a row, unless a filter is showing the marked rows only.
 
 Every yank writes the selected cells to the `+` register and the unnamed register, so `p` pastes them inside nvim and the clipboard has them outside it. `y` yanks them as tab separated values under a header row, which pastes into a spreadsheet as cells. `Y` opens a picker over every format. With nothing selected, every yank takes the active cell alone.
 

@@ -18,7 +18,7 @@ render: "Buffer:render" {class: draw}
 page_call: "reader:page(query)\nreads the columns and the file version once, here" {class: run}
 commands: "reader.commands.render\none xan process, no shell and no pipes" {class: run}
 pipeline: "reader.pipeline.build\nselect, enum, filter, sort, slice, select -e, view" {class: run}
-expression: "reader.expression\nthe moonblade the filters and the formats need" {class: run}
+expression: "reader.expression\nbuilds the moonblade for the filters and the formats" {class: run}
 
 xan: xan {
   class: external

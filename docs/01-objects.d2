@@ -1,6 +1,6 @@
 direction: down
 
-title: The objects, and who holds each one {
+title: The objects and what each one holds {
   near: top-center
   shape: text
   style.font-size: 24
@@ -68,14 +68,14 @@ page: csv.Page {
   file_version: what the file looked like when this page was read
 }
 
-reader: "csv.Reader\none xan at a time, a new run cancelling the last" {class: run}
+reader: "csv.Reader\nruns one xan process at a time\na new run kills the one before it" {class: run}
 
 xan: xan {
   class: external
   shape: cloud
 }
 
-empty: "file.empty and page.empty\nanswer every question with no columns and no data,\nso nothing waits on the first read" {
+empty: "file.empty and page.empty\nwhat a buffer holds before the first read,\nso nothing downstream checks for nil" {
   shape: text
   class: data
 }

@@ -26,7 +26,9 @@ display: "select -e ...\nwidths, formats and header text" {class: stage}
 after_display: "id,a,c ▼" {class: shape_after}
 view: "view -t table ...\ndraws each column at the width it already has" {class: stage}
 
-drawn: "┌────┬────┬─────┐\n│ id │ a  │ c ▼ │\n├────┼────┼─────┤\n│  0 │ 10 │   3 │\n│  2 │ 30 │   2 │\n└────┴────┴─────┘" {
+# Padded with U+00A0. d2 writes no xml:space, so SVG collapses a run of ordinary
+# spaces and the cells come out narrower than the borders above them.
+drawn: "┌────┬────┬─────┐\n│ id │ a  │ c ▼ │\n├────┼────┼─────┤\n│  0 │ 10 │   3 │\n│  2 │ 30 │   2 │\n└────┴────┴─────┘" {
   class: shape_after
   style.font: mono
 }

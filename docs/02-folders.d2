@@ -1,12 +1,12 @@
 direction: down
 
-title: The folders, and what each one requires {
+title: What each folder requires {
   near: top-center
   shape: text
   style.font-size: 24
 }
 
-rule: "Every arrow means the folder above requires the folder below.\nA function that changes an object lives in that object's folder." {
+rule: "An arrow points from a folder to one it requires.\nA function that changes an object lives in that object's folder." {
   shape: text
   style.font-size: 18
 }
@@ -21,15 +21,15 @@ classes: {
 
 init: "init.lua\nsetup, the BufReadCmd, the CsvTable command, the statusline" {class: entry}
 keymaps: "keymaps.lua\nevery key and the action it names" {class: entry}
-actions: "actions/\none registry, filled by loading the modules beside it" {class: entry}
+actions: "actions/\na registry each module beside it adds to when it loads" {class: entry}
 
-popup: "popup/\neverything opened over the table: floats, pickers, panels, dialogs" {class: ui}
+popup: "popup/\nfloats, pickers, panels and dialogs drawn over the table" {class: ui}
 buffer: "buffer/\ncsv.Buffer: the query, the page, one csv.View per window\nrender, color, the gutter, the hidden cursor" {class: draw}
 view: "view/\ncsv.View: the active cell, the selection, the viewport, yank" {class: draw}
 
-file: "file/\ncsv.File: open a spreadsheet and read what its head says" {class: data}
+file: "file/\ncsv.File: opens a spreadsheet and reads its columns and formats" {class: data}
 query: "query/\ncsv.Query: filters, sort, marks, columns, paging, the row count" {class: data}
-reader: "reader/\nthe only folder that names xan" {class: run}
+reader: "reader/\nbuilds and runs the xan commands\nno other folder names xan" {class: run}
 page: "page/\ncsv.Page: the drawn table and where every cell sits" {class: data}
 utils: "utils/\ntext widths, json indenting, the error notifier" {class: ui}
 
