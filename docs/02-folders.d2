@@ -25,13 +25,13 @@ actions: "actions/\na registry each module beside it adds to when it loads" {cla
 
 popup: "popup/\nfloats, pickers, panels and dialogs drawn over the table" {class: ui}
 buffer: "buffer/\ncsv.Buffer: the query, the page, one csv.View per window\nrender, color, the gutter, the hidden cursor" {class: draw}
-view: "view/\ncsv.View: the active cell, the selection, the viewport, yank" {class: draw}
+view: "view/\ncsv.View: the active cell, the selection, the viewport, yank\nkeeps nvim's visual region on the selected block" {class: draw}
 
 file: "file/\ncsv.File: opens a spreadsheet and reads its columns and formats" {class: data}
 query: "query/\ncsv.Query: filters, sort, marks, columns, paging, the row count" {class: data}
 reader: "reader/\nbuilds and runs the xan commands\nno other folder names xan" {class: run}
 page: "page/\ncsv.Page: the drawn table and where every cell sits" {class: data}
-utils: "utils/\ntext widths, json indenting, the error notifier" {class: ui}
+utils: "utils/\ntext widths, json indenting, the error notifier,\nwhich nvim modes are visual" {class: ui}
 
 init -> actions
 init -> buffer

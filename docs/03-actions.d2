@@ -19,7 +19,7 @@ setup: Bound once, when the buffer is attached {
   map: "keymaps.map\nevery key and the action it names" {class: entry}
   resolve: "keymaps.resolve\nfinds the key the user has given each BUILT_IN_ command" {class: entry}
   registry: "actions.utils.register_action\none registry, keyed by name" {class: entry}
-  apply: "init.apply_keymaps\nbinds each key to this buffer" {class: entry}
+  apply: "init.apply_keymaps\nbinds each key to this buffer, in normal mode and the visual modes" {class: entry}
 
   map -> resolve -> apply
   registry -> apply: the action the name finds
@@ -30,11 +30,14 @@ press: a key press {
   class: entry
 }
 
+leave: "utils.mode.leave_visual\nends the visual mode, unless keymaps.stays_visual names the action" {class: entry}
 run: "action.run(view)" {class: entry}
 
 change: "view.buffer.query\nadd_filter, sort_by, hide_column, turn_page" {class: data}
 render: "Buffer:render\nruns the query and draws the page it returns" {class: draw}
 move: "View:step, go_to, extend, select_kind\nmoves the active cell and the head of the selection" {class: draw}
+enter: "ModeChanged into a visual mode\nView:start_extending, or change_kind between two visual modes" {class: draw}
+sync: "View:set_visual, take_visual\nnvim's visual region and the selection, kept on one block" {class: draw}
 redraw: "View:draw\nthe active cell and the selection, as extmarks in csv-view" {class: draw}
 float: "popup.panel, popup.show, popup.dialog\nopen a float over the table" {class: ui}
 yank: "View:yank\nreader:export writes the block\nsetreg puts it in + and the unnamed register" {class: draw}
@@ -45,14 +48,20 @@ next: 04-read-path {
 }
 
 setup.apply -> press
-press -> run: "buf:view(0), the view for the current window"
+press -> leave
+leave -> run: "buf:view(0), the view for the current window"
 
 run -> change: sort, filter, mark, page, column
 change -> render
 render -> next
 
 run -> move: motion, extend, select
+move -> sync: in a visual mode
 move -> redraw
+
+press -> enter: "v, V, gv, a remapped <C-v>"
+enter -> sync
+sync -> redraw
 
 run -> float: "show_cell, show_row, show_column,\nshow_file_info, select_sheet, show_help"
 run -> yank: y and Y

@@ -193,7 +193,7 @@ Columns are color coded by data type. The type comes from a 600-row sample: nume
 
 ## Keys
 
-All mappings are buffer-local in a csv-table buffer. Hit `?` to open a list of all actions and run one.
+All mappings are buffer-local in a csv-table buffer, and every one of them works in normal mode and in nvim's visual modes. Hit `?` to open a list of all actions and run one.
 
 ### Moving
 
@@ -214,7 +214,7 @@ The table has an active cell, the way a spreadsheet does. It is drawn with `CsvA
 
 Open the same table in two windows and each window keeps its own active cell and its own selection. Only the window you are in draws them. A split starts on the cell the window it came from was on, and a window you come back to is on the cell you left it on.
 
-The keys above are the only motions the plugin maps, because they are the ones where a count has to be counted in cells. `5l` is five cells, and `5gg` and `5G` go to the row numbered 5, which is the number drawn in column one. A number belonging to another page stops at the near end of this one.
+The keys above are the only motions the plugin maps, because they are the ones where a count has to be counted in cells. `5l` is five cells, and `5gg` and `5G` go to the row numbered 5, which is the number drawn in column one. A number belonging to another page stops at the near end of this one. A count means the same in visual mode, so `3l` in a selection takes the head three cells right.
 
 The six keys `l`, `h`, `<Left>`, `<Right>`, `gg` and `G` are written `BUILT_IN_l` and so on in `keymaps`, which names the nvim command rather than the key. When a table buffer opens, the plugin reads every normal mode mapping and binds `next_column` to `l` only while no mapping has `l` on its left hand side, and to every key whose right hand side is `l`, so `nnoremap <M-l> l` gets `next_column` on `<M-l>` too. A mapping that gives `l` some other job, say moving between windows, has decided what `l` means, and `next_column` stays off it. A mapping whose right hand side is a Lua function names no key to read, so `l` wrapped in one counts as kept for yourself.
 
@@ -351,15 +351,19 @@ Marks survive filtering and sorting.
 | `y`             | `yank_tsv`               | Yank the selected cells as tab separated values  |
 | `Y`             | `yank_picker`            | Choose a format and yank the selected cells      |
 
-Nvim's own visual modes are how you tell the plugin you are selecting, so a remapped `<C-v>` works too. `v` runs `<C-v>` in a table buffer, since charwise visual covers whole lines between its two ends. `V` selects whole rows. While you are in visual mode, every move takes the far end of the selection with it. With cells already selected, entering visual mode keeps that anchor and those cells, and the next move extends them.
+Nvim's own visual modes are how you tell the plugin you are selecting, so a remapped `<C-v>` works too. `v` runs `<C-v>` in a table buffer, since charwise visual covers whole lines between its two ends, so it starts a blockwise selection and pressing it again ends visual mode, the same as `<C-v>` does. `V` selects whole rows. While you are in visual mode, every move takes the far end of the selection with it.
 
-The selection survives leaving visual mode, so `y` from normal mode still yanks those cells. `<Esc>` in visual mode is nvim's own exit, and a second `<Esc>` in normal mode clears the selection.
+Nvim's visual region and the plugin's selection cover the same cells. Entering visual mode with cells already selected keeps the anchor and takes the other end to the cell you are on, so `<S-Right>` a few times, `<S-Down>`, a plain move or two and then `v` gives you a block from the original anchor to where you are standing. Nvim's region has no way to hold every row of a column, so a column or page selection and a visual mode cannot both be running. `v` over a `<C-Space>` or `<C-a>` selection turns it into a cell block from the anchor to the cell you are on, and `V` turns it into whole rows. `<C-Space>` or `<C-a>` pressed inside visual mode ends the mode and then selects the column or the page. Since nvim's region covers the same block, a visual mode mapping of your own, or one from another plugin, acts on the cells the table has picked out.
 
-`gv` is nvim's own and it brings the block back, cleared or not. Every change to the selection is written to the `'<` and `'>` marks, and entering visual mode with nothing selected reads those two marks back as cells, so what nvim reselects is what the plugin then draws. Inside a table buffer those two marks hold the cell block rather than the last text you selected.
+Every key in this README works inside visual mode. A key that moves the active cell and takes the selection with it leaves you in visual mode: `l`, `h`, `<Left>`, `<Right>`, `<Tab>`, `<S-Tab>`, `gg`, `G`, `o`, `<S-LeftMouse>`, the shifted arrows and the `<C-S-Arrow>` set. Every other key ends visual mode before it runs, the way nvim's own `y` does, and the cells stay selected, so `y` over a selection yanks it and leaves you in normal mode with the cells still drawn.
 
-`o` is the plugin's rather than nvim's, because nvim's `o` moves the cursor to an end of the range nvim is drawing, and every move in visual mode takes the head of the selection to the cursor.
+The selection survives leaving visual mode, so `y` from normal mode still yanks those cells. `<Esc>` clears the selection, and in visual mode it ends the mode in the same press. The block it cleared stays in the `'<` and `'>` marks.
 
-A move without shift moves the active cell and leaves the selection where it was, so you can walk away, look at something, and come back. The next shifted move extends from the same anchor to wherever you are now. The shifted arrows and the `<C-S-Arrow>` set extend the selection and walk the active cell along, in visual mode or out of it, and with nothing selected they start from the active cell. `<S-LeftMouse>` takes the selection out to the cell you clicked and leaves the active cell where it is. A selection stops at the edges of the page. It clears when the rows on the page change or the columns are reordered, so a sort, a filter, a page turn and a hidden column all lose it. Changing how a column is drawn keeps it, and so does marking a row, unless a filter is showing the marked rows only.
+`gv` is nvim's own and it brings the block back, cleared or not. Every change to the selection is written to `'<` and `'>`, and entering visual mode with nothing selected reads those two marks back as cells, so what nvim reselects is what the plugin then draws. Inside a table buffer those two marks hold the cell block rather than the last text you selected.
+
+`o` is the plugin's rather than nvim's, because a selection outlives the visual mode it was made in, and once the mode has ended nvim's `o` has no region left to swap.
+
+A move without shift moves the active cell and leaves the selection where it was, so you can walk away, look at something, and come back. The next shifted move extends from the same anchor to wherever you are now. The shifted arrows and the `<C-S-Arrow>` set extend the selection and walk the active cell along, in visual mode or out of it, and with nothing selected they start from the active cell. `<S-LeftMouse>` takes the selection out to the cell you clicked and moves the active cell there. A selection stops at the edges of the page. It clears when the rows on the page change or the columns are reordered, so a sort, a filter, a page turn and a hidden column all lose it. Changing how a column is drawn keeps it, and so does marking a row, unless a filter is showing the marked rows only.
 
 Every yank writes the selected cells to the `+` register and the unnamed register, so `p` pastes them inside nvim and the clipboard has them outside it. `y` yanks them as tab separated values under a header row, which pastes into a spreadsheet as cells. `Y` opens a picker over every format. With nothing selected, every yank takes the active cell alone.
 

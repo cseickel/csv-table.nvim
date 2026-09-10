@@ -8,13 +8,9 @@ a remapped `<C-v>` and any plugin that starts visual mode both count, and nothin
 here has to be told which key was pressed.
 ]]
 
-local M = {}
+local mode = require("csv-table.utils.mode")
 
----@return boolean
-local function in_visual_mode()
-  local mode = vim.fn.mode()
-  return mode == "v" or mode == "V" or mode == "\22"
-end
+local M = {}
 
 --- The axes a visual mode bounds. Charwise and blockwise both pick out a block of
 --- cells, since a selection is cells rather than the text they are painted in,
@@ -31,9 +27,11 @@ local function drawn(self)
 end
 
 --- Take the head of the selection to `cell`, which is what extending means once
---- the cell has moved.
+--- the cell has moved. The anchor comes from nvim while a visual mode is running,
+--- so a mapping of the user's that moved the far end is followed.
 ---@param cell csv.Cell
 local function take_head(self, cell)
+  self:take_visual()
   self:extend_selection(cell)
   drawn(self)
 end
@@ -46,7 +44,7 @@ end
 --- corner before `start_extending` has read that corner.
 ---@param cell csv.Cell|nil Where the cell landed, absent when it could not move.
 local function moved(self, cell)
-  if cell and in_visual_mode() and self:has_selection() then
+  if cell and mode.in_visual() and self:has_selection() then
     take_head(self, cell)
   end
 end
@@ -124,25 +122,33 @@ function M.extend(self, rows, columns)
   end
 end
 
---- Take the selection out to `cell` without moving the active cell, which is what
---- a shift click means.
+--- Take the selection out to `cell`, which is what a shift click means. The active
+--- cell lands there too, so the cursor, the highlight and nvim's own far end all
+--- reach where the user pointed.
 ---@param cell csv.Cell
 function M.extend_to(self, cell)
-  if anchor_here(self, "cell") then
+  if anchor_here(self, "cell") and self:move_to(cell) then
     take_head(self, cell)
   end
 end
 
---- Entering a visual mode. An existing selection keeps its anchor, head and kind,
---- and the next move extends it.
+--- Entering a visual mode. A selection already picked out keeps its anchor and
+--- takes its head to the active cell, so `v` after a run of shift keyed moves goes
+--- on from where the user is standing. The kind comes from the mode, because a
+--- whole column has no shape nvim's region can hold and `set_visual` is about to
+--- hand it over.
 ---
 --- With nothing selected, `getpos("v")` and the cursor become the anchor and the
 --- head. `v` puts both on the active cell. `gv` puts them on the corners nvim
 --- reselected out of `'<` and `'>`, which hold the cells this module last wrote
 --- there, so the old block comes back.
 function M.start_extending(self)
-  if self:has_selection() then
-    return
+  local standing = self:active_cell()
+  if self:has_selection() and standing then
+    self:extend_selection(standing)
+    self:set_kind(kind_of_mode())
+    self:set_visual()
+    return drawn(self)
   end
 
   local other = vim.fn.getpos("v")
@@ -166,14 +172,15 @@ function M.change_kind(self)
 end
 
 --- Swap which end of the selection moves, and take the active cell to it. This is
---- `o`, and it is ours because nvim's own `o` moves the cursor to nvim's anchor,
---- which every move in a visual mode would then take the head to.
+--- `o`, and it is ours because a selection outlives the visual mode it was made in,
+--- where nvim's own `o` has no region left to swap.
 function M.swap_ends(self)
   if not self:has_selection() then
     return
   end
   self.anchor, self.head = self.head, self.anchor
   self:move_to(self.buffer.page:cell_of(self.head))
+  self:set_visual()
   drawn(self)
 end
 
@@ -189,9 +196,10 @@ function M.select_kind(self, kind)
   drawn(self)
 end
 
---- Drop the selection. The two marks keep the block, so `gv` brings it back the
---- way it does after leaving visual mode in any other buffer.
+--- Drop the selection, leaving the block it was in the two marks, so `gv` brings it
+--- back the way it does after leaving visual mode in any other buffer.
 function M.deselect(self)
+  self:mark_selection()
   self:clear_selection()
   self:draw()
 end

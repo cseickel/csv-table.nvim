@@ -12,6 +12,7 @@ local actions = require("csv-table.actions")
 local buffer = require("csv-table.buffer")
 local color = require("csv-table.buffer.color")
 local keymaps = require("csv-table.keymaps")
+local mode = require("csv-table.utils.mode")
 local query = require("csv-table.query")
 local text = require("csv-table.utils.text")
 
@@ -22,10 +23,8 @@ M.patterns = { "*.csv", "*.tsv", "*.xls", "*.xlsx", "*.xlsb", "*.ods" }
 ---@param buf csv.Buffer
 local function apply_keymaps(buf)
   for _, binding in ipairs(keymaps.resolve()) do
-    local modes = binding.visual and { "n", "x" } or { "n" }
-
     if binding.command then
-      vim.keymap.set(modes, binding.key, binding.command, {
+      vim.keymap.set({ "n", "x" }, binding.key, binding.command, {
         buffer = buf.bufnr,
         desc = "csv-table: nvim's " .. binding.command,
       })
@@ -37,7 +36,10 @@ local function apply_keymaps(buf)
         )
       end
 
-      vim.keymap.set(modes, binding.key, function()
+      vim.keymap.set({ "n", "x" }, binding.key, function()
+        if not binding.stays_visual then
+          mode.leave_visual()
+        end
         action.run(buf:view(0))
       end, { buffer = buf.bufnr, desc = "csv-table: " .. action.description })
     end

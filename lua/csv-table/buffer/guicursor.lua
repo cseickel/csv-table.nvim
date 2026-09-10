@@ -14,14 +14,12 @@ local M = {}
 -- `/` and every `vim.ui.input` prompt can be typed into.
 local HIDDEN = "n-v-o:CsvHiddenCursor"
 
---- `guicursor` with this plugin's entry taken out, which is the value it held
---- before a table hid the cursor. nvim rejects an empty entry.
+--- Rebuild `guicursor` with this plugin's entry either in or out, leaving every
+--- other entry as the plugin that wrote it left it.
 ---@param setting "normal"|"hidden"
----@return string
-local function set_guicursors(setting)
-  local value = vim.o.guicursor
+local function set_guicursor(setting)
   local entries = {}
-  for _, entry in ipairs(vim.split(value, ",", { plain = true })) do
+  for _, entry in ipairs(vim.split(vim.o.guicursor, ",", { plain = true })) do
     if entry ~= HIDDEN then
       entries[#entries + 1] = entry
     end
@@ -29,18 +27,18 @@ local function set_guicursors(setting)
   if setting == "hidden" then
     table.insert(entries, HIDDEN)
   end
-  local desired = #entries > 0 and table.concat(entries, ",") or ""
+
+  local desired = table.concat(entries, ",")
   if vim.o.guicursor ~= desired then
-    print("setting guicursor to " .. setting)
     vim.o.guicursor = desired
   end
 end
 
---- Hide the real cursor if `bufnr` holds a table and show it if it does not.
----@param buffer csv.Buffer | nil
+--- Hide the real cursor while the user is in a table, and show it again anywhere
+--- else.
+---@param buffer csv.Buffer|nil The table the current window holds, if it holds one.
 function M.update_guicursor(buffer)
-  local desired = buffer and "hidden" or "normal"
-  set_guicursors(desired)
+  set_guicursor(buffer and "hidden" or "normal")
 end
 
 return M

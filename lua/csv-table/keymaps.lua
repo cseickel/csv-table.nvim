@@ -1,7 +1,7 @@
 --[[
 Holds `map`, every key the plugin binds and the action it runs.
 
-- `M.visual` names the entries bound in visual mode as well as normal mode
+- `M.stays_visual` names the actions that leave nvim in its visual mode
 - `resolve` turns `map` into the bindings `init.apply_keymaps` sets
 - `built_in` reads the `BUILT_IN_` prefix
 
@@ -15,6 +15,12 @@ A movement key is bound only where a count has to mean something in table terms:
 `5l` is five cells and `5G` is the row the gutter numbers 5. Every other motion,
 `j` and `w` and `/` and the clicks, stays nvim's, and the cursor is followed to
 whichever cell it reached.
+
+Every key is bound in normal mode and in nvim's visual modes, since nvim's own
+visual commands are no use over a table: `y` there takes the painted text cut to
+the width each column is drawn at, and the rest are edits this buffer refuses. An
+action run from a visual mode ends that mode first, the way nvim's own `y` does,
+and `M.stays_visual` names the ones that do not.
 ]]
 
 local M = {}
@@ -106,15 +112,30 @@ M.map = {
 
 }
 
---- Entries of `map` bound in visual mode as well as normal mode, written the
---- way `map` writes them.
----
---- Nvim's own `y` there takes the painted text, cut to the width each column is
---- drawn at, rather than the values behind it. Nvim's own `o` moves the cursor
---- to the end of the range nvim is drawing, which is not the end of the
---- selection. Nvim's own `v` there switches a linewise selection to charwise.
+--- The actions that take the head of the selection with them or pick the block
+--- out, which is why nvim is left in its visual mode when one of them runs.
 ---@type string[]
-M.visual = { "y", "Y", "o", "BUILT_IN_v" }
+M.stays_visual = {
+  "next_column",
+  "prev_column",
+  "next_row",
+  "prev_row",
+  "first_column",
+  "last_column",
+  "first_row",
+  "last_row",
+
+  "swap_selection_ends",
+  "extend_to_click",
+  "extend_left",
+  "extend_right",
+  "extend_up",
+  "extend_down",
+  "extend_to_first_column",
+  "extend_to_last_column",
+  "extend_to_first_row",
+  "extend_to_last_row",
+}
 
 ---@param key string
 ---@return string
@@ -158,13 +179,13 @@ end
 ---@field key string
 ---@field action string|nil Names an action in `csv-table.actions`.
 ---@field command string|nil An nvim command to run in its place.
----@field visual boolean Whether the key is bound in visual mode as well.
+---@field stays_visual boolean Whether the action leaves nvim in its visual mode.
 
 ---@return csv.Binding[]
 function M.resolve()
-  local in_visual = {}
-  for _, key in ipairs(M.visual) do
-    in_visual[key] = true
+  local stays = {}
+  for _, action in ipairs(M.stays_visual) do
+    stays[action] = true
   end
 
   local bindings = {}
@@ -178,7 +199,7 @@ function M.resolve()
       key = key,
       action = entry.action,
       command = entry.command,
-      visual = entry.visual,
+      stays_visual = entry.stays_visual,
     })
   end
 
@@ -189,7 +210,7 @@ function M.resolve()
         key = key,
         action = command == nil and runs or nil,
         command = command,
-        visual = in_visual[key] == true,
+        stays_visual = stays[runs] == true,
       }
 
       local named = M.built_in(key)

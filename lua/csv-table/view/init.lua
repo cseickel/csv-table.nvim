@@ -38,6 +38,7 @@ for _, part in ipairs({
   "csv-table.view.export",
   "csv-table.view.movement",
   "csv-table.view.selection",
+  "csv-table.view.visual",
 }) do
   for name, method in pairs(require(part)) do
     if View[name] then
