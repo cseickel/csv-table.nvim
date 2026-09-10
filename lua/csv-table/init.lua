@@ -11,7 +11,6 @@ The entry point, where a spreadsheet file is caught before nvim reads it.
 local actions = require("csv-table.actions")
 local buffer = require("csv-table.buffer")
 local color = require("csv-table.buffer.color")
-local guicursor = require("csv-table.buffer.guicursor")
 local keymaps = require("csv-table.keymaps")
 local query = require("csv-table.query")
 local text = require("csv-table.utils.text")
@@ -159,7 +158,7 @@ function M.setup(opts)
   -- buffer owns are in `csv-table-buffer`.
   local group = vim.api.nvim_create_augroup("csv-table", { clear = true })
   color.setup(group)
-  guicursor.setup(group)
+  buffer.setup(group)
 
   vim.api.nvim_create_autocmd("BufReadCmd", {
     group = group,

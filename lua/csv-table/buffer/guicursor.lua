@@ -16,44 +16,31 @@ local HIDDEN = "n-v-o:CsvHiddenCursor"
 
 --- `guicursor` with this plugin's entry taken out, which is the value it held
 --- before a table hid the cursor. nvim rejects an empty entry.
----@param value string
+---@param setting "normal"|"hidden"
 ---@return string
-local function without_hidden(value)
+local function set_guicursors(setting)
+  local value = vim.o.guicursor
   local entries = {}
   for _, entry in ipairs(vim.split(value, ",", { plain = true })) do
     if entry ~= HIDDEN then
       entries[#entries + 1] = entry
     end
   end
-  return table.concat(entries, ",")
+  if setting == "hidden" then
+    table.insert(entries, HIDDEN)
+  end
+  local desired = #entries > 0 and table.concat(entries, ",") or ""
+  if vim.o.guicursor ~= desired then
+    print("setting guicursor to " .. setting)
+    vim.o.guicursor = desired
+  end
 end
 
 --- Hide the real cursor if `bufnr` holds a table and show it if it does not.
----@param bufnr integer
-function M.update(bufnr)
-  local base = without_hidden(vim.o.guicursor)
-  local setting = base
-  if vim.bo[bufnr].filetype == "csv-table" then
-    setting = base == "" and HIDDEN or base .. "," .. HIDDEN
-  end
-  if setting ~= vim.o.guicursor then
-    vim.o.guicursor = setting
-  end
-end
-
---- Follow the cursor's visibility for the rest of the session.
----
---- Entering a buffer is what decides it, so a missed event lasts until the next
---- entry. `BufLeave` goes missing whenever a buffer is wiped while it is current
---- or a window opens with `noautocmd`, which telescope and snacks both do.
----@param group integer
-function M.setup(group)
-  vim.api.nvim_create_autocmd("BufEnter", {
-    group = group,
-    callback = function(event)
-      M.update(event.buf)
-    end,
-  })
+---@param buffer csv.Buffer | nil
+function M.update_guicursor(buffer)
+  local desired = buffer and "hidden" or "normal"
+  set_guicursors(desired)
 end
 
 return M

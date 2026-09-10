@@ -42,10 +42,55 @@ local buffers = {}
 -- second `setup` would take them from the tables already open.
 local buffer_group = vim.api.nvim_create_augroup("csv-table-buffer", { clear = false })
 
----@param bufnr integer
+---@param bufnr integer|nil
 ---@return csv.Buffer|nil
 function M.get(bufnr)
+  if not bufnr or bufnr == 0 then
+    bufnr = vim.api.nvim_get_current_buf()
+  end
   return buffers[bufnr]
+end
+
+---@param winnr integer
+---@return csv.Buffer|nil
+function M.for_window(winnr)
+  local bufnr = vim.api.nvim_win_get_buf(winnr)
+  return M.get(bufnr)
+end
+
+--- Follow the cursor's visibility for the rest of the session.
+---
+--- Entering a buffer is what decides it, so a missed event lasts until the next
+--- entry. `BufLeave` goes missing whenever a buffer is wiped while it is current
+--- or a window opens with `noautocmd`, which telescope and snacks both do.
+---@param group integer
+function M.setup(group)
+  -- used to check again after a delay, catches the case where events are
+  -- missed. This is needed when db0query opens the window awithout
+  -- focusing it.
+  local function check_again()
+    vim.defer_fn(function()
+      local buffer = M.for_window(0)
+      guicursor.update_guicursor(buffer)
+    end, 100)
+  end
+
+  vim.api.nvim_create_autocmd("WinEnter", {
+    group = group,
+    callback = function(event)
+      local buffer = M.for_window(0)
+      guicursor.update_guicursor(buffer)
+      check_again()
+    end,
+  })
+  vim.api.nvim_create_autocmd("BufEnter", {
+    group = group,
+    callback = function(event)
+      local buffer = M.for_window(0)
+      guicursor.update_guicursor(buffer)
+      check_again()
+    end,
+  })
 end
 
 ---@param bufnr integer
@@ -81,23 +126,23 @@ function Buffer:view(window)
     window = vim.api.nvim_get_current_win()
   end
 
-  for _, held in ipairs(self.views) do
-    if held.window == window then
-      return held
+  for _, view in ipairs(self.views) do
+    if view.window == window then
+      return view
     end
   end
 
-  for _, held in ipairs(self.views) do
-    if not vim.api.nvim_win_is_valid(held.window) then
-      held.window = window
-      return held
+  for _, view in ipairs(self.views) do
+    if not vim.api.nvim_win_is_valid(view.window) then
+      view.window = window
+      return view
     end
   end
 
-  for _, held in ipairs(self.views) do
-    if not held:on_screen() then
-      held.window = window
-      return held
+  for _, view in ipairs(self.views) do
+    if not view:on_screen() then
+      view.window = window
+      return view
     end
   end
 
@@ -106,7 +151,7 @@ function Buffer:view(window)
   table.insert(self.views, made)
   return made
 end
-
+--
 -- Entering one of nvim's visual modes is what says the user is picking cells out,
 -- whichever key they entered it with. The pattern is the mode nvim came from and
 -- the mode it went to, so `\22` is blockwise visual and a switch between two visual
@@ -135,7 +180,7 @@ vim.api.nvim_create_autocmd("ModeChanged", {
   group = buffer_group,
   pattern = "[vV\22]:*",
   callback = function()
-    local buffer = buffers[vim.api.nvim_get_current_buf()]
+    local buffer = M.get()
     if buffer then
       buffer:view(0):mark_selection()
     end
@@ -364,11 +409,6 @@ function M.attach(bufnr, on_ready)
   -- means refresh. This command owns the whole read, so setting the filetype is what
   -- tells whatever the user hangs off `FileType`.
   vim.bo[bufnr].filetype = "csv-table"
-
-  -- `guicursor` is global, so the buffer that decides it is the one the user is in.
-  -- A read can be for a buffer nobody is in, which is what `bufload` does, and
-  -- hiding the cursor for that one would hide it where the user is.
-  guicursor.update(vim.api.nvim_get_current_buf())
 
   local buffer = buffers[bufnr]
   if buffer then
