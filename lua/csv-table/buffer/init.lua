@@ -1,5 +1,5 @@
 --[[
-Defines `csv.Buffer`, one per buffer nvim named after a spreadsheet: the query the
+Defines `csv.Buffer`, one per buffer this plugin reads as a table: the query the
 user is building, the page it drew, and one `csv.View` per window showing it.
 
 A buffer is recorded the moment the read command fires, holding an empty file, an
@@ -11,10 +11,9 @@ The buffer stays nomodifiable. Its text is xan's output, and writing it back ove
 the file would destroy the file.
 ]]
 
+local autocmds = require("csv-table.autocmds")
 local color = require("csv-table.buffer.color")
 local file = require("csv-table.file")
-local guicursor = require("csv-table.buffer.guicursor")
-local mode = require("csv-table.utils.mode")
 local page = require("csv-table.page")
 local query = require("csv-table.query")
 local reader = require("csv-table.reader")
@@ -38,11 +37,6 @@ Buffer.__index = Buffer
 ---@type table<integer, csv.Buffer>
 local buffers = {}
 
--- The autocommands a table buffer owns. Kept out of the group `setup` clears,
--- because these belong to one buffer: nvim drops them with the buffer, and a
--- second `setup` would take them from the tables already open.
-local buffer_group = vim.api.nvim_create_augroup("csv-table-buffer", { clear = false })
-
 ---@param bufnr integer|nil
 ---@return csv.Buffer|nil
 function M.get(bufnr)
@@ -59,27 +53,12 @@ function M.for_window(winnr)
   return M.get(bufnr)
 end
 
---- Follow the cursor's visibility for the rest of the session.
----
---- `guicursor` is global, so the window the user is in is the one that decides it.
---- Either event arrives without the other: `:buffer` changes the buffer under one
---- window, and `<C-w>w` changes the window over one buffer.
----@param group integer
-function M.setup(group)
-  -- Telescope and snacks open a window with `noautocmd`, so neither event fires and
-  -- the cursor keeps what the window before it decided. The second read catches
-  -- that once the window has finished opening.
-  local function follow_current_window()
-    guicursor.update_guicursor(M.for_window(0))
-    vim.defer_fn(function()
-      guicursor.update_guicursor(M.for_window(0))
-    end, 100)
+--- Register the autocommands of every buffer holding a table, which is what a
+--- cleared group costs them.
+function M.rebind_all()
+  for bufnr in pairs(buffers) do
+    M.rebind(bufnr)
   end
-
-  vim.api.nvim_create_autocmd({ "WinEnter", "BufEnter" }, {
-    group = group,
-    callback = follow_current_window,
-  })
 end
 
 ---@param bufnr integer
@@ -140,71 +119,6 @@ function Buffer:view(window)
   table.insert(self.views, made)
   return made
 end
-
--- Entering one of nvim's visual modes is what says the user is picking cells out,
--- whichever key they entered it with. The pattern is the mode nvim came from and
--- the mode it went to, so `\22` is blockwise visual and a switch between two visual
--- modes matches as well.
-vim.api.nvim_create_autocmd("ModeChanged", {
-  group = buffer_group,
-  pattern = "*:[vV\22]",
-  callback = function(event)
-    local buffer = buffers[vim.api.nvim_get_current_buf()]
-    if not buffer then
-      return
-    end
-
-    local was = event.match:match("^(.*):")
-    if mode.is_visual(was) then
-      return buffer:view(0):change_kind()
-    end
-    buffer:view(0):start_extending()
-  end,
-})
-
--- Leaving a visual mode, where nvim writes `'<` and `'>` from the two ends it was
--- holding. The block the user picked out goes back over them, so `gv` brings the
--- cells back rather than nvim's own rectangle.
-vim.api.nvim_create_autocmd("ModeChanged", {
-  group = buffer_group,
-  pattern = "[vV\22]:*",
-  callback = function()
-    local buffer = M.get()
-    if buffer then
-      buffer:view(0):mark_selection()
-    end
-  end,
-})
-
--- One namespace on the buffer draws the active cell and the selection, so the
--- window entered takes them from the window left.
-vim.api.nvim_create_autocmd("WinEnter", {
-  group = buffer_group,
-  callback = function()
-    local buffer = buffers[vim.api.nvim_get_current_buf()]
-    if buffer then
-      buffer:view(0):restore()
-    end
-  end,
-})
-
--- `WinScrolled` names the windows that scrolled in `v:event`, keyed by window, and
--- the mouse wheel scrolls a window without entering it, so the current window is
--- not the one to record. The `all` key it also holds is not a window.
-vim.api.nvim_create_autocmd("WinScrolled", {
-  group = buffer_group,
-  callback = function()
-    for name in pairs(vim.v.event) do
-      local window = tonumber(name)
-      if window and vim.api.nvim_win_is_valid(window) then
-        local buffer = buffers[vim.api.nvim_win_get_buf(window)]
-        if buffer then
-          buffer:view(window):remember()
-        end
-      end
-    end
-  end,
-})
 
 --- Run the query and draw the page it returns.
 ---@param on_rendered fun()|nil Runs once the new text is in the buffer.
@@ -322,6 +236,64 @@ local function set_window_options(bufnr)
   end
 end
 
+--- Register the autocommands this buffer owns. `record` calls it when the buffer is
+--- taken over, and `csv-table.autocmds` again once a reload has replaced the group
+--- these belong to.
+---@param bufnr integer
+function M.rebind(bufnr)
+  local group = autocmds.group()
+
+  -- `:bdelete` drops the buffer from `buffers` and leaves these registered, so a
+  -- buffer opened again would have two of each. The three are registered together,
+  -- and any one of them says so.
+  local held = vim.api.nvim_get_autocmds({ event = "CursorMoved", buffer = bufnr, group = group })
+  if #held > 0 then
+    return
+  end
+
+  -- Shown in a window again, which `:buffer` reaches without firing the read
+  -- command or `WinEnter`.
+  vim.api.nvim_create_autocmd("BufWinEnter", {
+    group = group,
+    buffer = bufnr,
+    callback = function()
+      set_window_options(bufnr)
+      local buffer = buffers[bufnr]
+      if buffer then
+        buffer:view(0):restore()
+      end
+    end,
+  })
+
+  -- A motion this plugin leaves to nvim ends here, where the cell the user was
+  -- aiming for becomes the active cell.
+  vim.api.nvim_create_autocmd("CursorMoved", {
+    group = group,
+    buffer = bufnr,
+    callback = function()
+      local buffer = buffers[bufnr]
+      if not buffer then
+        return
+      end
+      local shown = buffer:view(0)
+      shown:follow_cursor()
+      shown:remember()
+    end,
+  })
+
+  vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
+    group = group,
+    buffer = bufnr,
+    callback = function()
+      local buffer = buffers[bufnr]
+      if buffer then
+        buffer.query.reader:cancel()
+      end
+      buffers[bufnr] = nil
+    end,
+  })
+end
+
 --- Record the buffer and take over its options and autocommands. The file has not
 --- been read, so the query is over an empty file and the page is empty.
 ---@param bufnr integer
@@ -345,47 +317,12 @@ local function record(bufnr, path)
   buffers[bufnr] = buffer
 
   set_window_options(bufnr)
-
-  -- Shown in a window again, which `:buffer` reaches without firing the read
-  -- command or `WinEnter`.
-  vim.api.nvim_create_autocmd("BufWinEnter", {
-    group = buffer_group,
-    buffer = bufnr,
-    callback = function()
-      set_window_options(bufnr)
-      buffer:view(0):restore()
-    end,
-  })
-
-  -- A motion this plugin leaves to nvim ends here, where the cell the user was
-  -- aiming for becomes the active cell.
-  vim.api.nvim_create_autocmd("CursorMoved", {
-    group = buffer_group,
-    buffer = bufnr,
-    callback = function()
-      if not buffers[bufnr] then
-        return
-      end
-      local shown = buffer:view(0)
-      shown:follow_cursor()
-      shown:remember()
-    end,
-  })
-
-  vim.api.nvim_create_autocmd({ "BufWipeout", "BufDelete" }, {
-    group = buffer_group,
-    buffer = bufnr,
-    callback = function()
-      buffer.query.reader:cancel()
-      buffers[bufnr] = nil
-    end,
-  })
+  M.rebind(bufnr)
 
   return buffer
 end
 
---- Take over `bufnr`, which nvim has named after a spreadsheet and left to this
---- plugin to read.
+--- Take over `bufnr`, whose read command has left the whole read to this plugin.
 ---@param bufnr integer
 ---@param on_ready fun(buffer: csv.Buffer)|nil
 function M.attach(bufnr, on_ready)

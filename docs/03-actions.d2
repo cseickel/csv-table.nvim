@@ -19,7 +19,7 @@ setup: Bound once, when the buffer is attached {
   map: "keymaps.map\nevery key and the action it names" {class: entry}
   resolve: "keymaps.resolve\nfinds the key the user has given each BUILT_IN_ command" {class: entry}
   registry: "actions.utils.register_action\none registry, keyed by name" {class: entry}
-  apply: "init.apply_keymaps\nbinds each key to this buffer, in normal mode and the visual modes" {class: entry}
+  apply: "autocmds.apply_keymaps\nbinds each key to this buffer, in normal mode and the visual modes" {class: entry}
 
   map -> resolve -> apply
   registry -> apply: the action the name finds

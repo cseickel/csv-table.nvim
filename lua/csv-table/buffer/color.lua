@@ -41,7 +41,9 @@ local GROUPS = {
   CsvHiddenCursor = { blend = 100 },
 }
 
-local function define_groups()
+--- Define every group this plugin draws with, as a default a colorscheme is free
+--- to override. `csv-table.autocmds` calls it again after a colorscheme loads.
+function M.define_groups()
   for name, spec in pairs(GROUPS) do
     vim.api.nvim_set_hl(0, name, vim.tbl_extend("error", spec, { default = true }))
   end
@@ -244,12 +246,8 @@ end
 
 --- Define the groups and register the provider. One provider covers every window,
 --- so `on_win` is what decides a window is showing a table.
----@param group integer
-function M.setup(group)
-  define_groups()
-  -- A colorscheme runs `highlight clear` first, which takes every group above
-  -- with it.
-  vim.api.nvim_create_autocmd("ColorScheme", { group = group, callback = define_groups })
+function M.setup()
+  M.define_groups()
   vim.api.nvim_set_decoration_provider(syntax_namespace, { on_win = on_win, on_line = on_line })
 end
 

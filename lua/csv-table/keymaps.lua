@@ -2,7 +2,7 @@
 Holds `map`, every key the plugin binds and the action it runs.
 
 - `M.stays_visual` names the actions that leave nvim in its visual mode
-- `resolve` turns `map` into the bindings `init.apply_keymaps` sets
+- `resolve` turns `map` into the bindings `csv-table.autocmds` sets on a table buffer
 - `built_in` reads the `BUILT_IN_` prefix
 
 A key written `BUILT_IN_l` names the nvim command `l` rather than the key `l`,

@@ -30,10 +30,13 @@ These are the defaults. Anything you pass to `setup()` merges into them and over
 
 ```lua
 require("csv-table").setup({
-  -- Which files open as a table. Only formats supported by xan are valid.
+  -- The file extensions that open as a table on `:edit`, written bare, with
+  -- no leading dot and no `*`. Case is ignored, so `csv` opens `FOO.CSV` too.
+  -- A list you pass replaces this one. Any format xan reads can go here, and
+  -- `:CsvTable` opens one file in any of those formats without listing it.
   -- Parquet has partial support, but I would not recommend it because it is
   -- not as optimized and not all column types are supported.
-  patterns = { "*.csv", "*.tsv", "*.xls", "*.xlsx", "*.xlsb", "*.ods" },
+  extensions = { "csv", "tsv", "xls", "xlsx", "xlsb", "ods" },
 
   -- How many rows a page holds. `[]` changes it for one buffer.
   page_size = 1000,
@@ -125,6 +128,10 @@ require("csv-table").setup({
 })
 ```
 
+`extensions` replaces the `patterns` option. A config that still passes `patterns` gets a warning from `setup()` and the value is ignored, so the defaults apply until you rename it.
+
+An entry is letters and digits, in parts separated by single periods, and `setup()` raises on anything else. So `"csv"` is right, `"*.csv"` and `".csv"` are errors, and `"test.csv"` is a valid entry that opens `report.test.csv` and leaves a file named `test.csv` alone.
+
 A key you write is bound exactly as written, so `["<C-n>"] = "next_column"` puts the action on `<C-n>` whatever else `<C-n>` does in your config. Setting a key to `false` prevents the default bind without setting a new one, and `["BUILT_IN_l"] = false` binds `next_column` to nothing at all, on `l` or on any key mapped to it.
 
 A value written `BUILT_IN_<C-v>` runs that nvim command instead of an action, which is how `v` starts a block: whatever key runs nvim's `v` is bound to run nvim's `<C-v>`, because charwise visual covers whole lines between its two ends and a table selection is a block of cells.
@@ -139,7 +146,15 @@ keymaps = {
 
 ## Command
 
-`:CsvTable [path]` opens `path`, or re-opens the current buffer's file. `:edit` on a matching extension will do the same thing after the plugin has loaded.
+`:CsvTable [path]` opens `path`, or the current buffer's file, as a table whatever its extension is. The plugin reads a file as a table by taking over nvim's read of it, so the text never lands in the buffer. `setup()` takes over every file whose extension is in `extensions`, and `:CsvTable` takes over the one buffer. That buffer stays a table through every later `:edit` and through another `setup()`, until it is wiped. A path that does not exist is reported and nothing opens, and so is a buffer holding unsaved changes, since drawing the table means reading the file again.
+
+The file goes to `xan`, which tells formats apart by extension. Beside the csv, tsv and workbook formats in the default `extensions`, it reads json, jsonl and ndjson, toml, txt, npy, tar and md. A json object nested in a record flattens to dotted column names, so `{"c": {"d": 2}}` becomes a column `c.d`, and an array arrives as its json text, `[1,2]`. `xan` picks the columns of a json or jsonl file from its first 64 records, so a key that first appears after them is dropped.
+
+A format you open often belongs in `extensions` instead, so `:edit` opens it as a table:
+
+```lua
+extensions = { "csv", "tsv", "xls", "xlsx", "xlsb", "ods", "jsonl" }
+```
 
 ## Statusline
 

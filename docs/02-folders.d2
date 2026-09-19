@@ -19,7 +19,8 @@ classes: {
   ui: {style.fill: "#3d3d3d"}
 }
 
-init: "init.lua\nsetup, the BufReadCmd, the CsvTable command, the statusline" {class: entry}
+init: "init.lua\nsetup, the CsvTable command, the statusline" {class: entry}
+autocmds: "autocmds.lua\nthe csv-table augroup and the read command over the configured extensions\nthe session autocommands, the claim CsvTable makes on one buffer" {class: entry}
 keymaps: "keymaps.lua\nevery key and the action it names" {class: entry}
 actions: "actions/\na registry each module beside it adds to when it loads" {class: entry}
 
@@ -33,11 +34,16 @@ reader: "reader/\nbuilds and runs the xan commands\nno other folder names xan" {
 page: "page/\ncsv.Page: the drawn table and where every cell sits" {class: data}
 utils: "utils/\ntext widths, json indenting, the error notifier,\nwhich nvim modes are visual" {class: ui}
 
-init -> actions
+init -> autocmds
 init -> buffer
 init -> keymaps
 init -> query
 init -> utils
+
+autocmds -> actions: at call time
+autocmds -> buffer: at call time, since buffer requires it
+autocmds -> keymaps
+autocmds -> utils
 
 actions -> buffer
 actions -> popup
@@ -45,6 +51,7 @@ popup -> actions: the help panel runs one
 popup -> keymaps
 popup -> utils
 
+buffer -> autocmds: the augroup
 buffer -> file
 buffer -> query
 buffer -> page

@@ -19,6 +19,7 @@ local SAMPLE_ROWS = 600
 -- the file rather than from all of it.
 local SAMPLE_HEAD_ROWS = 60000
 
+--- The format xan infers from a name, which is the tail after its last dot.
 ---@param path string
 ---@return string
 local function extension(path)
