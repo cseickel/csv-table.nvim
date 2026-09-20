@@ -13,6 +13,7 @@ tables already open.
 - `group` is the augroup, which is also where a buffer registers its own
 - `covers` says whether the read command already takes a path
 - `claim` reads one buffer as a table whatever its name
+- `release` gives one buffer back to nvim
 
 `csv-table.buffer` and `csv-table.actions` are reached inside the callbacks rather
 than required at the top, because both lead back to `csv-table.buffer`, which
@@ -80,6 +81,19 @@ local function apply_keymaps(buf)
   end, { buffer = buf.bufnr, expr = true, desc = "csv-table: follow the click" })
 end
 
+--- Take this plugin's keys off `bufnr`. Every one `apply_keymaps` sets is given a
+--- description starting `csv-table: `, which is what tells them from the user's own.
+---@param bufnr integer
+local function clear_keymaps(bufnr)
+  for _, name in ipairs({ "n", "x" }) do
+    for _, mapping in ipairs(vim.api.nvim_buf_get_keymap(bufnr, name)) do
+      if mapping.desc and mapping.desc:find("^csv%-table: ") then
+        vim.api.nvim_buf_del_keymap(bufnr, name, mapping.lhs)
+      end
+    end
+  end
+end
+
 --- Follow the cursor's visibility into whichever window the user is in, since
 --- `guicursor` is global and the current window is the one that decides it.
 ---
@@ -143,6 +157,15 @@ function M.claim(bufnr)
       buffer().attach(event.buf, apply_keymaps)
     end,
   })
+end
+
+--- Drop everything this buffer holds from this plugin, the claim included, so nvim
+--- reads it as a plain file from here on. `apply` will not give any of it back.
+---@param bufnr integer
+function M.release(bufnr)
+  claimed[bufnr] = nil
+  vim.api.nvim_clear_autocmds({ buffer = bufnr, group = augroup })
+  clear_keymaps(bufnr)
 end
 
 --- The autocommand pattern for a name ending in `extension`, in any case. nvim

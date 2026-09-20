@@ -14,6 +14,7 @@ the file would destroy the file.
 local autocmds = require("csv-table.autocmds")
 local color = require("csv-table.buffer.color")
 local file = require("csv-table.file")
+local guicursor = require("csv-table.buffer.guicursor")
 local page = require("csv-table.page")
 local query = require("csv-table.query")
 local reader = require("csv-table.reader")
@@ -29,6 +30,8 @@ local M = {}
 ---@field page csv.Page   What is drawn now.
 ---@field read_state csv.QueryState What the drawn page was read for.
 ---@field views csv.View[] One per window that has shown this table.
+---@field buffer_options table<string, any> What the buffer held before `record`.
+---@field window_options table<integer, table<string, any>> What each window held, keyed by window.
 local Buffer = {}
 Buffer.__index = Buffer
 
@@ -220,19 +223,81 @@ end
 --- variable number of screen lines and unalign the columns. The gutter draws the row
 --- number through `csv-table.buffer.statuscolumn`, which takes the place of the line
 --- numbers.
+local WINDOW_OPTIONS = {
+  wrap = false,
+  number = false,
+  relativenumber = false,
+  signcolumn = "no",
+  statuscolumn = statuscolumn.EXPRESSION,
+}
+
+--- Every window option a window has to get back, in the order they go back in.
 ---
---- Each is set through `vim.wo[window][0]`, which is `:setlocal`: the value holds
---- for this buffer in that window alone. `vim.wo[window]` is `:set`, which also
---- writes the value the window keeps for every buffer, and the next buffer shown in
---- the window would inherit it.
----@param bufnr integer
-local function set_window_options(bufnr)
-  for _, window in ipairs(vim.fn.win_findbuf(bufnr)) do
-    vim.wo[window][0].wrap = false
-    vim.wo[window][0].number = false
-    vim.wo[window][0].relativenumber = false
-    vim.wo[window][0].signcolumn = "no"
-    vim.wo[window][0].statuscolumn = statuscolumn.EXPRESSION
+--- `sidescrolloff` is here and not above because `csv-table.view.cursor` sizes it to
+--- the column the cursor is parked in. `number` comes after `relativenumber`,
+--- because nvim puts `number` back to a value it remembers when `relativenumber`
+--- goes off, so a window with `number` on would lose it.
+local RESTORED = {
+  "sidescrolloff",
+  "wrap",
+  "signcolumn",
+  "statuscolumn",
+  "relativenumber",
+  "number",
+}
+
+--- The options nvim resets on its own once the buffer is read as a file again are
+--- not here. These three are ours to put back.
+local BUFFER_OPTIONS = { "buftype", "swapfile", "modifiable" }
+
+--- Put `held` back on `window`. `vim.wo[window][0]` is the window's value for the
+--- buffer it shows, which is the one `dress_windows` read and wrote over, so the
+--- window has to be showing that buffer still.
+---@param window integer
+---@param held table<string, any>
+local function restore_window(window, held)
+  if not vim.api.nvim_win_is_valid(window) then
+    return
+  end
+  for _, name in ipairs(RESTORED) do
+    vim.wo[window][0][name] = held[name]
+  end
+end
+
+--- Dress every window showing this table, keeping what each window had so it can be
+--- put back. A window that comes back to the table keeps the values it had the first
+--- time, since the ones on it now are this plugin's.
+function Buffer:dress_windows()
+  for _, window in ipairs(vim.fn.win_findbuf(self.bufnr)) do
+    if not self.window_options[window] then
+      local held = {}
+      for _, name in ipairs(RESTORED) do
+        held[name] = vim.wo[window][0][name]
+      end
+      self.window_options[window] = held
+    end
+
+    for name, value in pairs(WINDOW_OPTIONS) do
+      vim.wo[window][0][name] = value
+    end
+  end
+end
+
+
+--- Put every option back the way this buffer and the windows still on it had it. A
+--- window that moved to another buffer is left alone, since the value read there
+--- belongs to the pair it made with this one.
+function Buffer:undress()
+  for _, window in ipairs(vim.fn.win_findbuf(self.bufnr)) do
+    local held = self.window_options[window]
+    if held then
+      restore_window(window, held)
+    end
+  end
+  self.window_options = {}
+
+  for name, value in pairs(self.buffer_options) do
+    vim.bo[self.bufnr][name] = value
   end
 end
 
@@ -257,9 +322,9 @@ function M.rebind(bufnr)
     group = group,
     buffer = bufnr,
     callback = function()
-      set_window_options(bufnr)
       local buffer = buffers[bufnr]
       if buffer then
+        buffer:dress_windows()
         buffer:view(0):restore()
       end
     end,
@@ -300,6 +365,11 @@ end
 ---@param path string
 ---@return csv.Buffer
 local function record(bufnr, path)
+  local held = {}
+  for _, name in ipairs(BUFFER_OPTIONS) do
+    held[name] = vim.bo[bufnr][name]
+  end
+
   vim.bo[bufnr].buftype = "nowrite"
   vim.bo[bufnr].swapfile = false
   vim.bo[bufnr].modifiable = false
@@ -312,14 +382,74 @@ local function record(bufnr, path)
     end),
     page = empty,
     views = {},
+    buffer_options = held,
+    window_options = {},
   }, Buffer)
   buffer.read_state = buffer.query:state(empty)
   buffers[bufnr] = buffer
 
-  set_window_options(bufnr)
+  buffer:dress_windows()
   M.rebind(bufnr)
 
   return buffer
+end
+
+--- Read the file into `bufnr` the way nvim would have.
+---
+--- `BufReadCmd` is held off so this plugin's own read command leaves the buffer
+--- alone, and every other read event still fires, which is what a plugin hanging
+--- off `BufReadPost` and nvim's own filetype detection need. `undoreload` is zero so
+--- the drawn table stays out of the undo history: undoing back to it would leave the
+--- user holding xan's borders in a writable buffer, one `:w` from the file.
+---@param bufnr integer
+---@return boolean whether the file is in the buffer.
+local function read_as_text(bufnr)
+  local ignored, reload = vim.o.eventignore, vim.o.undoreload
+  -- Appended rather than assigned, because another plugin may be part way through
+  -- its own bookkeeping with `eventignore` set.
+  vim.opt.eventignore:append("BufReadCmd")
+  vim.o.undoreload = 0
+
+  local ok, err = pcall(vim.api.nvim_buf_call, bufnr, function()
+    vim.cmd.edit()
+  end)
+
+  vim.o.eventignore, vim.o.undoreload = ignored, reload
+  if not ok then
+    report.error(tostring(err))
+  end
+  return ok
+end
+
+--- Give `bufnr` back to nvim: every option, keymap, autocommand and extmark this
+--- plugin set undone, and the file read in place of the table.
+---@param bufnr integer
+function M.detach(bufnr)
+  local buffer = buffers[bufnr]
+  if not buffer then
+    return
+  end
+
+  buffer.query.reader:cancel()
+  buffer:undress()
+  -- A writable `buftype` makes nvim compare the buffer against the file and call
+  -- the drawn table an unsaved change, which would stop the read below.
+  vim.bo[bufnr].modified = false
+  buffers[bufnr] = nil
+
+  autocmds.release(bufnr)
+  color.clear(bufnr)
+  view.clear(bufnr)
+  vim.b[bufnr].table_header = nil
+  vim.bo[bufnr].filetype = ""
+
+  if not read_as_text(bufnr) then
+    -- The buffer still holds the drawn table, so it goes back to being one nobody
+    -- can write over the file.
+    vim.bo[bufnr].buftype = "nowrite"
+    vim.bo[bufnr].modifiable = false
+  end
+  guicursor.update_guicursor(M.for_window(0))
 end
 
 --- Take over `bufnr`, whose read command has left the whole read to this plugin.

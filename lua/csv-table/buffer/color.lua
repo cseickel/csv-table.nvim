@@ -203,6 +203,14 @@ local function draw_marks(buf)
   end
 end
 
+--- Take every extmark this module drew off `bufnr`. The provider's own marks are
+--- ephemeral, so they stop the moment the buffer is no longer a table.
+---@param bufnr integer
+function M.clear(bufnr)
+  vim.api.nvim_buf_clear_namespace(bufnr, marks_namespace, 0, -1)
+  vim.api.nvim_buf_clear_namespace(bufnr, flash_namespace, 0, -1)
+end
+
 --- Draw the marks again, which is what a change to them or to the page below them
 --- costs.
 ---@param buf csv.Buffer

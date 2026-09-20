@@ -151,6 +151,12 @@ function View:draw()
   end
 end
 
+--- Take the active cell and the selection off `bufnr`.
+---@param bufnr integer
+function M.clear(bufnr)
+  vim.api.nvim_buf_clear_namespace(bufnr, namespace, 0, -1)
+end
+
 --- Keep where the window is looking, so a buffer emptied and filled again comes
 --- back the way the user left it.
 function View:remember()

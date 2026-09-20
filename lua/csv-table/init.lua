@@ -104,6 +104,22 @@ function M.status(bufnr)
   return table.concat(parts, " · ")
 end
 
+--- The argument that turns the table off instead of opening one.
+local DISABLE = "--disable"
+
+--- Read the current buffer's file as text instead of as a table.
+---
+--- A later `:edit` goes through the read command registered over `extensions`, which
+--- is why a name `extensions` covers comes back as a table while a name `:CsvTable`
+--- claimed stays text: the claim went with the table.
+local function disable_current()
+  local bufnr = vim.api.nvim_get_current_buf()
+  if not buffer.get(bufnr) then
+    return vim.notify("csv-table: this buffer is not a table", vim.log.levels.ERROR)
+  end
+  buffer.detach(bufnr)
+end
+
 --- An extension is the part of a name a read command matches on, so anything that
 --- would land in the pattern as glob syntax rather than as itself is refused.
 ---@param extension string
@@ -157,6 +173,10 @@ function M.setup(opts)
   autocmds.apply(M.extensions)
 
   vim.api.nvim_create_user_command("CsvTable", function(command)
+    if command.args == DISABLE then
+      return disable_current()
+    end
+
     local path = command.args ~= "" and command.args or vim.api.nvim_buf_get_name(0)
     if path == "" then
       return vim.notify("csv-table: no file to open", vim.log.levels.ERROR)
@@ -198,7 +218,17 @@ function M.setup(opts)
     if loaded then
       vim.cmd.edit()
     end
-  end, { nargs = "?", complete = "file", desc = "Open a file as a table" })
+  end, {
+    nargs = "?",
+    complete = function(lead)
+      local matches = vim.fn.getcompletion(lead, "file")
+      if DISABLE:find(lead, 1, true) == 1 then
+        table.insert(matches, 1, DISABLE)
+      end
+      return matches
+    end,
+    desc = "Open a file as a table, or " .. DISABLE .. " to read it as text again",
+  })
 end
 
 return M

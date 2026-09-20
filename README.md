@@ -150,6 +150,8 @@ keymaps = {
 
 The file goes to `xan`, which tells formats apart by extension. Beside the csv, tsv and workbook formats in the default `extensions`, it reads json, jsonl and ndjson, toml, txt, npy, tar and md. A json object nested in a record flattens to dotted column names, so `{"c": {"d": 2}}` becomes a column `c.d`, and an array arrives as its json text, `[1,2]`. `xan` picks the columns of a json or jsonl file from its first 64 records, so a key that first appears after them is dropped.
 
+`:CsvTable --disable` gives the buffer back and reads the file as text. What happens on your next `:edit` depends on why the buffer was a table: a name in `extensions` comes back as a table, and a name you opened with `:CsvTable` stays text, because `--disable` dropped the takeover this command made.
+
 A format you open often belongs in `extensions` instead, so `:edit` opens it as a table:
 
 ```lua
