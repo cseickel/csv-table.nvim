@@ -1,11 +1,7 @@
 --[[
 Defines `csv.Page`, one page of the table as it is drawn: the buffer lines, the
 byte range of every cell, and the lookups from a row id, a row number, a line or
-a column to what draws it.
-
-`csv-table.reader.parse` builds one out of what xan printed. `empty` is a page
-nothing has been drawn on, and it answers every lookup with nothing rather than
-with an error.
+a column to what draws it. An empty page answers every lookup with nil.
 
 Pure Lua, so it runs without nvim.
 ]]
@@ -56,16 +52,16 @@ function M.new(fields)
   return setmetatable(fields, Page)
 end
 
---- What names `cell` across a render, since a row id and a column id outlive the
---- page they were read from. `Page:cell_of` is the way back.
+--- The name of `cell` that survives a render, since a row id and a column id
+--- outlive the page they were read from. `Page:cell_of` is the way back.
 ---@param cell csv.Cell
 ---@return csv.CellRef
 function M.ref_of(cell)
   return { row_id = cell.row.row_id, column_id = cell.column.column_id }
 end
 
---- A page nothing has been drawn on. `first_line` past `last_line` is what says
---- it holds no rows, which is the same answer a filter leaving nothing gives.
+--- A page nothing has been drawn on. `first_line` past `last_line` is what says a
+--- page holds no rows, and a filter that leaves nothing gives the same answer.
 ---@return csv.Page
 function M.empty()
   return M.new({
@@ -92,7 +88,7 @@ function Page:cell_ranges(buffer_line)
 end
 
 --- The byte range column `column_number` occupies on `buffer_line`, as 0-based
---- offsets suitable for an extmark.
+--- offsets an extmark takes.
 ---@param buffer_line integer
 ---@param column_number integer
 ---@return integer|nil from
@@ -105,9 +101,9 @@ function Page:cell_bounds(buffer_line, column_number)
   return range.from, range.to
 end
 
---- How wide column `column_number` is drawn, in characters, once the padding
---- around every value is taken back off. Every line pads its cells to the same
---- width, so the header answers for all of them.
+--- How wide column `column_number` is drawn, in characters, without the padding.
+--- Every line pads its cells to the same width, so the header answers for all of
+--- them.
 ---@param column_number integer
 ---@return integer|nil
 function Page:cell_width(column_number)
@@ -119,8 +115,8 @@ function Page:cell_width(column_number)
   return text.length(header:sub(range.from + 1, range.to)) - CELL_PADDING
 end
 
---- Which column of `buffer_line` holds byte offset `byte`. A byte on a separator
---- answers with the column to its right, and a byte past the last cell answers
+--- The column of `buffer_line` at byte offset `byte`. A byte on a separator
+--- answers with the column to its right and a byte past the last cell answers
 --- with the last column, so every byte of the line names a column.
 ---@param buffer_line integer
 ---@param byte integer 0-based, as nvim reports the cursor.
@@ -160,7 +156,8 @@ function Page:column_at(column_number)
   return self.columns[column_number]
 end
 
---- The cell `ref` names here, absent once the row or the column has left the page.
+--- The cell `ref` names on this page, or nil once the row or the column has left
+--- it.
 ---@param ref csv.CellRef|nil
 ---@return csv.Cell|nil
 function Page:cell_of(ref)
@@ -182,7 +179,7 @@ function Page:column_by_id(column_id)
   return column_number and self.columns[column_number] or nil
 end
 
---- Where `column` is drawn, present while it is on display.
+--- The column number `column` is drawn at, or nil while it is hidden.
 ---@param column csv.Column
 ---@return integer|nil column_number
 function Page:column_number(column)
@@ -199,8 +196,7 @@ function Page:row_count()
   return self.last_line - self.first_line + 1
 end
 
---- Where `cell` lands when it is taken `rows` down and `columns` across, kept
---- inside the table.
+--- The cell `rows` down and `columns` across from `cell`, clamped to the table.
 ---@param cell csv.Cell
 ---@param delta { rows: integer, columns: integer }
 ---@return csv.Cell|nil
@@ -224,9 +220,8 @@ function Page:step_cell(cell, delta)
   return { row = row, column = column }
 end
 
---- The cell drawn at `line` and byte `byte`. A line holding a border or the
---- header answers with the nearest data line, so every position in a drawn table
---- names a cell.
+--- The cell drawn at `line` and byte `byte`. A border or header line answers with
+--- the nearest data line, so every position in a drawn table names a cell.
 ---@param line integer
 ---@param byte integer 0-based, as nvim reports a cursor.
 ---@return csv.Cell|nil

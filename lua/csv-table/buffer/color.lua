@@ -1,11 +1,10 @@
 --[[
-Every color drawn into a table buffer: the groups, the order they stack in, and
-the two ways they reach the screen.
+Every color drawn into a table buffer, and the two ways it gets there.
 
-- a decoration provider paints the borders, the header and the typed cells, which
-  are decided by the text on the line and so are redrawn on every scroll
-- extmarks paint the marked rows and the marked columns, which are decided by the
-  query and so are redrawn when it changes
+A decoration provider paints the borders, the header and the typed cells. The
+line text decides those, so they are redrawn on every scroll. Extmarks paint the
+marked rows and columns. The query decides those, so they are redrawn when it
+changes.
 
 `csv-table.view` paints the active cell and the selection, which belong to one
 window rather than to the buffer.
@@ -21,8 +20,8 @@ local flash_namespace = vim.api.nvim_create_namespace("csv-flash")
 
 local FLASH_MILLISECONDS = 250
 
--- The bottom of the stack. An extmark takes 4096 by default, which is what the
--- marks and the flash sit on, and `csv-table.view` paints above both.
+-- The bottom of the stack. An extmark defaults to 4096, so the marks and the flash
+-- paint over this, and `csv-table.view` paints over those.
 M.SYNTAX_PRIORITY = 100
 
 local GROUPS = {
@@ -37,12 +36,11 @@ local GROUPS = {
   CsvSelection = { link = "Visual" },
   CsvActiveCell = { reverse = true },
   CsvFlash = { link = "IncSearch" },
-  -- `blend = 100` is what hides the cursor drawn in this group.
+  -- `blend = 100` hides a cursor drawn in this group.
   CsvHiddenCursor = { blend = 100 },
 }
 
---- Define every group this plugin draws with, as a default a colorscheme is free
---- to override. `csv-table.autocmds` calls it again after a colorscheme loads.
+--- Define every group as a default, which a colorscheme's own definition wins over.
 function M.define_groups()
   for name, spec in pairs(GROUPS) do
     vim.api.nvim_set_hl(0, name, vim.tbl_extend("error", spec, { default = true }))
@@ -51,9 +49,9 @@ end
 
 -- Painted by the decoration provider ------------------------------------------
 
---- The kind of every column that takes a color, keyed by column number. A number
---- gets its kind rather than a group, since the sign of the value picks which of
---- the two number groups it takes.
+--- The kind of every column that takes a color, keyed by column number. The kind
+--- rather than the group, because the sign of each value picks which of the two
+--- number groups it takes.
 ---@param buf csv.Buffer
 ---@return table<integer, "number"|"date">
 local function cell_kinds(buf)
@@ -69,8 +67,8 @@ local function cell_kinds(buf)
   return kinds
 end
 
---- The group a cell takes, or nil when the cell holds nothing. `view` pads every
---- cell, so the value starts at the first non-space.
+--- The group a cell takes, or nil when the cell holds nothing. `xan view` pads
+--- every cell, so the value starts at the first non-space.
 ---@param kind "number"|"date"
 ---@param text string The cell as it is drawn, padding included.
 ---@return string|nil
@@ -99,8 +97,7 @@ local function draw(bufnr, row, from, to, group)
   })
 end
 
---- Draw the gaps between the cells of one line, and the run at either end that
---- holds the outer border.
+--- Draw the gaps between the cells of one line and the outer border at each end.
 ---@param bufnr integer
 ---@param row integer
 ---@param line string
@@ -126,7 +123,7 @@ local drawing_state = nil
 ---@param bufnr integer
 ---@return boolean whether this window holds a table to color.
 local function on_win(_, _, bufnr)
-  -- Required here because `csv-table.buffer` requires this module to redraw.
+  -- Required here because `csv-table.buffer` requires this module.
   local buf = require("csv-table.buffer").get(bufnr)
   if not buf then
     drawing_state = nil
@@ -139,9 +136,8 @@ end
 ---@param bufnr integer
 ---@param row integer 0-based.
 local function on_line(_, _, bufnr, row)
-  -- `on_win` already decided this window has a table, so `drawing_state` is set.
-  -- The guard is here because nvim drops a provider that raises, which would end
-  -- coloring for the session.
+  -- `on_win` set this for any window nvim gets here for. The guard stays because
+  -- nvim drops a provider that raises, which would end coloring for the session.
   if not drawing_state then
     return
   end
@@ -203,24 +199,23 @@ local function draw_marks(buf)
   end
 end
 
---- Take every extmark this module drew off `bufnr`. The provider's own marks are
---- ephemeral, so they stop the moment the buffer is no longer a table.
+--- Remove every extmark this module drew on `bufnr`. The provider's marks are
+--- ephemeral, so they stop on their own once the buffer is no longer a table.
 ---@param bufnr integer
 function M.clear(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, marks_namespace, 0, -1)
   vim.api.nvim_buf_clear_namespace(bufnr, flash_namespace, 0, -1)
 end
 
---- Draw the marks again, which is what a change to them or to the page below them
---- costs.
+--- Draw the marks again, after the marks or the page under them changed.
 ---@param buf csv.Buffer
 function M.redraw(buf)
   vim.api.nvim_buf_clear_namespace(buf.bufnr, marks_namespace, 0, -1)
   draw_marks(buf)
 end
 
---- Highlight one column of every row briefly. A redraw clears extmarks, so this
---- only holds while the text it describes is the text on screen.
+--- Highlight one column on every row for `FLASH_MILLISECONDS`. A page redraw
+--- replaces the text under the extmarks, so it ends the flash early.
 ---@param buf csv.Buffer
 ---@param column csv.Column
 function M.flash_column(buf, column)
@@ -253,7 +248,7 @@ function M.flash_column(buf, column)
 end
 
 --- Define the groups and register the provider. One provider covers every window,
---- so `on_win` is what decides a window is showing a table.
+--- and `on_win` decides whether the window shows a table.
 function M.setup()
   M.define_groups()
   vim.api.nvim_set_decoration_provider(syntax_namespace, { on_win = on_win, on_line = on_line })

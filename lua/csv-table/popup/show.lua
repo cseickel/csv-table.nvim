@@ -1,9 +1,6 @@
 --[[
-Shows what a cell or a row holds, read back from the file, since a value wider than
-its column is drawn cut and the text on screen cannot answer what a cell holds.
-
-- `cell` opens what the active cell holds, at full length
-- `row` offers every column of the row to be searched, and copies the choice
+Shows what a cell or a row holds, read back from the file. A value wider than its
+column is drawn cut, so the text on screen cannot answer what a cell holds.
 ]]
 
 local json = require("csv-table.utils.json")
@@ -15,7 +12,6 @@ local M = {}
 
 local GAP = "  "
 
---- How one value reads in a panel, and whether it came out as JSON.
 ---@param value string
 ---@return string[] lines
 ---@return boolean is_json
@@ -26,7 +22,6 @@ local function value_lines(value)
   return vim.split(value, "\n", { plain = true }), false
 end
 
---- Show what the active cell holds, at full length.
 ---@param view csv.View
 function M.cell(view)
   local cell = view:active_cell()
@@ -45,12 +40,12 @@ function M.cell(view)
   end)
 end
 
---- Search the active cell's row by column name or by value, and copy what is
---- chosen. A row is read by searching it once a file is wide enough that the column
---- being read is off the screen.
+--- Search the active cell's row by column name or value, and copy what is chosen.
+--- A file wide enough that the column you want has scrolled off the screen is read
+--- this way rather than by moving to the cell.
 ---
---- The cell is read before xan runs, so a panel opened over a row the user has since
---- left still says which row it is showing.
+--- The cell is read before xan runs, so a panel opened over a row the user has
+--- since left still says which row it is showing.
 ---@param view csv.View
 function M.row(view)
   local cell = view:active_cell()
@@ -60,8 +55,7 @@ function M.row(view)
 
   local query = view.buffer.query
   query.reader:row_values(query, cell.row.row_id, function(values)
-    -- Every column of the file, in file order, so a column hidden from the table is
-    -- still answered for.
+    -- `file.columns` holds the hidden columns too, so the row comes out whole.
     local fields = {}
     local width = 0
     for index, column in ipairs(query.file.columns) do

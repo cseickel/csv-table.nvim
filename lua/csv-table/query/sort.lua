@@ -2,13 +2,13 @@
 The `csv.Query` methods that order the rows.
 
 Every one of them goes back to the first page, because the rows the page held are
-now somewhere else in the result.
+now elsewhere in the result.
 ]]
 
 local M = {}
 
 --- Sort by one column alone. Asking again for the direction it already has clears
---- the sort, which is how a sort is undone.
+--- the sort.
 ---@param column csv.Column
 ---@param direction "asc"|"desc"
 function M.sort_by(self, column, direction)
@@ -27,8 +27,8 @@ function M.sort_by(self, column, direction)
   self.page_number = 0
 end
 
---- Add a less significant sort key, or change the direction of one already
---- present. Asking again for the direction it already has removes that key.
+--- Add a less significant sort key, or change the direction of one already there.
+--- Asking again for the direction it already has removes that key.
 ---@param column csv.Column
 ---@param direction "asc"|"desc"
 function M.add_sort_key(self, column, direction)

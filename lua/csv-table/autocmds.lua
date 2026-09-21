@@ -1,10 +1,10 @@
 --[[
-All autocmds this plugin defines are done so via this module.
+Every autocommand this plugin defines is registered here.
 
 `apply` creates the group fresh, so running `setup` again replaces every
-autocommand. This includes the buffer-local ones. It is designed to be safe
-when re-running `setup` for different extensions, or even clearing the
-module cache and reloading with a new version of the plugin.
+autocommand, the buffer-local ones included. It is safe to re-run `setup` for
+different extensions, or to clear the module cache and reload a new version of
+the plugin.
 
 `csv-table.buffer` and `csv-table.actions` are reached inside the callbacks rather
 than required at the top, because both lead back to `csv-table.buffer`, which
@@ -25,8 +25,9 @@ local augroup
 ---@type table<string, true>
 local captured_by_extension = {}
 
--- This is a record of every buffer that we are managing, which means we
--- interrupt the normal nvim read and replace it with our own read via xan.
+-- Every buffer `:CsvTable` took, whatever its name. nvim drops a buffer-local
+-- autocommand when the buffer is wiped and `apply` drops it when it takes the
+-- group, so this says which buffers should hold one, as against which hold one now.
 ---@type table<integer, true>
 local captured_by_command = {}
 
@@ -61,17 +62,17 @@ local function apply_keymaps(buf)
     end
   end
 
-  -- A click lands exactly where it was pointed, and the view needs to know that,
-  -- since any other move that ends up in the cell it started in was a motion too
-  -- small to leave the cell. The expression hands the key back so nvim still does
-  -- the click itself.
+  -- A click lands on the cell it pointed at. Every other move that ends in the cell
+  -- it started from was too small to leave that cell, and steps one cell instead, so
+  -- the view has to be told which of the two this is. The expression returns the key
+  -- for nvim to perform the click itself.
   vim.keymap.set({ "n", "x" }, "<LeftMouse>", function()
     buf:view(0):click()
     return "<LeftMouse>"
   end, { buffer = buf.bufnr, expr = true, desc = "csv-table: follow the click" })
 end
 
---- Take this plugin's keys off `bufnr`. Every one `apply_keymaps` sets is given a
+--- Take this plugin's keys off `bufnr`. `apply_keymaps` gives every one of them a
 --- description starting `csv-table: `, which is what tells them from the user's own.
 ---@param bufnr integer
 local function clear_keymaps(bufnr)
@@ -84,12 +85,12 @@ local function clear_keymaps(bufnr)
   end
 end
 
---- Follow the cursor's visibility into whichever window the user is in, since
---- `guicursor` is global and the current window is the one that decides it.
+--- Hide or show the cursor for the window the user is now in. `guicursor` is global,
+--- so the current window is the one that decides it.
 ---
---- Telescope and snacks open a window with `noautocmd`, so neither event fires and
---- the cursor keeps what the window before it decided. The second read catches that
---- once the window has finished opening.
+--- Telescope and snacks open a window with `noautocmd`, so neither event fires there
+--- and the cursor keeps what the window before it set. The deferred second call
+--- catches that once the window has finished opening.
 local function follow_current_window()
   guicursor.update(buffer().for_window(0))
   vim.defer_fn(function()
@@ -97,19 +98,18 @@ local function follow_current_window()
   end, 100)
 end
 
---- The augroup every autocommand of this plugin belongs to, the ones a buffer
---- registers for itself included.
+--- The augroup every autocommand of this plugin belongs to, including the ones
+--- `csv-table.buffer` registers per buffer.
 ---@return integer
 function M.group()
   return augroup
 end
 
---- Whether the read command `apply` registered already takes `path`. Capturing a
---- path it takes would be a second autocommand on the same read.
+--- Whether the extension pattern `apply` registered already takes `path`.
 ---
---- An extension holds periods of its own, so this asks what the pattern asks: does
---- the name end in a dot and the extension. A name that is only the extension does
---- not, since `*.test.ps1` has nothing for the `*` to match in `test.ps1`.
+--- An extension may hold periods of its own, so this asks what the pattern asks:
+--- does the name end in a dot and the extension. A name that is only the extension
+--- does not, since `*.test.ps1` has nothing for the `*` to match in `test.ps1`.
 ---@param path string
 ---@return boolean
 function M.is_captured_by_extension(path)
@@ -122,13 +122,14 @@ function M.is_captured_by_extension(path)
   return false
 end
 
---- Read `bufnr` as a table from here on, regardless of extension.
+--- Read `bufnr` as a table from here on, whatever its name. The capture lasts until
+--- the buffer is wiped, and `apply` restores it after a reload takes the group.
 ---@param bufnr integer
 function M.capture(bufnr)
   captured_by_command[bufnr] = true
 
   -- nvim runs every autocommand matching a read, so a second one of ours here would
-  -- read the file twice.
+  -- read the file twice. Another plugin's is its own business.
   local already_captured = vim.api.nvim_get_autocmds({
     event = "BufReadCmd",
     buffer = bufnr,
@@ -147,9 +148,9 @@ function M.capture(bufnr)
   })
 end
 
---- Drop everything this buffer holds from this plugin, the capture included, so nvim
---- reads it as a plain file from here on. Only meaningful when the file was not
---- an extension we are configured to handle automatically.
+--- Drop everything this plugin put on `bufnr`, the capture included, so nvim reads
+--- it as a plain file from here on. A name the configured extensions cover is read
+--- as a table again on the next `:edit`, since that pattern is still registered.
 ---@param bufnr integer
 function M.release(bufnr)
   captured_by_command[bufnr] = nil
@@ -188,7 +189,8 @@ function M.apply(extensions)
     callback = color.define_groups,
   })
 
-  -- A `BufReadCmd` replaces nvim's own read
+  -- A `BufReadCmd` replaces nvim's own read, so a file this matches never reaches
+  -- the buffer as text.
   vim.api.nvim_create_autocmd("BufReadCmd", {
     group = augroup,
     pattern = patterns,
@@ -204,10 +206,9 @@ function M.apply(extensions)
     callback = follow_current_window,
   })
 
-  -- Entering one of nvim's visual modes is what says the user is picking cells out,
-  -- whichever key they entered it with. The pattern is the mode nvim came from and
-  -- the mode it went to, so `\22` is blockwise visual and a switch between two
-  -- visual modes matches as well.
+  -- Entering one of nvim's visual modes says the user is picking cells out, whichever
+  -- key they entered it with. The pattern is the mode left and the mode entered, so
+  -- `\22` is blockwise visual and a switch between two visual modes matches too.
   vim.api.nvim_create_autocmd("ModeChanged", {
     group = augroup,
     pattern = "*:[vV\22]",
@@ -225,9 +226,9 @@ function M.apply(extensions)
     end,
   })
 
-  -- Leaving a visual mode, where nvim writes `'<` and `'>` from the two ends it was
-  -- holding. The block the user picked out goes back over them, so `gv` brings the
-  -- cells back rather than nvim's own rectangle.
+  -- Leaving a visual mode. nvim writes `'<` and `'>` from the two ends it was
+  -- holding, and the picked block goes back over them, so `gv` brings the cells back
+  -- rather than nvim's own rectangle.
   vim.api.nvim_create_autocmd("ModeChanged", {
     group = augroup,
     pattern = "[vV\22]:*",
@@ -251,9 +252,9 @@ function M.apply(extensions)
     end,
   })
 
-  -- `WinScrolled` names the windows that scrolled in `v:event`, keyed by window, and
-  -- the mouse wheel scrolls a window without entering it, so the current window is
-  -- not the one to record. The `all` key it also holds is not a window.
+  -- `v:event` names the windows that scrolled, keyed by window, plus an `all` key
+  -- that is not a window. The mouse wheel scrolls a window without entering it, so
+  -- the current window is not the one to record.
   vim.api.nvim_create_autocmd("WinScrolled", {
     group = augroup,
     callback = function()
@@ -270,8 +271,8 @@ function M.apply(extensions)
   })
 
   -- Creating the group cleared what every open table had registered for itself,
-  -- captures included, so each one gets it back. A capture on a wiped buffer is the
-  -- only one with nothing to go back to.
+  -- captures included, so each one gets it back. A capture on a wiped buffer has
+  -- nothing to go back to.
   buffer().rebind_all()
   for bufnr in pairs(captured_by_command) do
     if vim.api.nvim_buf_is_valid(bufnr) then

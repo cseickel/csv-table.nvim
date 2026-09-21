@@ -5,8 +5,8 @@ table counts.
 
 local M = {}
 
---- How many characters a value holds. The `#` operator counts bytes, and a sort
---- arrow in a header is three of them.
+--- How many characters `value` holds. `#` counts bytes, and a sort arrow in a
+--- header is three of them.
 ---@param value string
 ---@return integer
 function M.length(value)
@@ -14,8 +14,8 @@ function M.length(value)
   return count
 end
 
---- The first `length` characters of a value, ending in an ellipsis when anything
---- was dropped.
+--- The first `length` characters of `value`, ending in an ellipsis when anything
+--- was cut.
 ---@param value string
 ---@param length integer
 ---@return string

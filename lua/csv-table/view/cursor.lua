@@ -2,21 +2,20 @@
 The `csv.View` methods that drive the real nvim cursor, which is hidden and parked
 at one edge of the active cell.
 
-`physical_cell` and `moved_cell` are the only way back from the cursor to a cell,
-and they answer for a move nvim made on its own: a click, a search, `gv`, or any
-motion this plugin does not map.
+The cursor is also the way back to a cell from a move nvim made on its own: a
+click, a search, `gv`, or any motion this plugin does not map.
 ]]
 
 local page = require("csv-table.page")
 
 local M = {}
 
---- Characters kept on screen past the active cell, which is what shows the cell's
---- border and a slice of the next column for orientation.
+--- Characters kept on screen past the active cell, showing its border and a slice
+--- of the next column.
 local PREVIEW = 8
 
---- The last column is set to 0, so the right border is at the edge of the screen
---- and does not scroll past it. Every other column uses the preview value.
+--- 0 on the last column, so the right border sits at the edge of the screen
+--- instead of scrolling past it.
 ---@param column_number integer
 ---@return integer
 local function scroll_off(self, column_number)
@@ -28,9 +27,8 @@ end
 
 --- Park the real cursor in `cell` and draw it. The cursor takes the last byte of
 --- the cell when moving right and the first when moving left, and a move that
---- stays in the same cell keeps the end it had. nvim scrolls sideways only far
---- enough to show the byte the cursor is on, so the far end is what brings the
---- whole cell into view.
+--- stays in the same cell keeps the end it had, because nvim scrolls sideways only
+--- far enough to show the byte the cursor is on.
 ---
 --- The position recorded is the one nvim reports back, because nvim moves a
 --- cursor set inside a multi-byte character to the start of that character.
@@ -46,8 +44,8 @@ local function park(self, cell)
     return
   end
 
-  -- The column alone, so a render that drops the row still keeps the end the
-  -- cursor was parked at.
+  -- The column alone is compared, so a render that drops the row still keeps the
+  -- end the cursor was parked at.
   local previous_column = self.active and current_page:column_by_id(self.active.column_id)
   local previous_number = previous_column and current_page:column_number(previous_column)
 
@@ -70,8 +68,7 @@ local function park(self, cell)
   self:draw()
 end
 
---- Whether the real cursor has left the byte the active cell parked it on, which
---- is what says the user moved it.
+--- Whether the real cursor has left the byte it was parked on.
 ---@return boolean
 function M.cursor_moved(self)
   if not self.active then
@@ -81,24 +78,23 @@ function M.cursor_moved(self)
   return position[1] ~= self.position[1] or position[2] ~= self.position[2]
 end
 
---- The cell the real cursor is in, which is where nvim left it rather than where
---- the plugin put it.
+--- The cell the real cursor is in now, wherever nvim left it.
 ---@return csv.Cell|nil
 function M.physical_cell(self)
   local position = vim.api.nvim_win_get_cursor(self.window)
   return self.buffer.page:cell_at(position[1], position[2])
 end
 
---- The cell a move of the real cursor was aiming for.
+--- The cell a move of the real cursor meant.
 ---
 --- A cursor that landed in another cell names that cell, which is what a click, a
 --- search or `$` means. A cursor still inside the cell it started in was moved by
---- something too small to leave it, such as `l` in a cell drawn twenty wide, and
---- the cell one step that way is what was meant.
+--- something too small to leave it, `l` in a cell drawn twenty wide, and the cell
+--- one step that way is what was meant.
 ---
---- Sideways is the only direction that can be meant here, so a cursor that kept
---- its byte kept its cell. `k` on the first row of the page is that: the cursor
---- reaches the border line above and `cell_at` brings it back.
+--- Sideways is the only direction that can be meant, so a cursor that kept its
+--- byte kept its cell. `k` on the first row of the page is one: the cursor reaches
+--- the border line above and `cell_at` brings it back.
 ---@return csv.Cell|nil
 function M.moved_cell(self)
   local cursor_cell = self:physical_cell()
@@ -125,13 +121,13 @@ function M.move_to(self, cell)
     return nil
   end
 
-  -- An action that opened a popup or waited for xan comes back here holding a view
-  -- of a window the user has since closed or taken elsewhere.
+  -- An action that opened a popup or waited for xan comes back holding a view of a
+  -- window the user has since closed or moved to another buffer.
   if not self:on_screen() then
     return nil
   end
 
-  -- nvim empties the buffer before a read command refills it, so between the two
+  -- nvim empties the buffer before a read command refills it, and between the two
   -- the page names lines the buffer does not hold.
   if cell.row.buffer_line > vim.api.nvim_buf_line_count(self.buffer.bufnr) then
     return nil
@@ -141,7 +137,7 @@ function M.move_to(self, cell)
   return cell
 end
 
---- Take the active cell `rows` rows and `columns` columns from where it is,
+--- Move the active cell `rows` rows and `columns` columns from where it is,
 --- leaving the selection alone.
 ---@param rows integer
 ---@param columns integer
@@ -154,10 +150,10 @@ function M.move_by(self, rows, columns)
   return self:move_to(self.buffer.page:step_cell(cell, { rows = rows, columns = columns }))
 end
 
---- Put the active cell back after a render, taking the row and the column by id,
---- so a sort or a filter that keeps them takes the user along. Either id that has
---- left the page falls back to where the cursor is parked: its line for the row,
---- its byte for the column.
+--- Put the active cell back after a render, finding the row and the column by id,
+--- so a sort or filter that keeps them keeps the user on them. An id that has left
+--- the page falls back to where the cursor is parked: its line for the row, its
+--- byte for the column.
 ---@return csv.Cell|nil
 function M.restore(self)
   local cell = self:physical_cell()

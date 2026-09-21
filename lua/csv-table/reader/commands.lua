@@ -1,9 +1,9 @@
 --[[
-Builds every argv the plugin runs. All of them are `xan`, and all but `sheets`
-are `xan run '<stages>' <path>`, one process with no shell and no pipes.
+Builds every argv the plugin runs. Each is one `xan` process, no shell and no
+pipes, and all but `sheets` are `xan run '<stages>' <path>`.
 
 A source that is not already CSV takes a `from` stage in front, so every stage
-below it sees CSV whatever the file on disk holds.
+after it reads CSV whatever the file on disk holds.
 ]]
 
 local expression = require("csv-table.reader.expression")
@@ -15,27 +15,28 @@ local M = {}
 local WORKBOOK_FORMATS = { xls = true, xlsx = true, xlsb = true, ods = true }
 
 local SAMPLE_ROWS = 600
--- `sample` reads whatever it is given, so the sample is drawn from the head of
--- the file rather than from all of it.
+-- `sample` reads its whole input, so the sample is drawn from the head of the
+-- file rather than all of it.
 local SAMPLE_HEAD_ROWS = 60000
 
---- The format xan infers from a name, which is the tail after its last dot.
+--- The tail after the last dot, lowercased, which is what `xan from` infers the
+--- format from.
 ---@param path string
 ---@return string
 local function extension(path)
   return (path:match("%.([%w]+)$") or ""):lower()
 end
 
---- Whether `path` names a workbook, which is the only kind of source that has
---- sheets to choose between.
+--- Whether `path` names a workbook, the one kind of source with sheets to choose
+--- between.
 ---@param path string
 ---@return boolean
 function M.has_sheets(path)
   return WORKBOOK_FORMATS[extension(path)] == true
 end
 
---- The stage that turns a source into CSV, absent when it already is one. `xan
---- from` infers the format from the extension, so it is never named.
+--- The stage turning the source into CSV, nil when it already is CSV. `xan from`
+--- infers the format from the extension, so the format is never named.
 ---@param path string
 ---@param sheet integer|nil 0-based, for a workbook.
 ---@return string|nil
@@ -50,8 +51,7 @@ local function source_stage(path, sheet)
   return "from"
 end
 
---- The argv running `stages` against `path`, reading it as CSV first if it is not
---- already CSV.
+--- The argv running `stages` against `path`.
 ---@param path string
 ---@param sheet integer|nil
 ---@param stages string The pipeline, already joined.
@@ -79,9 +79,9 @@ function M.render(query, display_columns)
   return run_query(query, pipeline.build(query, display_columns))
 end
 
---- `to jsonl` keys its object by the column names in the stream, and a CSV may
+--- `to jsonl` keys each object by the column names in the stream and a CSV may
 --- repeat a header, so the columns are renamed to their ids first. The keys come
---- out `"0"`, `"1"`, `"2"`, one per column and free of anything needing quotes.
+--- out `"0"`, `"1"`, `"2"`.
 ---@param count integer How many columns the file holds.
 ---@return string
 local function rename_to_ids(count)
@@ -92,7 +92,7 @@ local function rename_to_ids(count)
   return "rename " .. pipeline.quote(table.concat(ids, ","))
 end
 
---- The argv for the sample `csv-table.file.format` measures precision from.
+--- The argv drawing a sample of rows as JSON lines, every value left a string.
 ---@param path string
 ---@param sheet integer|nil
 ---@param column_count integer
@@ -106,19 +106,17 @@ function M.sample(path, sheet, column_count)
   }, " | "))
 end
 
---- The stage that keeps every record at least two values wide. A record holding
---- one empty value would be written as an empty line, so the writer quotes it and
---- the value arrives as `""`. `csv-table.reader` drops this column as it splits
---- the record.
+--- Keeps every record at least two values wide. A record holding one empty value
+--- is written as an empty line, so the writer quotes it and the value arrives as
+--- `""`.
 local PADDING = "map " .. pipeline.quote('("") as csv_table_padding')
 
---- The argv reading one whole row, the ASCII unit separator between its values
+--- The argv reading one whole row, with the ASCII unit separator between values
 --- and the record separator at the end. `--quote-never` writes each value as the
---- file holds it, so a comma, a quote or a newline inside a value arrives whole
---- and nothing has to be unescaped.
+--- file holds it, so a comma, a quote or a newline inside a value arrives whole.
 ---
 --- `enum` numbers rows by their position in the source before anything filters or
---- sorts them, so a row id is the number of rows to skip.
+--- sorts, so a row id is exactly the number of rows `slice -s` skips.
 ---@param query csv.Query
 ---@param row_id integer
 ---@return string[]
@@ -131,12 +129,12 @@ function M.row(query, row_id)
   }, " | "))
 end
 
---- The name `map` gives the column the sort orders on. It is never addressed by
---- name, so a source column sharing it does no harm.
+--- The column `map` appends for the sort in `ordering_stages`. It is never
+--- addressed by name, so a source column sharing the name does no harm.
 local ORDER_COLUMN = "csv_table_order"
 
---- Whether `row_ids` is a run of consecutive rows already in file order, which is
---- what an unsorted page leaves.
+--- Whether `row_ids` is a run of consecutive rows in file order, which is what an
+--- unsorted page leaves.
 ---@param row_ids integer[]
 ---@return boolean
 local function consecutive(row_ids)
@@ -148,9 +146,10 @@ local function consecutive(row_ids)
   return true
 end
 
---- The stages that put the rows back in the order they are drawn in. `slice -I`
---- returns them in file order whatever order it was asked in, so every row looks
---- its own id up in a map of row id to screen position and the sort reads that.
+--- The stages putting the rows back in the order they are drawn. `slice -I`
+--- returns rows in file order whatever order it was asked in, so each row looks
+--- its own id up in a map of row id to screen position and the sort reads that
+--- column.
 ---@param row_ids integer[]
 ---@param kept_count integer How many columns the export keeps.
 ---@return string[]
@@ -168,13 +167,13 @@ local function ordering_stages(row_ids, kept_count)
   return {
     "map " .. pipeline.quote(order),
     -- The row id sits at 0 and the kept columns run to `kept_count`, so `map`
-    -- appends this one just past them.
+    -- appended the order column just past them.
     string.format("sort -s %d -N", kept_count + 1),
   }
 end
 
---- The stage that writes each format, keyed by the name the export actions use.
---- Every stage above emits CSV, so `csv` adds no stage of its own.
+--- The stage writing each format. Every stage before it emits CSV, so `csv` needs
+--- none.
 local WRITERS = {
   tsv = "fmt --tabs",
   csv = nil,
@@ -182,11 +181,10 @@ local WRITERS = {
   markdown = "to md",
 }
 
---- The stage that drops the row id and leaves the exported columns.
+--- The stage dropping the row id and keeping the exported columns.
 ---
 --- `to json` keys each object by header name and `to md` heads each column with
---- it, and a file may repeat a header, so those two take the labels instead:
---- unique, and what the user reads in the drawn header.
+--- it, and a file may repeat a header, so those two take the labels instead.
 ---@param block csv.Block
 ---@param format string
 ---@return string
@@ -210,9 +208,8 @@ local function keeping_stage(block, format)
   return "select " .. pipeline.quote(table.concat(selectors, ","))
 end
 
---- The argv writing the block. Naming the rows by id is what keeps the filter and
---- the sort from running again: they decided which rows are on screen, and the
---- ids say which of those to read.
+--- The argv writing the block. The rows are named by id, so neither the filter nor
+--- the sort runs again; the ids already say which rows the screen holds.
 ---@param query csv.Query
 ---@param export csv.Export
 ---@return string[]
@@ -247,7 +244,7 @@ function M.export(query, export)
   return run_query(query, table.concat(stages, " | "))
 end
 
---- The argv that lists a file's column names, one per line.
+--- The argv listing a file's column names, one per line.
 ---@param path string
 ---@param sheet integer|nil
 ---@return string[]
@@ -255,15 +252,15 @@ function M.headers(path, sheet)
   return run(path, sheet, "headers -j")
 end
 
---- The argv that names every sheet in a workbook, one per line.
+--- The argv listing every sheet in a workbook, one per line.
 ---@param path string
 ---@return string[]
 function M.sheets(path)
   return { "xan", "from", "--list-sheets", path }
 end
 
---- Run `stage` over the rows the current filters leave. `columns` names the
---- columns `stage` addresses, so the opening `select` takes those columns.
+--- The argv running `stage` over the rows the current filters leave. `columns`
+--- are the columns `stage` addresses, and `positions` says where each one sits.
 ---@param query csv.Query
 ---@param columns csv.Column[]
 ---@param stage fun(positions: table<integer, integer>): string

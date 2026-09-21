@@ -1,9 +1,5 @@
 --[[
-Opens the two dialogs that add a filter or change the sheet.
-
-- `open` offers the comparisons that suit the column's kind, a checklist of the
-  column's own values, or a moonblade expression
-- `sheets` lists a workbook's sheets and reads the one chosen
+The dialogs that add a filter or change the sheet.
 
 The value checklist is drawn through the filters already applied, so every value
 it offers is one that would leave rows on screen.
@@ -40,7 +36,6 @@ local TEXT_CHOICES = {
   { key = "/", label = "matching a regular expression", type = "string", operator = "regex" },
 }
 
---- Draw the checklist for the value picker.
 ---@param values csv.Frequency[]
 ---@param checked table<integer, boolean>
 ---@return string[]
@@ -54,7 +49,7 @@ local function checklist(values, checked)
 end
 
 --- Choose values from the column's own contents. The float is an ordinary buffer,
---- so `/` searches the list the way it searches anything else.
+--- so `/` searches the list the way it searches any other.
 ---@param view csv.View
 ---@param column csv.Column
 ---@param values csv.Frequency[]
@@ -99,7 +94,6 @@ local function pick_values(view, column, values)
   end, { buffer = bufnr, nowait = true })
 end
 
---- Ask for the value a comparison compares against, then apply it.
 ---@param view csv.View
 ---@param column csv.Column
 ---@param choice csv.Choice
@@ -132,7 +126,6 @@ local function ask_for_value(view, column, choice)
   end)
 end
 
---- Choose which sheet of a workbook to read.
 ---@param view csv.View
 function M.sheets(view)
   local file = view.buffer.query.file
@@ -157,7 +150,8 @@ function M.sheets(view)
   end, { buffer = bufnr, nowait = true })
 end
 
---- Open the dialog for `column`.
+--- Offer the comparisons that suit the column's kind, a checklist of its values,
+--- or a moonblade expression.
 ---@param view csv.View
 ---@param column csv.Column
 function M.open(view, column)

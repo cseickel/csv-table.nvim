@@ -1,11 +1,10 @@
 --[[
-Run every spec beside this file.
+Runs every spec in `tests/`, from the repository root:
 
     lua tests/run.lua
 
-Reads the specs from `tests/`, prints a line per failure, and exits nonzero when
-anything failed. It needs the `lua` binary and the repository, so it runs the
-same way in a terminal and in CI.
+It prints a line per failure and exits nonzero when anything failed. It needs the
+`lua` binary and the repository, so it runs the same way in a terminal and in CI.
 ]]
 
 package.path = "lua/?.lua;lua/?/init.lua;tests/?.lua;" .. package.path

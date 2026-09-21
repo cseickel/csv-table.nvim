@@ -1,25 +1,23 @@
 --[[
-Writes the moonblade expressions xan takes, since filters and formatting reach it
-as expressions rather than flags.
+Writes the moonblade expressions xan takes. Filters and formatting reach xan as
+expressions rather than flags.
 
-String comparison uses `eq` where numeric comparison uses `==`, and a cast that
-fails aborts the whole run, so anything that can fail is wrapped in `try`.
+String comparison uses `eq` where numeric comparison uses `==`. A cast that fails
+aborts the whole run, so anything that can fail is wrapped in `try`.
 ]]
 
 local M = {}
 
 local NUMERIC_CONVERSION = "%%[-+ #%d%.]*[diouxXeEfgGaA]"
 
---- Render a moonblade string literal.
 ---@param value string
 ---@return string
 function M.string_literal(value)
   return '"' .. value:gsub("\\", "\\\\"):gsub('"', '\\"') .. '"'
 end
 
---- Render one filter. `positions` says where each column sits in the stream the
---- filter reads, which `csv-table.reader.pipeline` fixed with its opening
---- `select`.
+--- One filter as an expression. `positions` says where each column sits in the
+--- stream the filter reads.
 ---@param filter csv.Filter
 ---@param positions table<integer, integer>
 ---@return string
@@ -38,8 +36,8 @@ function M.filter(filter, positions)
 
   local column = string.format("col(%d)", positions[filter.column.column_id])
 
-  -- A row whose value is not a number is not a row satisfying a numeric
-  -- comparison, which is what `try` turns the cast failure into.
+  -- `try` turns the failed cast of a non-numeric value into a row that does not
+  -- satisfy the comparison.
   if filter.type == "numeric" then
     return string.format("try(%s %s %s)", column, filter.operator, filter.value)
   end
@@ -62,7 +60,7 @@ function M.filter(filter, positions)
   return string.format("%s(%s, %s)", filter.operator, column, value)
 end
 
---- Combine every filter into the single expression `xan filter` receives.
+--- Every filter in the one expression `xan filter` takes, all of which must hold.
 ---@param filters csv.Filter[]
 ---@param positions table<integer, integer>
 ---@return string
@@ -76,7 +74,7 @@ end
 
 local PAD_FUNCTION = { left = "rpad", center = "pad", right = "lpad" }
 
---- How a column's value is written, padding included.
+--- The expression writing a column's value in `format`, padding included.
 ---@param reference string A `col(...)` call naming the column.
 ---@param format csv.Format
 ---@return string
@@ -93,8 +91,8 @@ function M.value_expression(reference, format)
   end
 
   if format.align then
-    -- Slicing counts characters where `printf` counts bytes, so this never cuts
-    -- a multi-byte character in half.
+    -- Slicing counts characters where `printf` counts bytes, so the cut never
+    -- splits a multi-byte character.
     local width = format.width
     expression = string.format(
       'if(len(%s) > %d, %s[0:%d] ++ "…", %s(%s, %d))',

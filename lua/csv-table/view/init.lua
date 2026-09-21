@@ -1,13 +1,13 @@
 --[[
 Defines `csv.View`, one window's view of one table: the cell the user is on, the
-cells picked out, and where the window is scrolled to.
+cells selected, and where the window is scrolled to.
 
-A buffer holds one view per window showing it, handed out by `Buffer:view`. Every
-cell is held as a `csv.CellRef` and resolved against the page drawn now, so a
-sort or a filter that keeps a row takes the view with it.
+A buffer holds one view per window showing it. Every cell is held as a
+`csv.CellRef` and resolved against the page drawn now, so a sort or filter that
+keeps a row takes the view with it.
 
-The active cell and the selection are drawn into one namespace on the buffer,
-which the window the user is in holds.
+The active cell and the selection are drawn into one namespace on the buffer, so
+only the window the user is in shows them.
 ]]
 
 local M = {}
@@ -62,8 +62,7 @@ function M.new(buffer, window)
   }, View)
 end
 
---- A copy of this view for `window`, which is what a second window on the same
---- table starts from.
+--- A copy of this view for `window`.
 ---@param window integer
 ---@return csv.View
 function View:clone(window)
@@ -78,8 +77,7 @@ function View:clone(window)
   return copy
 end
 
---- Whether the window still shows this table, which is what says the view is
---- taken rather than free for the next window to adopt.
+--- Whether the window still shows this table.
 ---@return boolean
 function View:on_screen()
   return vim.api.nvim_win_is_valid(self.window)
@@ -91,8 +89,7 @@ function View:is_current()
   return self.window == vim.api.nvim_get_current_win()
 end
 
---- The cell the user is on, which is the one drawn in `CsvActiveCell` and the one
---- every action runs on.
+--- The cell the user is on, drawn in `CsvActiveCell`.
 ---@return csv.Cell|nil
 function View:active_cell()
   return self.buffer.page:cell_of(self.active)
@@ -123,8 +120,8 @@ local function draw_cell(self, cell, group, priority)
   end
 end
 
---- Draw the selected cells and the active cell. One namespace on the buffer holds
---- both, so only the window the user is in can show them.
+--- Draw the selection and the active cell. The namespace is on the buffer, so only
+--- the current window draws into it.
 function View:draw()
   if not self:is_current() then
     return
@@ -159,17 +156,17 @@ function M.clear(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, namespace, 0, -1)
 end
 
---- Keep where the window is looking, so a buffer emptied and filled again comes
---- back the way the user left it.
+--- Record where the window is scrolled to, so a buffer emptied and filled again
+--- comes back the way the user left it.
 function View:remember()
   if self:on_screen() then
     self.viewport = vim.api.nvim_win_call(self.window, vim.fn.winsaveview)
   end
 end
 
---- Look at the table the way this window was left. Scheduled, because `:edit`
---- puts the cursor on line 1 once the read command it fired has returned, and
---- this has to land after that.
+--- Scroll the window back to where `remember` recorded. Scheduled, because `:edit`
+--- puts the cursor on line 1 once the read command it fired has returned, and this
+--- has to land after that.
 function View:restore_viewport()
   local viewport = self.viewport
   vim.schedule(function()

@@ -2,8 +2,7 @@
 The `csv.Query` methods that decide which columns are drawn and in what order.
 
 `query.columns` is the one stored list. A column's position in it is the display
-order, and its `column_id` is the file order, so every xan stage takes the id and
-the drawn table takes the position.
+order and its `column_id` is the file order.
 ]]
 
 local M = {}
@@ -38,8 +37,8 @@ function M.hide_column(_, column)
   column.hidden = true
 end
 
---- Hide a column and keep it on the clipboard. `append` adds to a cut already
---- there, which is how several columns move together.
+--- Hide a column and put it on the clipboard. `append` adds it to the columns
+--- already there, so several columns move together.
 ---@param column csv.Column
 ---@param append boolean
 function M.cut_column(self, column, append)
@@ -86,8 +85,8 @@ function M.paste_columns(self, column, before)
   return true
 end
 
---- Exchange a column with the visible column `delta` places away. The two swap
---- in place, leaving any hidden column between them where it sits.
+--- Swap a column with the visible column `delta` places away. A hidden column
+--- between them stays where it is.
 ---@param column csv.Column
 ---@param delta integer
 ---@return boolean moved True when the column had a neighbor to trade with.
@@ -125,7 +124,8 @@ function M.show_all_columns(self)
   self.columns_filtered_to_marks = false
 end
 
---- Show only the marked columns, or every column if already restricted.
+--- Show only the marked columns, or every column when already restricted. Nothing
+--- changes when no column is marked.
 function M.show_marked_columns_only(self)
   if self.columns_filtered_to_marks then
     return M.show_all_columns(self)

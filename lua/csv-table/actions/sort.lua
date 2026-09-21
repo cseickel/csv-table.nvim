@@ -1,8 +1,7 @@
 --[[
-Registers the actions that order the rows.
-
-Sorting by a column and adding it as a less significant key are separate keys, so
-the same column asked for twice means two different things.
+Registers the actions that order the rows. Sorting by a column and adding it as a
+less significant key are separate keys, so the same column asked for twice means
+two different things.
 ]]
 
 local utils = require("csv-table.actions.utils")

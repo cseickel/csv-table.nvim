@@ -1,11 +1,9 @@
 --[[
-Defines `csv.File`, the spreadsheet on disk and what reading its head revealed:
-the columns, a format per column, the sheet names, and a row id name none of the
-columns already uses.
+Defines `csv.File`, the spreadsheet on disk and what reading its head found: the
+columns, a format per column, the sheet names, and a row id name no column uses.
 
-`empty` is a file nothing has been read from yet. `open` reads one through a
-reader and answers with the file it found. Both give a whole File, so nothing
-downstream asks whether the read has happened.
+A file nothing has been read from is a whole File too, with no columns and no
+sheets, so nothing downstream asks whether the read has happened.
 ]]
 
 local commands = require("csv-table.reader.commands")
@@ -30,9 +28,9 @@ local M = {}
 local File = {}
 File.__index = File
 
---- A repeated header takes its occurrence as a suffix, so `a,b,a` labels its
---- columns `a[0]`, `b` and `a[1]`. That gives the user one name per column to
---- read, and gives `to jsonl` one key per column to write.
+--- A repeated header takes its occurrence as a suffix, so `a,b,a` labels as
+--- `a[0]`, `b`, `a[1]`. That gives one name per column for the user and one key
+--- per column for `to jsonl`.
 ---@param names string[]
 ---@return csv.Column[]
 function M.columns_from_names(names)
@@ -56,8 +54,8 @@ function M.columns_from_names(names)
   return columns
 end
 
---- A row id name free of every header, so a `col("id")` in a hand written filter
---- reads the row id.
+--- A row id name no header uses, so `col("id")` in a hand-written filter reads the
+--- row id.
 ---@param names string[]
 ---@return string
 local function prepended_name(names)
@@ -81,8 +79,6 @@ local function rowid_column(name)
   return { name = name, label = name, column_id = -1, hidden = false }
 end
 
---- The file whose contents are already known, which is what `open` answers with
---- and what a spec builds directly.
 ---@param fields { path: string, sheet: integer, sheets: string[], columns: csv.Column[], formats: table<integer, csv.Format>, rowid_name: string }
 ---@return csv.File
 function M.new(fields)
@@ -96,8 +92,7 @@ function M.new(fields)
   }, File)
 end
 
---- A file nothing has been read from. It answers every question a File answers,
---- with no columns and no sheets.
+--- A file nothing has been read from.
 ---@param path string
 ---@return csv.File
 function M.empty(path)
@@ -111,10 +106,9 @@ function M.empty(path)
   })
 end
 
---- What the file looks like on disk now, as a value two reads can be compared by.
---- A file written again in the same second keeps its modification time, so the
---- size comes along. A file out of reach has no version, and an empty string
---- never matches a version a read recorded.
+--- The file on disk now, as a value two reads can be compared by. A file written
+--- again in the same second keeps its mtime, so the size is in it too. A file out
+--- of reach has no version, and an empty string never matches one a read recorded.
 ---@return string
 function File:version()
   local stat = vim.uv.fs_stat(self.path)
@@ -124,9 +118,9 @@ function File:version()
   return string.format("%d:%d:%d", stat.size, stat.mtime.sec, stat.mtime.nsec)
 end
 
---- Read `path` through `reader` and answer with the file it found. The sheet
---- names are listed first where the file has any, so the headers and the sample
---- come from the sheet that was asked for.
+--- Read `path` through `reader` and pass the File to `on_file`. The sheet names
+--- are listed first when the file has any, so the headers and the sample come from
+--- the sheet asked for.
 ---@param reader csv.Reader
 ---@param path string
 ---@param sheet integer|nil 0-based, defaulting to the first sheet.
@@ -140,8 +134,8 @@ function M.open(reader, path, sheet, on_file)
   ---@param stdout string
   ---@return string[]
   local function lines_of(stdout)
-    -- A sheet may hold an empty header cell, which xan prints as a blank line
-    -- and which is a real column, so blank lines are kept.
+    -- A sheet may hold an empty header cell, which xan prints as a blank line and
+    -- which is a real column, so blank lines are kept.
     local lines = vim.split(stdout, "\n", { plain = true })
     if lines[#lines] == "" then
       table.remove(lines)
@@ -180,8 +174,7 @@ function M.open(reader, path, sheet, on_file)
   end)
 end
 
---- The format of `column`, made plain the first time the user changes a column
---- the sample never saw.
+--- The format of `column`, created plain when there is none yet.
 ---@param column csv.Column
 ---@return csv.Format
 function File:format_of(column)
@@ -199,10 +192,9 @@ function File:is_numeric(column)
   return format.is_numeric(self.formats[column.column_id])
 end
 
---- The width the user is working from: the one they asked for, or the column as
---- it is drawn when they have not asked yet. The sample can miss the longest
---- value in the file, and the column is drawn to fit the longest value on the
---- page, so the drawn width is the only honest starting point.
+--- The width the user asked for, or the drawn width when they have not asked yet.
+--- The sample can miss the longest value in the file, and the column is drawn to
+--- fit the longest value on the page, so the drawn width is the starting point.
 ---@param column csv.Column
 ---@param drawn_width integer
 ---@return integer
@@ -212,7 +204,7 @@ function File:working_width(column, drawn_width)
 end
 
 --- Show more or fewer decimals. Asking for decimals on a column that is not a
---- number makes it a float, since that is what the request means.
+--- number makes it a float.
 ---@param column csv.Column
 ---@param delta integer
 function File:adjust_precision(column, delta)
@@ -222,8 +214,8 @@ function File:adjust_precision(column, delta)
   column_format.kind = column_format.precision > 0 and "float" or "int"
 end
 
---- Use a printf specification instead of every other formatting rule. An empty
---- specification returns the column to the detected format.
+--- Use a printf specification in place of every other formatting rule. An empty
+--- specification puts the column back on the detected format.
 ---@param column csv.Column
 ---@param spec string
 function File:set_spec(column, spec)
@@ -231,8 +223,8 @@ function File:set_spec(column, spec)
 end
 
 --- Pad every value of a column to `width` characters, cutting the longer ones.
---- Padding needs a side to pad towards, so an alignment the user has not chosen
---- settles to the side the column's kind reads on.
+--- Padding needs a side, so an alignment the user has not chosen takes the side
+--- the column's kind reads on.
 ---@param column csv.Column
 ---@param opts { width: integer, align: "left"|"center"|"right"|nil }
 function File:set_padding(column, opts)

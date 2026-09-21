@@ -1,12 +1,12 @@
 --[[
 Reads the table `xan view` drew and builds the `csv.Page` describing it.
 
-`view` pads its output with a blank line at each end, and draws a top border, the
-header, a border, the rows, and a bottom border. The blank lines go and the rest
-reaches the buffer, so the table keeps its frame.
+`xan view` pads its output with a blank line at each end and draws a top border,
+the header, a border, the rows, and a bottom border. The blank lines are dropped
+and the rest reaches the buffer as drawn.
 
-The row ids come out of the first cell before that cell is cut away, so every
-range this returns describes the text the buffer will hold.
+Row ids come out of the first cell before that cell is cut away, so every range
+returned describes the text the buffer will hold.
 
 Pure Lua, so it runs without nvim.
 ]]
@@ -24,9 +24,9 @@ local function trim(value)
 end
 
 --- The byte range of every cell on one line. The ends of the line bound the first
---- and last cells, and a zero width range is dropped, so a theme that draws the
---- outer border and one that leaves it off give the same count. `view` pads every
---- cell, so every real cell has width.
+--- and last cells. A zero width range is dropped, so a theme that draws the outer
+--- border and one that leaves it off give the same count; `xan view` pads every
+--- cell, so a real cell always has width.
 ---@param line string
 ---@return csv.CellRange[]
 local function scan(line)
@@ -67,8 +67,8 @@ local function same_ranges(left, right)
 end
 
 --- Whether `line` is one of the three horizontal borders. Every theme draws them
---- from dashes and corners, and the header and the data rows are the lines that
---- hold a vertical separator.
+--- from dashes and corners, and the header and data rows are the lines holding a
+--- vertical separator.
 ---@param line string
 ---@return boolean
 local function is_border_line(line)
@@ -95,11 +95,11 @@ local function byte_of_character(line, position)
 end
 
 --- `line` without its first cell: the `width` characters the cell is drawn in and
---- the separator that closes them.
+--- the separator closing them.
 ---
---- Counting characters is what lets one cut serve a border line as well as a row.
---- Every line spends the same number of characters on the cell, while a border
---- line spends three bytes on each of them and a row of digits spends one.
+--- The cut counts characters rather than bytes so one cut serves a border line as
+--- well as a row. Every line spends the same number of characters on the cell,
+--- while a border line spends three bytes on each and a row of digits spends one.
 ---@param line string
 ---@param border_width integer Characters of outer border ahead of the cell, 1 or 0.
 ---@param width integer Characters the cell is drawn in, padding included.
@@ -110,7 +110,7 @@ local function without_first_cell(line, border_width, width)
   return line:sub(1, from - 1) .. line:sub(to)
 end
 
---- Build the page out of what `xan view` printed.
+--- The page described by the lines `xan view` printed.
 ---@param output string[]
 ---@param opts { columns: csv.Column[], first_row_number: integer, file_version: string }
 ---@return csv.Page|nil
@@ -133,7 +133,7 @@ function M.page(output, opts)
     return nil, "xan view drew no row id"
   end
   -- The outer border is one character where the theme draws one, and `scan`
-  -- starts the first cell past it.
+  -- started the first cell past it.
   local border_width = header_ranges[1].from > 0 and 1 or 0
   local id_width = header_ranges[1].to - header_ranges[1].from
 
@@ -167,9 +167,9 @@ function M.page(output, opts)
   local ranges = scan(lines[header_line])
   local ranges_by_line = {}
 
-  -- Every column is drawn at one display width, so the header's ranges answer for
-  -- most lines. A line holding a multi-byte character puts its separators at
-  -- other byte offsets, and only those lines are kept.
+  -- Every column is drawn at one display width, so the header's ranges serve for
+  -- most lines. Only the lines whose separators sit at different byte offsets are
+  -- kept, which are the lines holding a multi-byte character.
   for buffer_line = first_line, last_line do
     local line_ranges = scan(lines[buffer_line])
     if not same_ranges(line_ranges, ranges) then

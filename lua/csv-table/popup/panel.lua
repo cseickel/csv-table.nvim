@@ -1,11 +1,5 @@
 --[[
-Opens the panels that describe the plugin and the file.
-
-- `help` searches every action by description and runs the one chosen
-- `bindings` pairs each action with the keys that reach it
-- `info` gives the source, the row and column counts, the filters, the sort, and a
-  line per column
-- `stats` gives everything xan reports for one column
+The panels that describe the plugin and the file.
 
 `info` and `stats` run through the filters applied, so they describe the rows on
 screen rather than the file on disk.
@@ -35,9 +29,9 @@ local STAT_FIELDS = {
 ---@field name string Names an action in `csv-table.actions`.
 ---@field description string
 
---- Every action, sorted by its description. Sorting by key would put `sa` next to
---- `sd` and `ss`, which do three different things. An action with no key is in the
---- list too, because the help panel runs whatever the user picks.
+--- Every action, sorted by description. Sorting by key would put `sa` next to `sd`
+--- and `ss`, which do three different things. An action with no key is in the list
+--- too, because the help panel runs whatever the user picks.
 ---@return csv.Key[]
 function M.bindings()
   local actions = require("csv-table.actions")
@@ -67,9 +61,6 @@ function M.bindings()
   return bindings
 end
 
---- Search every action and run the one chosen, so a key is something to find
---- rather than something to have memorised, and an action with no key is still
---- one press away.
 ---@param view csv.View
 function M.help(view)
   local actions = require("csv-table.actions")
@@ -90,7 +81,6 @@ function M.help(view)
   end)
 end
 
---- How the current filters and sort read as sentences.
 ---@param query csv.Query
 ---@return string[]
 local function query_lines(query)
@@ -136,11 +126,10 @@ local function query_lines(query)
   return lines
 end
 
---- One line per column: how it is read, how it is shown, and what is in it. The
---- statistics arrive in column order rather than by name, because two columns may
---- share a name and a lookup would then describe both.
+--- One line per column. The statistics arrive in column order rather than by name,
+--- because two columns may share a name and a lookup would describe both.
 ---@param query csv.Query
----@param stats table<string, string>[] One row per column, row id column first.
+---@param stats table<string, string>[] One row per column, row id first.
 ---@return string[]
 local function column_lines(query, stats)
   local lines = {
@@ -181,7 +170,6 @@ local function column_lines(query, stats)
   return lines
 end
 
---- Describe the file and the query over it.
 ---@param view csv.View
 function M.info(view)
   local query = view.buffer.query
@@ -206,7 +194,6 @@ function M.info(view)
   end)
 end
 
---- Every statistic xan reports for one column.
 ---@param view csv.View
 ---@param column csv.Column
 function M.stats(view, column)

@@ -1,14 +1,14 @@
 --[[
-Holds the registry every action is written into.
+The registry every action is written into.
 
-A name registered twice stops the plugin loading, since which of the two a key
-would run is otherwise the order of a Lua table.
+A name registered twice stops the plugin loading. Otherwise which of the two a
+key runs would be whichever a Lua table happened to keep.
 ]]
 
 local M = {}
 
---- Further than any table is wide or long, so a step of this many rows or cells
---- reaches the edge without a second way of naming one.
+--- Further than any table is wide or long. A step of this many rows or cells
+--- reaches the edge, so no action needs a separate way of asking for the edge.
 M.EDGE = 1000000
 
 ---@class csv.Action
@@ -39,8 +39,8 @@ function M.get_all_actions()
   return actions
 end
 
---- Run `change` against the active cell's column, then render. The first render is
---- what puts a cell there, so this waits for it.
+--- Run `change` on the active cell's column, then render. Before the first render
+--- there is no active cell and nothing happens.
 ---@param view csv.View
 ---@param change fun(column: csv.Column)
 function M.on_column(view, change)

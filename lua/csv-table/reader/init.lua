@@ -1,13 +1,11 @@
 --[[
-Defines `csv.Reader`, one per buffer, which runs xan and decodes what comes back.
+Defines `csv.Reader`, one per buffer, which runs xan and decodes what it prints.
 
 A reader runs one xan at a time. Starting another drops the callbacks of the one
-before it and kills it, so the answer the user is waiting on is the only one
-still being worked out and a run that lost its place reaches nobody.
+before it and kills it.
 
-This is the way in to the rest of the folder. `commands`, `pipeline`,
-`expression` and `parse` beside it write the argv and the moonblade xan takes and
-read what it prints, and no module outside these five names xan.
+`commands`, `pipeline`, `expression` and `parse` beside this module write the
+argv and the moonblade expressions xan takes and read what it prints.
 ]]
 
 local commands = require("csv-table.reader.commands")
@@ -42,13 +40,11 @@ local RECORD_SEPARATOR = "\30"
 local Reader = {}
 Reader.__index = Reader
 
---- A reader for one buffer.
 ---@return csv.Reader
 function M.new()
   return setmetatable({ handle = nil, pending = nil, row = nil }, Reader)
 end
 
---- Drop the callbacks of the run in flight and kill it.
 function Reader:cancel()
   self.pending = nil
   if self.handle then
@@ -59,9 +55,9 @@ end
 
 --- Run `argv` and hand its stdout to `on_output`.
 ---
---- `xan run` exits 0 even when a stage inside the pipeline fails, and runs the
---- stages after it with no input, so anything on stderr is a failure whatever the
---- exit code says.
+--- `xan run` exits 0 when a stage inside the pipeline fails, and runs the stages
+--- after it with no input, so anything on stderr is a failure whatever the exit
+--- code says.
 ---@param argv string[]
 ---@param on_output fun(stdout: string)
 function Reader:run(argv, on_output)
@@ -71,8 +67,7 @@ function Reader:run(argv, on_output)
   self.pending = pending
 
   self.handle = vim.system(argv, { text = true }, vim.schedule_wrap(function(result)
-    -- Another run took the reader while this one was out, which is what says
-    -- nobody is waiting on it any more.
+    -- A later run cancelled this one while it was out.
     if self.pending ~= pending then
       return
     end
@@ -108,8 +103,8 @@ end
 
 --- The page `query` asks for, drawn by xan and parsed.
 ---
---- The columns and the first row number are read once here, so the command and
---- the page describe the same rows however the query moves on afterwards.
+--- The columns and the first row number are read before the run, so the command
+--- and the page describe the same rows however the query moves on in the meantime.
 ---@param query csv.Query
 ---@param on_page fun(page: csv.Page)
 function Reader:page(query, on_page)
@@ -127,7 +122,7 @@ function Reader:page(query, on_page)
       return report.error(err)
     end
 
-    -- The file has just been read, so whatever was read from it before is old.
+    -- The file was just read again, so the row read before this is stale.
     self.row = nil
     on_page(new_page)
   end)
@@ -147,12 +142,11 @@ function Reader:count(query, on_count)
 end
 
 --- Every value of one row, in file order. The row read last is kept, so reading
---- cell after cell along one row runs xan once, and `page` drops it, since that
---- is the file being read again.
+--- cell after cell along one row runs xan once.
 ---
---- Nothing is escaped on the way here, so a value holding a separator of its own
---- would split into two. The two separators are control characters, which is what
---- makes that worth trading for values that arrive as they are written.
+--- Nothing is escaped on the way back, so a value holding one of the two
+--- separators would split in two. Both are ASCII control characters, which is what
+--- makes that worth trading for values that arrive exactly as the file holds them.
 ---@param query csv.Query
 ---@param row_id integer
 ---@param on_values fun(values: string[])
@@ -168,8 +162,8 @@ local function read_row(self, query, row_id, on_values)
 
     local record = (stdout:gsub(RECORD_SEPARATOR .. "$", ""))
     local values = vim.split(record, UNIT_SEPARATOR, { plain = true })
-    -- The last value is the padding column `csv-table.reader.commands` appends,
-    -- which belongs to no column of the file.
+    -- The last value is the padding column `commands.row` appends, not a column
+    -- of the file.
     table.remove(values)
 
     self.row = { row_id = row_id, values = values }
@@ -202,9 +196,9 @@ function Reader:cell(query, ref, on_value)
   end)
 end
 
---- The block written in `export.format`, in the order the rows are drawn. Every
+--- The block written in `export.format`, rows in the order they are drawn. Every
 --- writer ends its output with a newline, which a spreadsheet would paste as an
---- empty row.
+--- empty row, so it is cut.
 ---@param query csv.Query
 ---@param export csv.Export
 ---@param on_text fun(text: string)

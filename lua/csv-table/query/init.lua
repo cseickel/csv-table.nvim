@@ -2,15 +2,14 @@
 Defines `csv.Query`, everything the user has asked of one file: which rows to
 keep, in what order, which columns to draw, and which page of the result.
 
-A query holds the file it reads and the reader that runs it, so it answers its
-own row count. `after_read` is where a completed table read decides what has to
-follow it, comparing the query the last page was drawn for against this one.
+A query holds the file it reads and the reader that runs it, so it counts its own
+rows. `after_read` compares the state the last page was read for against the
+query now, and decides what a finished read has to do next.
 ]]
 
 local M = {}
 
---- Rows a page holds in a buffer that has not been told otherwise. `setup`
---- replaces it.
+--- The rows per page a new query starts with. `setup` replaces it.
 M.page_size = 1000
 
 ---@class csv.SortKey
@@ -48,8 +47,8 @@ M.page_size = 1000
 
 ---@alias csv.Filter csv.FilterNumeric|csv.FilterString|csv.FilterIn|csv.FilterMarked|csv.FilterRows|csv.FilterExpr
 
---- What a completed table read was made for. `after_read` compares one of these
---- against the query as it stands now.
+--- What a table read was made for, held as column ids and scalars rather than
+--- live objects so two states compare by value.
 ---@class csv.QueryState
 ---@field filters table[] Each filter with its column named by id.
 ---@field file_version string
@@ -87,7 +86,7 @@ for _, part in ipairs({
   end
 end
 
---- A query over `file`, asking for nothing but the first page.
+--- A query over `file` that asks for nothing but the first page.
 ---@param file csv.File
 ---@param reader csv.Reader
 ---@param on_changed fun()
@@ -116,7 +115,7 @@ function M.new(file, reader, on_changed)
 end
 
 --- The filters as the reader runs them, with the marked filter resolved to the
---- row ids marked now. Two queries whose effective filters match leave the same
+--- row ids marked now. Two queries with equal effective filters leave the same
 --- rows.
 ---@return csv.Filter[]
 function Query:effective_filters()
@@ -136,10 +135,10 @@ function Query:effective_filters()
   return resolved
 end
 
---- A filter as a value two states can be compared by, which is the filter with its
---- column named by id. A column is one object the whole session, and hiding one
---- changes what it holds, so a state that kept the object would compare the column
---- as it stands now against itself.
+--- The filter with its column named by id. A column is one object for the whole
+--- session and hiding it changes what it holds, so a state that kept the object
+--- would compare the column against itself, and `vim.deep_equal` returns true as
+--- soon as `left == right`.
 ---@param filter csv.Filter
 ---@return table
 local function comparable(filter)
@@ -150,7 +149,7 @@ local function comparable(filter)
   return fields
 end
 
---- What a page drawn now would have been read for.
+--- The state a page read now would be read for.
 ---@param page csv.Page
 ---@return csv.QueryState
 function Query:state(page)
@@ -159,8 +158,7 @@ function Query:state(page)
     column_ids[index] = column.column_id
   end
 
-  -- The ordering rather than the keys, so a state holds no reference into a list
-  -- the next sort will edit in place.
+  -- Copied, because the next sort edits `sort_keys` in place.
   local sort = {}
   for index, key in ipairs(self.sort_keys) do
     sort[index] = { column_id = key.column.column_id, direction = key.direction }
@@ -189,9 +187,8 @@ function Query:count()
   end)
 end
 
---- Decide what a completed table read calls for, given the query the page before it
---- was read for. The count needs the rows the filters leave, and `moved` says
---- whether anything naming a row or a column of the page before it still holds.
+--- Recount the rows when the file or the filters changed since `previous`, and
+--- report whether the page moved.
 ---@param previous csv.QueryState
 ---@param page csv.Page
 ---@return csv.QueryState current
@@ -233,7 +230,7 @@ function Query:clear_filters()
   self.page_number = 0
 end
 
---- Turn the marked-rows filter on, or off if it is already on.
+--- Turn the marked-rows filter on, or off when it is already on.
 function Query:toggle_marked_filter()
   for index, filter in ipairs(self.filters) do
     if filter.type == "marked" then
@@ -284,8 +281,7 @@ function Query:last_page()
 end
 
 --- The number the first row of the page is drawn with. Numbering runs across the
---- whole result rather than restarting on each page, so the row a user names is
---- the row they would name in a spreadsheet.
+--- whole result rather than restarting on each page.
 ---@return integer
 function Query:first_row_number()
   return self.page_number * self.limit + 1
@@ -297,7 +293,7 @@ function Query:set_page_size(size)
   self.page_number = 0
 end
 
---- Drop everything the user has asked for, keeping the file.
+--- Drop everything the user asked for, keeping the file.
 function Query:reset()
   self.filters = {}
   self.sort_keys = {}

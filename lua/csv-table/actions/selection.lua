@@ -1,9 +1,9 @@
 --[[
 Registers the actions that pick cells out and export them.
 
-Starting and resuming a selection are not here. Nvim's own visual modes say the
+Starting and resuming a selection are not here. nvim's own visual modes say the
 user is extending, and `csv-table.view.movement` takes the head along with every
-move made in one, so `v`, `V` and `gv` all work with no action of ours.
+move made in one, so `v`, `V` and `gv` work with no action here.
 ]]
 
 local picker = require("csv-table.popup.picker")
@@ -20,7 +20,6 @@ local function extender(rows, cells)
   end
 end
 
---- Pick out the block `kind` covers, anchored on the active cell.
 ---@param kind csv.SelectionKind
 ---@return fun(view: csv.View)
 local function selector(kind)
@@ -78,8 +77,8 @@ utils.register_action("extend_to_click", "Take the selection out to the click", 
   end
 end)
 
---- Every way the selected cells reach the clipboard. `display` is the text the
---- buffer already holds, and the rest are written by xan from the file.
+--- Every format the selected cells can be yanked in. `display` is the text the
+--- buffer already holds; xan writes the rest from the file.
 ---
 --- `label` is what the picker offers, where the prompt has already said the word
 --- yank. `description` is what the help panel shows beside the key, where the line

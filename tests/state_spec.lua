@@ -1,7 +1,7 @@
 local fixture = require("support.fixture")
 local page = require("csv-table.page")
 
---- An empty page read at `version`, which is all `after_read` looks at.
+--- An empty page read at `version`. The version is all these specs need a page for.
 ---@param version string
 ---@return csv.Page
 local function page_at(version)
@@ -10,8 +10,8 @@ local function page_at(version)
   return empty_page
 end
 
---- Settle the query against one read, then read again after `change`, so the
---- count asked for is the one that change called for.
+--- Settle the query with one read, then read again after `change`, so any count
+--- asked for is the one `change` called for.
 ---@param query csv.Query
 ---@param reader table
 ---@param change fun()
@@ -102,7 +102,7 @@ describe("query:after_read", function()
   end)
 end)
 
---- Read once, then read again after `change`, and answer whether the page moved.
+--- Read once, then read again after `change`, and say whether the page moved.
 ---@param query csv.Query
 ---@param change fun()
 ---@return boolean

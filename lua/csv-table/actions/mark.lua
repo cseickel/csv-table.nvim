@@ -1,8 +1,6 @@
 --[[
-Registers the mark actions.
-
-A row is marked by its source id rather than by the line it is drawn on, so a mark
-survives sorting, filtering and turning the page.
+Registers the mark actions. A row is marked by its source id rather than the line
+it is drawn on, so a mark survives sorting, filtering and turning the page.
 ]]
 
 local utils = require("csv-table.actions.utils")

@@ -1,8 +1,8 @@
 --[[
 Registers the actions that narrow what is shown.
 
-Filters are ANDed, and each one names a column except the marked filter, which
-reads the marked set at render time, so marking another row widens the view at once.
+Filters are ANDed. Each one names a column except the marked filter, which reads
+the marked set at render time, so marking another row widens the view at once.
 ]]
 
 local dialog = require("csv-table.popup.dialog")

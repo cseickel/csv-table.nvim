@@ -1,18 +1,13 @@
 --[[
-Registers the actions on the column the active cell is in: hiding, cutting and
-pasting, moving, aligning, precision, width and a printf format.
-
-An action that moves a column takes the active cell with it, so the column that
-moved is still the one under the cursor.
+Registers the actions on the column the active cell is in.
 ]]
 
 local color = require("csv-table.buffer.color")
 local utils = require("csv-table.actions.utils")
 
---- Render, then make `column` active again, so the column the user just changed
---- stays the one they are on. A column that narrows leaves the byte the cursor is
---- parked on inside whichever column took its place, and the next key would act on
---- that one.
+--- Render, then make `column` active again. A column that narrows leaves the byte
+--- the cursor is parked on inside whichever column took its place, and the next
+--- key would act on that one.
 ---@param view csv.View
 ---@param column csv.Column
 ---@param on_focused fun(column: csv.Column)|nil Runs once the column is active again.
@@ -30,7 +25,7 @@ local function follow(view, column, on_focused)
 end
 
 --- A column that moved is somewhere else on the line, so it flashes to be found
---- again. The width and format actions leave it where it was, and pass this by.
+--- again. The width and format actions leave it where it was and pass this by.
 ---@param view csv.View
 ---@return fun(column: csv.Column)
 local function flash(view)
@@ -39,8 +34,8 @@ local function flash(view)
   end
 end
 
---- Change how the active cell's column is padded, measuring the column as it is
---- drawn so the change starts from the width on screen.
+--- Change how the active cell's column is padded. The column is measured as it is
+--- drawn, so the change starts from the width on screen.
 ---@param view csv.View
 ---@param change fun(column: csv.Column, width: integer)
 local function on_padding(view, change)

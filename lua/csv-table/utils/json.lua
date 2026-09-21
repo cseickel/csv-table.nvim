@@ -1,10 +1,8 @@
 --[[
-Breaks a cell holding JSON onto one value per line, since it arrives as a single
-line of punctuation.
+Breaks a cell holding JSON onto one value per line.
 
 The text is walked rather than decoded and printed again, so only the whitespace
-between tokens changes and every number, key order and escape is the one in the
-file.
+between tokens changes. Every number, key order and escape is the one in the file.
 ]]
 
 local M = {}
@@ -12,7 +10,7 @@ local M = {}
 local INDENT = "  "
 
 --- Whether `value` is a JSON object or array. A bare number or word parses as
---- JSON on its own, and indenting one would help nobody.
+--- JSON too, and indenting one would help nobody.
 ---@param value string
 ---@return boolean
 function M.is_json(value)

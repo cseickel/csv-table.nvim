@@ -2,13 +2,12 @@
 Defines `csv.Buffer`, one per buffer this plugin reads as a table: the query the
 user is building, the page it drew, and one `csv.View` per window showing it.
 
-A buffer is recorded the moment the read command fires, holding an empty file, an
-empty query and an empty page, so a second read command finds it rather than
-starting a second reader. The file, the query and the page are replaced as each one
-is read.
+A buffer is recorded the moment the read command fires, with an empty file, an
+empty query and an empty page, so a second read command finds it instead of
+starting a second reader. Each of the three is replaced as it is read.
 
-The buffer stays nomodifiable. Its text is xan's output, and writing it back over
-the file would destroy the file.
+The buffer stays nomodifiable. Its text is xan's output, and writing that back
+over the file would destroy the file.
 ]]
 
 local autocmds = require("csv-table.autocmds")
@@ -35,8 +34,6 @@ local M = {}
 local Buffer = {}
 Buffer.__index = Buffer
 
--- nvim names a buffer with a number, so every entry point starts from one and this
--- is what turns it into the table that buffer holds.
 ---@type table<integer, csv.Buffer>
 local buffers = {}
 
@@ -56,8 +53,8 @@ function M.for_window(window)
   return M.get(bufnr)
 end
 
---- Register the autocommands of every buffer holding a table, which is what a
---- cleared group costs them.
+--- Register every table buffer's autocommands again after a cleared group dropped
+--- them.
 function M.rebind_all()
   for bufnr in pairs(buffers) do
     M.rebind(bufnr)
@@ -72,8 +69,8 @@ local function replace_lines(bufnr, lines)
   vim.bo[bufnr].modifiable = false
 end
 
---- The view a window with none of its own copies, which is the one in the window
---- just left, since that is the window a split came from.
+--- The view in the window just left, which is the window a split came from, or
+--- the first view when that window has none.
 ---@param buffer csv.Buffer
 ---@return csv.View|nil
 local function source_view(buffer)
@@ -86,10 +83,9 @@ local function source_view(buffer)
   return buffer.views[1]
 end
 
---- The view `window` has of this table. A window with none of its own takes over a
---- closed window's view first, then one belonging to a window that has moved on to
---- another buffer, and copies a view only when neither is there, so a split starts
---- where the window it came from left off.
+--- The view `window` has of this table. A window with none of its own takes over
+--- a closed window's view first, then one whose window moved on to another buffer,
+--- and copies the view of the window it was split from only when neither exists.
 ---@param window integer 0 for the current window, as the API takes it.
 ---@return csv.View
 function Buffer:view(window)
@@ -131,9 +127,8 @@ function Buffer:render(on_rendered)
       return
     end
 
-    -- A page past the first that came back empty is a page past the end, which
-    -- happens when the rows divide evenly into pages. Step back and draw the page
-    -- that does have rows, so the user sees the view stay where it was.
+    -- A page past the first that comes back empty is a page past the end, which
+    -- happens when the rows divide evenly into pages.
     if new_page:row_count() < 1 and self.query.page_number > 0 then
       self.query:turn_page(-1)
       return self:render(on_rendered)
@@ -144,12 +139,11 @@ function Buffer:render(on_rendered)
     self.read_state, page_moved = self.query:after_read(self.read_state, new_page)
     replace_lines(self.bufnr, new_page.lines)
     color.redraw(self)
-    -- Nothing here reads this. A winbar can pin the header line while the buffer is
-    -- scrolled past it, and this is where it finds which line that is.
+    -- For a winbar that pins the header line while the buffer is scrolled past it.
     vim.b[self.bufnr].table_header = new_page.header_line
 
-    -- Every view, since a page that moved leaves the ends of a selection naming
-    -- rows nobody picked, and a window that stepped away comes back to this view.
+    -- A page that moved leaves every selection naming rows nobody picked. Every
+    -- view, including the ones whose windows are off screen.
     if page_moved then
       for _, window_view in ipairs(self.views) do
         window_view:clear_selection()
@@ -185,10 +179,9 @@ function Buffer:row_range()
   return first, first + self.page:row_count() - 1
 end
 
---- Read the file and draw it. Every query the user built names columns of the file
---- being left, so a fresh read gets a fresh query. The views stay: a row id is a
---- position in the file, and a file read again holds the same rows in the same
---- places.
+--- Read the file and draw it. The query names columns of the file being left, so
+--- a fresh read gets a fresh query. The views stay, because a row id is a position
+--- in the file and a file read again holds the same rows in the same places.
 ---@param sheet integer|nil 0-based.
 ---@param on_ready fun(buffer: csv.Buffer)|nil
 function Buffer:load(sheet, on_ready)
@@ -212,17 +205,16 @@ function Buffer:load(sheet, on_ready)
 end
 
 --- Read another sheet of the same workbook. Another sheet is other data, so every
---- row and column a view names is gone and the views go with them.
+--- row and column a view names is gone, and the views go with them.
 ---@param sheet integer 0-based.
 function Buffer:open_sheet(sheet)
   self.views = {}
   self:load(sheet)
 end
 
---- A table is read by scrolling sideways, so wrapping would break every row into a
---- variable number of screen lines and unalign the columns. The gutter draws the row
---- number through `csv-table.buffer.statuscolumn`, which takes the place of the line
---- numbers.
+--- A table is read by scrolling sideways. Wrapping would break each row into its
+--- own number of screen lines and unalign the columns. The gutter shows the row
+--- number from `csv-table.buffer.statuscolumn` in place of the line number.
 local WINDOW_OPTIONS = {
   wrap = false,
   number = false,
@@ -231,12 +223,12 @@ local WINDOW_OPTIONS = {
   statuscolumn = statuscolumn.EXPRESSION,
 }
 
---- Every window option a window has to get back, in the order they go back in.
+--- Every window option to put back, in the order they go back in.
 ---
---- `sidescrolloff` is here and not above because `csv-table.view.cursor` sizes it to
---- the column the cursor is parked in. `number` comes after `relativenumber`,
---- because nvim puts `number` back to a value it remembers when `relativenumber`
---- goes off, so a window with `number` on would lose it.
+--- `sidescrolloff` is here and not in `WINDOW_OPTIONS` because `csv-table.view.cursor`
+--- sets it on every move, by which column the cursor is in. `relativenumber` goes
+--- back before `number`, because nvim puts `number` back to a value it remembers
+--- when `relativenumber` goes off, and that would undo a `number` already restored.
 local RESTORED_WINDOW_OPTIONS = {
   "sidescrolloff",
   "wrap",
@@ -246,13 +238,12 @@ local RESTORED_WINDOW_OPTIONS = {
   "number",
 }
 
---- The options nvim resets on its own once the buffer is read as a file again are
---- not here. These three are ours to put back.
+--- The three `record` sets and `undress` puts back. Every other buffer option this
+--- plugin touches is reset by nvim itself once the file is read as text again.
 local BUFFER_OPTIONS = { "buftype", "swapfile", "modifiable" }
 
 --- Put `saved_options` back on `window`. `vim.wo[window][0]` is the window's value
---- for the buffer it shows, which is the one `dress_windows` read and wrote over, so
---- the window has to be showing that buffer still.
+--- for the buffer it shows now, so the window has to be showing the table still.
 ---@param window integer
 ---@param saved_options table<string, any>
 local function restore_window(window, saved_options)
@@ -264,8 +255,8 @@ local function restore_window(window, saved_options)
   end
 end
 
---- Dress every window showing this table, keeping what each window had so it can be
---- put back. A window that comes back to the table keeps the values it had the first
+--- Set `WINDOW_OPTIONS` on every window showing this table, saving what each had
+--- first. A window that comes back to the table keeps the values saved the first
 --- time, since the ones on it now are this plugin's.
 function Buffer:dress_windows()
   for _, window in ipairs(vim.fn.win_findbuf(self.bufnr)) do
@@ -283,9 +274,9 @@ function Buffer:dress_windows()
   end
 end
 
---- Put every option back the way this buffer and the windows still on it had it. A
---- window that moved to another buffer is left alone, since the value read there
---- belongs to the pair it made with this one.
+--- Put every saved option back on this buffer and on the windows still showing it.
+--- A window that moved to another buffer is left alone, since the saved value was
+--- its value for this buffer and would land on the other one.
 function Buffer:undress()
   for _, window in ipairs(vim.fn.win_findbuf(self.bufnr)) do
     local saved_options = self.window_options[window]
@@ -300,24 +291,22 @@ function Buffer:undress()
   end
 end
 
---- Register the autocommands this buffer owns. `record` calls it when the buffer is
---- taken over, and `csv-table.autocmds` again once a reload has replaced the group
---- these belong to.
+--- Register the autocommands this buffer owns, unless they are registered already.
 ---@param bufnr integer
 function M.rebind(bufnr)
   local group = autocmds.group()
 
   -- `:bdelete` drops the buffer from `buffers` and leaves these registered, so a
-  -- buffer opened again would have two of each. The three are registered together,
-  -- and any one of them says so.
+  -- buffer opened again would get a second set. The three are registered together,
+  -- so any one of them answers for all.
   local already_bound =
     vim.api.nvim_get_autocmds({ event = "CursorMoved", buffer = bufnr, group = group })
   if #already_bound > 0 then
     return
   end
 
-  -- Shown in a window again, which `:buffer` reaches without firing the read
-  -- command or `WinEnter`.
+  -- Shown in a window again. `:buffer` gets here without firing the read command
+  -- or `WinEnter`.
   vim.api.nvim_create_autocmd("BufWinEnter", {
     group = group,
     buffer = bufnr,
@@ -330,8 +319,8 @@ function M.rebind(bufnr)
     end,
   })
 
-  -- A motion this plugin leaves to nvim ends here, where the cell the user was
-  -- aiming for becomes the active cell.
+  -- A motion left to nvim ends here, and the cell it reached becomes the active
+  -- cell.
   vim.api.nvim_create_autocmd("CursorMoved", {
     group = group,
     buffer = bufnr,
@@ -359,8 +348,8 @@ function M.rebind(bufnr)
   })
 end
 
---- Record the buffer and take over its options and autocommands. The file has not
---- been read, so the query is over an empty file and the page is empty.
+--- Record the buffer and take over its options and autocommands. The file is not
+--- read yet, so the query is over an empty file and the page is empty.
 ---@param bufnr integer
 ---@param path string
 ---@return csv.Buffer
@@ -396,11 +385,11 @@ end
 
 --- Read the file into `bufnr` the way nvim would have.
 ---
---- `BufReadCmd` is held off so this plugin's own read command leaves the buffer
---- alone, and every other read event still fires, which is what a plugin hanging
---- off `BufReadPost` and nvim's own filetype detection need. `undoreload` is zero so
---- the drawn table stays out of the undo history: undoing back to it would leave the
---- user holding xan's borders in a writable buffer, one `:w` from the file.
+--- Only `BufReadCmd` is ignored, so this plugin's read command stays out of the way
+--- and every other read event still fires for filetype detection and for plugins on
+--- `BufReadPost`. `undoreload = 0` keeps the drawn table out of the undo history,
+--- where undoing back to it would leave the user holding xan's borders in a writable
+--- buffer, one `:w` from the file.
 ---@param bufnr integer
 ---@return boolean whether the file is in the buffer.
 local function read_as_text(bufnr)
@@ -422,7 +411,7 @@ local function read_as_text(bufnr)
 end
 
 --- Give `bufnr` back to nvim: every option, keymap, autocommand and extmark this
---- plugin set undone, and the file read in place of the table.
+--- plugin set is undone, and the file is read in place of the table.
 ---@param bufnr integer
 function M.detach(bufnr)
   local buffer = buffers[bufnr]
@@ -432,8 +421,9 @@ function M.detach(bufnr)
 
   buffer.query.reader:cancel()
   buffer:undress()
-  -- A writable `buftype` makes nvim compare the buffer against the file and call
-  -- the drawn table an unsaved change, which would stop the read below.
+  -- Drawing the table left `modified` true. `undress` has just put a writable
+  -- `buftype` back, so nvim now treats that as an unsaved change and would refuse
+  -- the read below.
   vim.bo[bufnr].modified = false
   buffers[bufnr] = nil
 
@@ -444,15 +434,16 @@ function M.detach(bufnr)
   vim.bo[bufnr].filetype = ""
 
   if not read_as_text(bufnr) then
-    -- The buffer still holds the drawn table, so it goes back to being one nobody
-    -- can write over the file.
+    -- The buffer still holds the drawn table, which must never be written to the
+    -- file.
     vim.bo[bufnr].buftype = "nowrite"
     vim.bo[bufnr].modifiable = false
   end
   guicursor.update(M.for_window(0))
 end
 
---- Take over `bufnr`, whose read command has left the whole read to this plugin.
+--- Take over `bufnr` from inside its read command, which has left the whole read to
+--- this plugin.
 ---@param bufnr integer
 ---@param on_ready fun(buffer: csv.Buffer)|nil
 function M.attach(bufnr, on_ready)
@@ -461,23 +452,22 @@ function M.attach(bufnr, on_ready)
     return report.error("buffer has no file name")
   end
 
-  -- `:edit` fires the read command again on a buffer already showing a table, and
-  -- means refresh. This command owns the whole read, so setting the filetype is what
-  -- tells whatever the user hangs off `FileType`.
+  -- A read command owns the whole read, so nothing else sets the filetype.
   vim.bo[bufnr].filetype = "csv-table"
 
   local buffer = buffers[bufnr]
   if buffer then
-    -- nvim empties the buffer before this runs, so the text has to go back whatever
-    -- happens. When the file is the one the page was read from, the lines already in
-    -- hand are that text, and xan has nothing to add.
+    -- `:edit` on a buffer already showing a table means refresh. nvim empties the
+    -- buffer before the read command runs, so the text has to go back whatever
+    -- happens. When the file is unchanged since the page was read, the lines in hand
+    -- are that text.
     local current_page = buffer.page
     if #current_page.lines > 0 and buffer.query.file:version() == current_page.file_version then
       replace_lines(bufnr, current_page.lines)
       color.redraw(buffer)
 
-      -- Every view names rows of this page, which is the one still in hand, so each
-      -- window comes back to the cell it was left on.
+      -- Every view names rows of this page, so each window comes back to the cell
+      -- it was left on.
       for _, window in ipairs(vim.fn.win_findbuf(bufnr)) do
         buffer:view(window):restore_viewport()
       end

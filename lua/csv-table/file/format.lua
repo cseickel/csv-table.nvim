@@ -1,6 +1,6 @@
 --[[
 Defines `csv.Format`, one per column: its kind, the decimals to print, and the
-width, alignment and printf spec the user has asked for.
+width, alignment and printf spec the user asked for.
 
 A CSV cell is text, so a sample of rows is the only thing that says what a column
 holds.
@@ -17,7 +17,7 @@ local M = {}
 
 local MAX_PRECISION = 6
 
--- A column printed from float32 has noise past seven digits: a price of 199.59
+-- A column printed from float32 has noise past seven significant digits: 199.59
 -- reaches the file as 199.589996338, which reads as nine decimals.
 local SIGNIFICANT_DIGITS = 7
 
@@ -26,8 +26,8 @@ function M.plain()
   return { kind = "text", precision = 0 }
 end
 
---- Decimals a value needs once its float noise is gone, or nil when the value is
---- not a number.
+--- The decimals a value needs once its float noise is gone, or nil when the value
+--- is not a number.
 ---@param value string
 ---@return integer|nil
 function M.decimals(value)
@@ -36,8 +36,8 @@ function M.decimals(value)
     return nil
   end
 
-  -- Round-tripping through %g drops the noise digits, and reprinting in fixed
-  -- notation keeps the count right for values %g would render as `1e-05`.
+  -- The `%g` round trip drops the noise, and reprinting in fixed notation keeps
+  -- the count right for values `%g` renders as `1e-05`.
   local rounded = tonumber(string.format("%." .. SIGNIFICANT_DIGITS .. "g", number))
   local fraction = string.format("%.10f", rounded):match("^%-?%d+%.(%d+)$")
   if not fraction then
@@ -46,10 +46,9 @@ function M.decimals(value)
   return #(fraction:gsub("0+$", ""))
 end
 
---- What follows the opening shape of a date, which is any mixture of the
---- characters a date, a time, an offset and a separator between them are drawn
---- from. Anchored at both ends like `tonumber`, so `2024-01-15 not a date` is
---- text rather than a date with prose after it that the coloring would cover.
+--- What may follow the opening shape of a date: any mix of the characters a date,
+--- a time, an offset and the separators between them are made of. Anchored at
+--- both ends like `tonumber`, so `2024-01-15 not a date` is text.
 local DATE_BODY = "[-%d:%./T Z+]*$"
 
 --- The shapes a date column's values take: an ISO date, a slashed date, and a
@@ -81,10 +80,9 @@ local function percentile(sorted, fraction)
   return sorted[math.max(1, math.min(index, #sorted))]
 end
 
---- Decide how one column reads from its sampled values. A single unparseable
---- value makes the column text, so a column only reads as a number, or as a
---- date, when every sampled value is one. No value is both, since none of the
---- date shapes casts to a number.
+--- The format of one column, from its sampled values. A column reads as a number
+--- or as a date only when every non-empty sampled value is one, and no value is
+--- both, since none of the date shapes casts to a number.
 ---@param values string[]
 ---@return csv.Format
 function M.analyze_column(values)
@@ -119,10 +117,10 @@ function M.analyze_column(values)
   end
 
   table.sort(decimal_counts)
-  -- The last few values of a float32 column can need more decimals than the
-  -- rest, so the high percentile keeps one row in six hundred from widening
-  -- every row. Under a hundred values it resolves to the maximum, so a small
-  -- file formats to whatever its widest value needs.
+  -- A few values of a float32 column can need more decimals than the rest, and
+  -- the 0.99 percentile stops one row in six hundred from widening every row.
+  -- Under a hundred values it is the maximum, so a small file gets the decimals
+  -- its widest value needs.
   local precision = percentile(decimal_counts, 0.99)
   if precision == 0 then
     return { kind = "int", precision = 0 }
@@ -130,9 +128,9 @@ function M.analyze_column(values)
   return { kind = "float", precision = math.min(precision, MAX_PRECISION) }
 end
 
---- Decide how every column reads. `csv-table.reader.commands` renames the
---- columns to their ids before writing the sample, so a JSON key is a column id
---- as a string.
+--- The format of every column, keyed by column id. The sample's keys are column
+--- ids as strings, because `csv-table.reader.commands` renames the columns to
+--- their ids before writing it.
 ---@param sample table<string, string>[]
 ---@param columns csv.Column[]
 ---@return table<integer, csv.Format>
@@ -150,8 +148,7 @@ function M.analyze(sample, columns)
   return formats
 end
 
---- Whether a column holds numbers, which decides how it sorts, which side it
---- reads on, and whether `printf` shapes it. A date is none of those things.
+--- Whether a column holds numbers. A date does not.
 ---@param format csv.Format|nil
 ---@return boolean
 function M.is_numeric(format)

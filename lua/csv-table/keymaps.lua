@@ -1,31 +1,27 @@
 --[[
-Holds `map`, every key the plugin binds and the action it runs.
-
-- `M.stays_visual` names the actions that leave nvim in its visual mode
-- `resolve` turns `map` into the bindings `csv-table.autocmds` sets on a table buffer
-- `built_in` reads the `BUILT_IN_` prefix
+Every key the plugin binds and what it runs, in `map`.
 
 A key written `BUILT_IN_l` names the nvim command `l` rather than the key `l`,
 and `resolve` puts the action wherever that command lives in the user's config.
-A user whose `l` moves between windows decided what `l` means, and `next_column`
-stays off it. A value written the same way runs an nvim command in place of an
-action, which is how `v` starts a blockwise selection.
+A user whose `l` moves between windows keeps it, and `next_column` stays off it.
+A value written the same way runs an nvim command in place of an action, which
+is how `v` starts a blockwise selection.
 
 A movement key is bound only where a count has to mean something in table terms:
 `5l` is five cells and `5G` is the row the gutter numbers 5. Every other motion,
-`j` and `w` and `/` and the clicks, stays nvim's, and the cursor is followed to
+`j`, `w`, `/` and the clicks, stays nvim's, and the cursor is followed to
 whichever cell it reached.
 
-Every key is bound in normal mode and in nvim's visual modes, since nvim's own
-visual commands are no use over a table: `y` there takes the painted text cut to
-the width each column is drawn at, and the rest are edits this buffer refuses. An
-action run from a visual mode ends that mode first, the way nvim's own `y` does,
-and `M.stays_visual` names the ones that do not.
+Every key is bound in normal and visual modes, because nvim's own visual commands
+are no use over a drawn table: `y` takes the painted text cut to each column's
+drawn width, and the rest are edits this buffer refuses. An action run from a
+visual mode ends that mode first, the way nvim's own `y` does, except the ones
+`stays_visual` names.
 ]]
 
 local M = {}
 
---- What marks a key or a value in `map` as the name of an nvim command.
+--- The prefix that marks a key or a value in `map` as an nvim command name.
 local BUILT_IN = "BUILT_IN_"
 
 ---@type table<string, string|false>
@@ -112,8 +108,8 @@ M.map = {
 
 }
 
---- The actions that take the head of the selection with them or pick the block
---- out, which is why nvim is left in its visual mode when one of them runs.
+--- The actions that leave nvim in its visual mode. Each one moves an end of the
+--- selection.
 ---@type string[]
 M.stays_visual = {
   "next_column",
@@ -143,9 +139,8 @@ local function keycodes(key)
   return vim.api.nvim_replace_termcodes(key, true, true, true)
 end
 
---- Whether binding `key` inside a table buffer would spoil one of `bound_keys`. A
---- key that starts another one, `s` against `sa`, leaves both waiting on
---- `timeoutlen` and one of them out of reach.
+--- Whether `key` starts one of `bound_keys` or one of them starts `key`. A key
+--- that starts another, `s` against `sa`, leaves both waiting on `timeoutlen`.
 ---@param key string In keycodes, as the members of `bound_keys` are.
 ---@param bound_keys string[]
 ---@return boolean
@@ -158,8 +153,8 @@ local function collides(key, bound_keys)
   return false
 end
 
---- The nvim command `value` names, present when `value` is written
---- `BUILT_IN_l` rather than naming a key or an action.
+--- The nvim command `value` names, or nil when `value` is a key or an action
+--- rather than a `BUILT_IN_` name.
 ---@param value string
 ---@return string|nil
 function M.built_in(value)
@@ -172,15 +167,14 @@ end
 ---@field command string|nil An nvim command to run in its place.
 ---@field stays_visual boolean Whether the action leaves nvim in its visual mode.
 
---- Every key to bind and what it runs, an action name or an nvim command, with
---- each `BUILT_IN_` key turned into the keys that run that command in this
---- user's config.
+--- Every key to bind and what it runs, with each `BUILT_IN_` key replaced by the
+--- keys that run that command in the user's config.
 ---
---- Only a `noremap` mapping is followed, because `nmap <M-l> l` runs whatever
---- the user has made `l` mean rather than nvim's own `l`. A `<Plug>` name is
---- left alone, since the plugin that defined it is the only thing meant to run
---- it. A mapping written as a Lua function has no key sequence to read, so a
---- user who wrapped `l` in one is taken to have kept `l` for themselves.
+--- Only a `noremap` mapping is followed, because `nmap <M-l> l` runs whatever the
+--- user made `l` mean rather than nvim's own `l`. A `<Plug>` name is left alone,
+--- since only the plugin that defined it is meant to run it. A mapping written as
+--- a Lua function has no key sequence to read, so a user who wrapped `l` in one
+--- is taken to have kept `l` for themselves.
 ---@return csv.Binding[]
 function M.resolve()
   local visual_actions = {}

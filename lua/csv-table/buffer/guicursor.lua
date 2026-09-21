@@ -2,20 +2,19 @@
 Hides the real cursor while a table is on screen, since the active cell is drawn
 in its place.
 
-`guicursor` is global and holds one entry per mode, the last entry for a mode
-winning, so hiding is appending an entry and showing is taking it back out.
-Rebuilding from the value leaves another plugin's cursor styling as that plugin
-set it.
+`guicursor` is global and holds one entry per mode, and the last entry for a mode
+wins. Hiding the cursor appends an entry and showing it removes that entry.
+Rebuilding the value around that entry leaves another plugin's cursor styling
+alone.
 ]]
 
 local M = {}
 
--- The modes a table buffer is read in. The command line keeps its cursor, so `:`,
--- `/` and every `vim.ui.input` prompt can be typed into.
+-- The modes a table is read in. The command line keeps its cursor, so `:`, `/`
+-- and `vim.ui.input` can be typed into.
 local HIDDEN_CURSOR_ENTRY = "n-v-o:CsvHiddenCursor"
 
---- Rebuild `guicursor` with this plugin's entry either in or out, leaving every
---- other entry as the plugin that wrote it left it.
+--- Write `guicursor` with this plugin's entry in or out.
 ---@param setting "normal"|"hidden"
 local function set_guicursor(setting)
   local entries = {}
@@ -34,8 +33,7 @@ local function set_guicursor(setting)
   end
 end
 
---- Hide the real cursor while the user is in a table, and show it again anywhere
---- else.
+--- Hide the cursor when the current window shows a table, and show it otherwise.
 ---@param buffer csv.Buffer|nil The table the current window holds, if it holds one.
 function M.update(buffer)
   set_guicursor(buffer and "hidden" or "normal")

@@ -1,10 +1,6 @@
 --[[
-Registers the actions that move the active cell by whole cells.
-
-A count moves that many cells, so `5l` is five columns and `5G` is the row the
-gutter numbers 5. The default map binds only the keys where that count is the
-point, since a plain `j` is already a row and the snap in `csv-table.view.movement`
-lands it on the right cell.
+Registers the actions that move the active cell by whole cells. A count moves
+that many cells, so `5l` is five columns and `5G` is the row the gutter numbers 5.
 ]]
 
 local utils = require("csv-table.actions.utils")
@@ -18,9 +14,9 @@ local function stepper(rows, cells)
   end
 end
 
---- Go to the row numbered `count`, or to `edge` of the page when no count was
---- given. The count is the number the gutter shows, so what the user types is what
---- they read. A number belonging to another page clamps to the near end of this one.
+--- Go to the row numbered `count`, or to `edge` of the page without a count. The
+--- count is the number the gutter shows. A number belonging to another page clamps
+--- to the near end of this one.
 ---@param edge "first_line"|"last_line"
 ---@return fun(view: csv.View)
 local function row_jump_action(edge)

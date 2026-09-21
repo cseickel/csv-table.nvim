@@ -1,12 +1,5 @@
 --[[
 The entry point, the module a user's config requires and calls `setup` on.
-
-- `setup` takes `keymaps`, `extensions` and `page_size`, then hands the extensions
-  to `csv-table.autocmds`, which registers the read command over them
-- the `CsvTable` command opens any file as a table, whatever its name, by capturing
-  its buffer through `csv-table.autocmds`
-- `status` is the statusline: the sheet, the rows on the page, the filters, the
-  marks, the sort and the cut columns
 ]]
 
 local autocmds = require("csv-table.autocmds")
@@ -22,8 +15,6 @@ M.extensions = { "csv", "tsv", "xls", "xlsx", "xlsb", "ods" }
 
 local SHEET_NAME_LENGTH = 10
 
---- Which sheet of a workbook is on screen, and the key that changes it. Absent
---- for a file that has no sheets.
 ---@param buf csv.Buffer
 ---@return string|nil
 local function sheet_summary(buf)
@@ -40,7 +31,6 @@ local function sheet_summary(buf)
   )
 end
 
---- What the sort reads as in a statusline.
 ---@param buf csv.Buffer
 ---@return string|nil
 local function sort_summary(buf)
@@ -55,7 +45,7 @@ local function sort_summary(buf)
   return "sort " .. table.concat(parts, " ")
 end
 
---- What is held for pasting, as a statusline fragment.
+--- The columns cut and waiting to be pasted.
 ---@param buf csv.Buffer
 ---@return string|nil
 local function clipboard_summary(buf)
@@ -70,8 +60,8 @@ local function clipboard_summary(buf)
   return "cut " .. table.concat(names, ",")
 end
 
---- How the page and everything applied to it read in a statusline. Empty for any
---- buffer that is not a table.
+--- The statusline text for `bufnr`, empty for a buffer that is not a table. Set
+--- `statusline` to call this.
 ---@param bufnr integer
 ---@return string
 function M.status(bufnr)
@@ -104,14 +94,13 @@ function M.status(bufnr)
   return table.concat(parts, " · ")
 end
 
---- The argument that turns the table off instead of opening one.
 local DISABLE = "--disable"
 
 --- Read the current buffer's file as text instead of as a table.
 ---
---- A later `:edit` goes through the read command registered over `extensions`, which
---- is why a name `extensions` captures comes back as a table while a name `:CsvTable`
---- captured stays text: the capture went with the table.
+--- A buffer captured by `:CsvTable` stays text, because the capture goes with the
+--- table. A name `extensions` covers comes back as a table on the next `:edit`,
+--- because the read command registered over the extension is still there.
 local function disable_current()
   local bufnr = vim.api.nvim_get_current_buf()
   if not buffer.get(bufnr) then
@@ -120,8 +109,8 @@ local function disable_current()
   buffer.detach(bufnr)
 end
 
---- An extension is the part of a name a read command matches on, so anything that
---- would land in the pattern as glob syntax rather than as itself is refused.
+--- An extension goes into an autocommand pattern, so anything nvim would read
+--- there as glob syntax rather than as itself is refused.
 ---@param extension string
 ---@return boolean
 local function valid_extension(extension)
@@ -183,7 +172,7 @@ function M.setup(opts)
     end
 
     -- `complete = "file"` backslash escapes a space, and the argument arrives as the
-    -- user typed it, so `expand` is what turns it back into a path.
+    -- user typed it. `expand` turns it back into a path.
     local full = vim.fn.fnamemodify(vim.fn.expand(path), ":p")
     local stat = vim.uv.fs_stat(full)
     if not stat or stat.type ~= "file" then
@@ -191,9 +180,9 @@ function M.setup(opts)
     end
 
     local bufnr = vim.fn.bufadd(full)
-    -- Reading the file again is what draws the table, and nvim refuses to read over
-    -- unsaved changes. Refusing here leaves the buffer as it was, where capturing it
-    -- first would leave it half taken over.
+    -- nvim refuses to read over unsaved changes, and the read is what draws the
+    -- table. Refusing here leaves the buffer as it was; capturing first would leave
+    -- it half taken over.
     if vim.bo[bufnr].modified then
       return vim.notify(
         "csv-table: " .. full .. " has unsaved changes. Write or discard them first.",
@@ -201,18 +190,19 @@ function M.setup(opts)
       )
     end
 
-    -- An extension `extensions` already names is read as a table by the command
-    -- registered over it, and nvim runs every read command that matches.
     -- `bufadd` leaves a buffer off the buffer list, where `:ls`, `:bnext` and every
     -- picker that reads the list would miss it.
     vim.bo[bufnr].buflisted = true
+
+    -- nvim runs every read command that matches, so capturing a name the extension
+    -- pattern already takes would read the file twice.
     if not autocmds.is_captured_by_extension(full) then
       autocmds.capture(bufnr)
     end
 
-    -- Loading an unloaded buffer fires the read command on its own. A buffer
-    -- already holding the file, as text or as a table drawn from an older read, is
-    -- loaded, so it takes an `:edit` to read again.
+    -- Loading an unloaded buffer fires the read command on its own. A buffer that
+    -- already holds the file, as text or as a table from an older read, is loaded
+    -- and takes an `:edit` to read again.
     local loaded = vim.api.nvim_buf_is_loaded(bufnr)
     vim.api.nvim_set_current_buf(bufnr)
     if loaded then

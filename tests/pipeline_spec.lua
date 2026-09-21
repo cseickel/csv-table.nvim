@@ -3,14 +3,12 @@ local expression = require("csv-table.reader.expression")
 local fixture = require("support.fixture")
 local pipeline = require("csv-table.reader.pipeline")
 
---- The pipeline string for the current query, with every column on display.
 ---@param query csv.Query
 ---@return string
 local function pipeline_for(query)
   return pipeline.build(query, query:display_columns())
 end
 
---- The filter expression the current query renders to.
 ---@param query csv.Query
 ---@return string
 local function filters_of(query)

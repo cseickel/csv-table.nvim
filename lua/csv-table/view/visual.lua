@@ -2,13 +2,9 @@
 The `csv.View` methods that keep nvim's own visual region on the same block as the
 selected cells.
 
-- `set_visual` hands nvim the anchor
-- `take_visual` reads back the anchor nvim holds
-
-Nvim keeps a visual region as one end it holds and one end the cursor drives, and
-the cursor is already the active cell, so the anchor is the only end to carry
-across. `getpos("v")` reads it while the mode runs. `'<` and `'>` are written by
-`mark_selection` and outlive the mode.
+nvim keeps a visual region as one end it holds and one end the cursor drives, and
+the cursor is already the active cell, so the anchor is the only end to hand over
+or read back. `getpos("v")` reads it while the mode runs.
 ]]
 
 local mode = require("csv-table.utils.mode")
@@ -36,12 +32,12 @@ local function outer_edge(self, cell, toward)
   return { cell.row.buffer_line, column_number > toward_number and to - 1 or from }
 end
 
---- Put nvim's anchor on the anchor cell, so nvim's visual region covers the block
---- the table has picked out and every move from here takes both.
+--- Put nvim's anchor on the anchor cell, so nvim's visual region covers the
+--- selected block.
 ---
---- Nvim's `o` makes the end the cursor is on the one it holds, so parking the
---- cursor on the anchor cell and pressing it hands the anchor over. The cursor
---- lands on whichever end nvim was holding, and goes back where it was parked.
+--- nvim's `o` makes the end the cursor is on the one it holds, so parking the
+--- cursor on the anchor cell and pressing it hands the anchor over. That leaves
+--- the cursor on the end nvim was holding, so it goes back where it was parked.
 function M.set_visual(self)
   if not mode.in_visual() or not self:on_screen() or not self:is_current() then
     return
@@ -70,9 +66,9 @@ function M.set_visual(self)
   vim.o.eventignore = saved_eventignore
 end
 
---- Take the anchor from the one nvim holds, so a mapping of the user's that moved
---- the far end of the visual region is followed. `cell_at` clamps to the page, so an
---- anchor left on a border line comes back as the nearest row.
+--- Read the anchor back from nvim, so a mapping of the user's that moved the far
+--- end of the visual region is followed. `cell_at` clamps to the page, so an anchor
+--- left on a border line comes back as the nearest row.
 function M.take_visual(self)
   if not mode.in_visual() or not self:on_screen() or not self:is_current() then
     return

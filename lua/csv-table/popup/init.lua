@@ -18,7 +18,6 @@ local function max_line_width(lines)
   return width
 end
 
---- How many screen lines `lines` need once wrapped at `width`.
 ---@param lines string[]
 ---@param width integer
 ---@return integer
@@ -30,7 +29,6 @@ local function wrapped_height(lines, width)
   return height
 end
 
---- Open `lines` in a centered float.
 ---@param lines string[]
 ---@param opts { title: string, modifiable: boolean|nil, wrap: boolean|nil }
 ---@return integer bufnr
@@ -62,7 +60,6 @@ function M.open(lines, opts)
   return bufnr, winid
 end
 
---- Close `winid` when any of `keys` is pressed in `bufnr`.
 ---@param bufnr integer
 ---@param winid integer
 ---@param keys string[]

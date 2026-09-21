@@ -2,7 +2,7 @@ local fixture = require("support.fixture")
 local parse = require("csv-table.reader.parse")
 local text = require("csv-table.utils.text")
 
---- What `xan view -t table` draws for two rows of one column, blank padding and
+--- What `xan view -t table` prints for two rows of one column, blank lines and
 --- all.
 ---@return string[]
 local function view_output()
@@ -18,7 +18,7 @@ local function view_output()
   }
 end
 
---- The parsed page for `view_output`, numbered from `first_row_number`.
+--- `view_output` parsed, with its rows numbered from `first_row_number`.
 ---@param first_row_number integer
 ---@return csv.Page
 ---@return csv.Column[] source_columns
@@ -145,8 +145,8 @@ end)
 describe("page:cell_width", function()
   it("measures a column without the padding view puts around it", function()
     local parsed_page = page_for(1)
-    -- The header cell is drawn as `│ a   │`, so five characters hold `a` plus one
-    -- space either side.
+    -- The header cell is drawn as `│ a   │`: five characters, of which `a` and one
+    -- space either side are the cell.
     equals(parsed_page:cell_width(1), 3)
   end)
 end)

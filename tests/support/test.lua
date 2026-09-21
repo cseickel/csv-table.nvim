@@ -1,8 +1,6 @@
 --[[
-The test vocabulary: `describe`, `it` and the checks.
-
-A spec file returns nothing and calls `describe` at the top level. `run.lua`
-loads each one, then reports what failed and exits nonzero when anything did.
+The test vocabulary: `describe`, `it` and the checks. A spec file returns nothing
+and calls `describe` at the top level.
 ]]
 
 local M = {}
@@ -62,7 +60,7 @@ function M.truthy(value)
   end
 end
 
---- Assert that `text` holds `pattern`, which is a lua pattern.
+--- Assert that `text` holds a match for `pattern`, a Lua pattern.
 ---@param text string
 ---@param pattern string
 function M.matches(text, pattern)
@@ -71,8 +69,7 @@ function M.matches(text, pattern)
   end
 end
 
---- Assert that `text` is free of `pattern`, which is how a spec says a stage
---- left something out.
+--- Assert that `text` holds no match for `pattern`, a Lua pattern.
 ---@param text string
 ---@param pattern string
 function M.lacks(text, pattern)

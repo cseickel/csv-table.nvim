@@ -10,15 +10,16 @@ local report = require("csv-table.utils.report")
 
 local M = {}
 
---- Put `text` in the system clipboard and the unnamed register, so `p` inside
---- nvim pastes it whether or not `clipboard` is set to follow the system one.
+--- Write `text` to both `+` and `"`, so `p` inside nvim pastes it whether or not
+--- `clipboard` follows the system one.
 ---@param text string
 local function to_registers(text)
   vim.fn.setreg("+", text)
   vim.fn.setreg('"', text)
 end
 
---- The rows and columns `bounds` covers, named the way the reader names them.
+--- The rows and columns `bounds` covers, as row ids and columns, nil once any of
+--- them has left the page.
 ---@param bounds csv.Bounds
 ---@return csv.Block|nil
 local function block_of(self, bounds)
@@ -45,11 +46,10 @@ local function block_of(self, bounds)
   return { row_ids = row_ids, columns = columns }
 end
 
---- The selected cells exactly as the table draws them, one line each, the header
---- line first.
----
---- Each line is cut at its own cell ranges, because a line holding a multi-byte
---- character has its separators at byte offsets the header does not share.
+--- The selected cells as the table draws them, one line each, the header line
+--- first. Each line is cut at its own cell ranges, because a line holding a
+--- multi-byte character has its separators at byte offsets the header does not
+--- share.
 ---@param bounds csv.Bounds
 ---@param headers boolean
 ---@return string

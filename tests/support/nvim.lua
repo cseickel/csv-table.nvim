@@ -2,7 +2,7 @@
 Enough of nvim's API for the pure modules to load under plain lua.
 
 Splitting a string, comparing two tables and naming an extmark namespace are what
-those modules ask `vim` for, so that is what this holds. A module that reaches
+those modules ask `vim` for, so that is all this holds. A module that reaches
 further belongs in a headless nvim run.
 ]]
 
@@ -32,8 +32,7 @@ local function deep_equal(left, right)
   return true
 end
 
---- `vim.api.nvim_create_namespace`: a name gets an id, and the same name asked for
---- again gets the same one.
+-- `vim.api.nvim_create_namespace`: the same name asked for twice gets the same id.
 local namespaces = {}
 local last_namespace = 0
 
@@ -50,7 +49,7 @@ end
 _G.vim = {
   deep_equal = deep_equal,
   api = { nvim_create_namespace = create_namespace },
-  --- `vim.split` with `plain`, which is the only form the pure modules use.
+  --- `vim.split` with `plain`, the only form the pure modules use.
   ---@param text string
   ---@param separator string
   ---@return string[]
@@ -60,7 +59,7 @@ _G.vim = {
     for piece in text:gmatch(pattern) do
       table.insert(parts, piece)
     end
-    -- `gmatch` matches the empty string past the last separator.
+    -- `gmatch` also matches the empty string past the last separator.
     table.remove(parts)
     return parts
   end,

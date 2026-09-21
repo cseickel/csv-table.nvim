@@ -1,19 +1,18 @@
 --[[
-The `csv.View` methods for the cells picked out: an anchor cell, a head cell, and
-a kind naming which of the two axes those cells bound.
+The `csv.View` methods for the selected cells: an anchor cell, a head cell, and a
+kind naming which of the two axes those cells bound.
 
-Both ends are `csv.CellRef`, so nothing here holds a row of a page that is no
-longer drawn. `csv-table.buffer` drops them when a render moves the rows.
+Both ends are a `csv.CellRef`, so nothing here holds a row of a page that is no
+longer drawn.
 ]]
 
 local page = require("csv-table.page")
 
 local M = {}
 
---- Which axis the two cells bound, and which one covers the page.
----
---- `cell` bounds both, `row` bounds the rows and takes every column, `column`
---- bounds the columns and takes every row, and `page` takes everything.
+--- Which axes the two cells bound. `cell` bounds both, `row` bounds the rows and
+--- takes every column, `column` bounds the columns and takes every row, and
+--- `page` takes everything.
 ---@alias csv.SelectionKind "cell"|"row"|"column"|"page"
 
 ---@class csv.Bounds
@@ -30,7 +29,7 @@ local function column_number_of(current_page, ref)
   return column and current_page:column_number(column) or nil
 end
 
---- Pick out the block `kind` makes of two cells. One cell is picked by naming it
+--- Select the block `kind` makes of two cells. One cell is selected by naming it
 --- twice.
 ---@param anchor csv.Cell
 ---@param head csv.Cell
@@ -41,8 +40,8 @@ function M.select_cells(self, anchor, head, kind)
   self.kind = kind
 end
 
---- Take the block out to `head`, leaving the anchor and the kind as they are.
---- Extending without a selection picks out the one cell.
+--- Extend the block to `head`, leaving the anchor and the kind as they are.
+--- Extending with no selection selects the one cell.
 ---@param head csv.Cell
 function M.extend_selection(self, head)
   if self.anchor then
@@ -70,9 +69,9 @@ function M.has_selection(self)
   return self.anchor ~= nil
 end
 
---- The lines and the columns the selection covers, present while the ends the kind
---- bounds are on the page. Rows are bounded by the lines they are drawn on, since
---- a sort puts row ids on the page in any order.
+--- The lines and columns the selection covers, nil once an end the kind bounds has
+--- left the page. Rows are bounded by the lines they are drawn on, since a sort
+--- puts row ids on the page in any order.
 ---
 --- Each axis is looked up only where the kind bounds it, so hiding a column leaves
 --- a selection of whole rows alone.
@@ -113,8 +112,7 @@ function M.bounds(self)
   return bounds
 end
 
---- The active cell on its own, as the bounds of a block of one, which is what an
---- export with nothing selected takes.
+--- The active cell as the bounds of a block of one.
 ---@return csv.Bounds|nil
 function M.active_bounds(self)
   local cell = self:active_cell()
@@ -133,18 +131,17 @@ function M.active_bounds(self)
   }
 end
 
---- Leave the selected block in `'<` and `'>`, so nvim's own `gv` reselects those
---- cells rather than the two ends nvim was holding.
+--- Write the selected block to `'<` and `'>`, so nvim's own `gv` reselects those
+--- cells rather than the two ends nvim was holding. nvim writes both marks itself
+--- when a visual mode ends, so this runs again on the way out and lands last.
 ---
---- Nvim writes both marks itself when a visual mode ends, so `csv-table.buffer`
---- runs this again on the way out and lands last.
----
---- The marks outlive a render, the same way they do in a buffer of text that was
+--- The marks outlive a render the same way they do in a buffer of text that was
 --- replaced: they name a line and a byte, and after a sort those name different
 --- rows.
 ---
---- `nvim_buf_set_mark` refuses `<` and `>`, so `setpos` does the writing, and it
---- writes nothing unless the buffer is the one the user is in.
+--- `nvim_buf_set_mark` refuses `<` and `>`, so `setpos` does the writing. It checks
+--- the buffer number rather than using it, and writes nothing unless the table is
+--- the current buffer.
 function M.mark_selection(self)
   local bounds = self:bounds()
   if not bounds then

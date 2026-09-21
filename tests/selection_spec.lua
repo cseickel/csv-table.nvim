@@ -2,7 +2,7 @@ local fixture = require("support.fixture")
 local parse = require("csv-table.reader.parse")
 local view = require("csv-table.view")
 
---- A three row, two column page, and a view of it to pick cells out of.
+--- A three row, two column page and a view over it.
 ---@return csv.Page
 ---@return csv.View
 ---@return csv.Column[]
@@ -45,7 +45,7 @@ end
 describe("view:select_cells", function()
   it("covers the rectangle between the two cells", function()
     local page, table_view = table_and_view()
-    table_view:select_cells(cell_at(page, 4,1), cell_at(page, 6,2), "cell")
+    table_view:select_cells(cell_at(page, 4, 1), cell_at(page, 6, 2), "cell")
 
     local bounds = table_view:bounds()
     equals(bounds.top, 4)
@@ -56,7 +56,7 @@ describe("view:select_cells", function()
 
   it("covers one cell when the same cell is named twice", function()
     local page, table_view = table_and_view()
-    local cell = cell_at(page, 5,2)
+    local cell = cell_at(page, 5, 2)
     table_view:select_cells(cell, cell, "cell")
 
     local rows, cols = size(table_view:bounds())
@@ -66,7 +66,7 @@ describe("view:select_cells", function()
 
   it("orders the bounds however the two ends were given", function()
     local page, table_view = table_and_view()
-    table_view:select_cells(cell_at(page, 6,2), cell_at(page, 4,1), "cell")
+    table_view:select_cells(cell_at(page, 6, 2), cell_at(page, 4, 1), "cell")
 
     local bounds = table_view:bounds()
     equals(bounds.top, 4)
@@ -77,7 +77,7 @@ end)
 describe("view:bounds by kind", function()
   it("takes every column for a row selection", function()
     local page, table_view = table_and_view()
-    table_view:select_cells(cell_at(page, 4,1), cell_at(page, 5,1), "row")
+    table_view:select_cells(cell_at(page, 4, 1), cell_at(page, 5, 1), "row")
 
     local bounds = table_view:bounds()
     equals(bounds.top, 4)
@@ -88,7 +88,7 @@ describe("view:bounds by kind", function()
 
   it("takes every row for a column selection", function()
     local page, table_view = table_and_view()
-    local cell = cell_at(page, 5,2)
+    local cell = cell_at(page, 5, 2)
     table_view:select_cells(cell, cell, "column")
 
     local bounds = table_view:bounds()
@@ -100,7 +100,7 @@ describe("view:bounds by kind", function()
 
   it("takes the whole page", function()
     local page, table_view = table_and_view()
-    local cell = cell_at(page, 5,2)
+    local cell = cell_at(page, 5, 2)
     table_view:select_cells(cell, cell, "page")
 
     local rows, cols = size(table_view:bounds())
@@ -110,7 +110,7 @@ describe("view:bounds by kind", function()
 
   it("answers for a row selection whose column has gone", function()
     local page, table_view, source = table_and_view()
-    table_view:select_cells(cell_at(page, 4,1), cell_at(page, 5,1), "row")
+    table_view:select_cells(cell_at(page, 4, 1), cell_at(page, 5, 1), "row")
     table_view.head = { row_id = table_view.head.row_id, column_id = source[3].column_id }
 
     equals(table_view:bounds().bottom, 5)
@@ -120,8 +120,8 @@ end)
 describe("view:extend_selection", function()
   it("moves the head and leaves the anchor and the kind", function()
     local page, table_view = table_and_view()
-    table_view:select_cells(cell_at(page, 4,1), cell_at(page, 4,1), "row")
-    table_view:extend_selection(cell_at(page, 6,2))
+    table_view:select_cells(cell_at(page, 4, 1), cell_at(page, 4, 1), "row")
+    table_view:extend_selection(cell_at(page, 6, 2))
 
     equals(table_view.kind, "row")
     local bounds = table_view:bounds()
@@ -131,7 +131,7 @@ describe("view:extend_selection", function()
 
   it("picks out the one cell when nothing is selected yet", function()
     local page, table_view = table_and_view()
-    table_view:extend_selection(cell_at(page, 5,1))
+    table_view:extend_selection(cell_at(page, 5, 1))
 
     equals(table_view.kind, "cell")
     local rows, cols = size(table_view:bounds())
@@ -143,7 +143,7 @@ end)
 describe("view:set_kind", function()
   it("keeps both ends", function()
     local page, table_view = table_and_view()
-    table_view:select_cells(cell_at(page, 4,1), cell_at(page, 5,1), "cell")
+    table_view:select_cells(cell_at(page, 4, 1), cell_at(page, 5, 1), "cell")
     table_view:set_kind("row")
 
     local bounds = table_view:bounds()
@@ -156,7 +156,7 @@ end)
 describe("view:clear_selection", function()
   it("leaves nothing to draw", function()
     local page, table_view = table_and_view()
-    table_view:select_cells(cell_at(page, 4,1), cell_at(page, 4,1), "cell")
+    table_view:select_cells(cell_at(page, 4, 1), cell_at(page, 4, 1), "cell")
     table_view:clear_selection()
 
     equals(table_view:has_selection(), false)
@@ -167,7 +167,7 @@ end)
 describe("view:bounds", function()
   it("answers nothing once an end has left the display", function()
     local page, table_view, source = table_and_view()
-    table_view:select_cells(cell_at(page, 4,1), cell_at(page, 4,1), "cell")
+    table_view:select_cells(cell_at(page, 4, 1), cell_at(page, 4, 1), "cell")
     table_view.head = { row_id = table_view.head.row_id, column_id = source[3].column_id }
 
     equals(table_view:bounds(), nil)
@@ -175,7 +175,7 @@ describe("view:bounds", function()
 
   it("answers nothing once an end has left the page", function()
     local page, table_view = table_and_view()
-    table_view:select_cells(cell_at(page, 4,1), cell_at(page, 6,2), "cell")
+    table_view:select_cells(cell_at(page, 4, 1), cell_at(page, 6, 2), "cell")
     table_view.head = { row_id = 99, column_id = table_view.head.column_id }
 
     equals(table_view:bounds(), nil)
