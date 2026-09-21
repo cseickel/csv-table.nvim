@@ -1,19 +1,10 @@
 --[[
-The augroup this plugin registers under, the autocommands that last the session,
-and the read command that turns a file into a table, over the configured extensions
-and over any one buffer `claim` takes.
+All autocmds this plugin defines are done so via this module.
 
 `apply` creates the group fresh, so running `setup` again replaces every
-autocommand with the ones this version of the plugin defines. That takes the
-buffer-local ones with it, which is why `apply` ends by giving them back to the
-tables already open.
-
-- `apply` registers the session autocommands and the read command over the
-  configured extensions
-- `group` is the augroup, which is also where a buffer registers its own
-- `covers` says whether the read command already takes a path
-- `claim` reads one buffer as a table whatever its name
-- `release` gives one buffer back to nvim
+autocommand. This includes the buffer-local ones. It is designed to be safe
+when re-running `setup` for different extensions, or even clearing the
+module cache and reloading with a new version of the plugin.
 
 `csv-table.buffer` and `csv-table.actions` are reached inside the callbacks rather
 than required at the top, because both lead back to `csv-table.buffer`, which
@@ -32,13 +23,12 @@ local augroup
 
 -- The extensions the read command was registered over, lowercased.
 ---@type table<string, true>
-local wanted = {}
+local managed_extensions = {}
 
--- Every buffer `claim` took. nvim drops a buffer-local autocommand when the buffer
--- is wiped and `apply` drops it when it takes the group, so this is what says a
--- buffer should have one, as against what says it has one now.
+-- This is a record of every buffer that we are managing, which means we
+-- interrupt the normal nvim read and replace it with our own read via xan.
 ---@type table<integer, true>
-local claimed = {}
+local managed_buffers = {}
 
 local function buffer()
   return require("csv-table.buffer")
@@ -124,7 +114,7 @@ end
 ---@return boolean
 function M.covers(path)
   local name = vim.fn.fnamemodify(path, ":t"):lower()
-  for extension in pairs(wanted) do
+  for extension in pairs(managed_extensions) do
     if name:sub(-#extension - 1) == "." .. extension then
       return true
     end
@@ -132,21 +122,19 @@ function M.covers(path)
   return false
 end
 
---- Read `bufnr` as a table from here on, whatever its name says. The claim lasts
---- until the buffer is wiped: nvim drops the autocommand then, and `apply` gives it
---- back after anything else takes it.
+--- Read `bufnr` as a table from here on, regardless of extension.
 ---@param bufnr integer
 function M.claim(bufnr)
-  claimed[bufnr] = true
+  managed_buffers[bufnr] = true
 
   -- nvim runs every autocommand matching a read, so a second one of ours here would
-  -- read the file twice. Another plugin's is its own business.
-  local held = vim.api.nvim_get_autocmds({
+  -- read the file twice.
+  local already_claimed = vim.api.nvim_get_autocmds({
     event = "BufReadCmd",
     buffer = bufnr,
     group = augroup,
   })
-  if #held > 0 then
+  if #already_claimed > 0 then
     return
   end
 
@@ -160,10 +148,11 @@ function M.claim(bufnr)
 end
 
 --- Drop everything this buffer holds from this plugin, the claim included, so nvim
---- reads it as a plain file from here on. `apply` will not give any of it back.
+--- reads it as a plain file from here on. Only meaningful when the file was not
+--- an extension we are configured to handle automatically.
 ---@param bufnr integer
 function M.release(bufnr)
-  claimed[bufnr] = nil
+  managed_buffers[bufnr] = nil
   vim.api.nvim_clear_autocmds({ buffer = bufnr, group = augroup })
   clear_keymaps(bufnr)
 end
@@ -185,10 +174,10 @@ end
 function M.apply(extensions)
   augroup = vim.api.nvim_create_augroup("csv-table", { clear = true })
 
-  wanted = {}
+  managed_extensions = {}
   local patterns = {}
   for index, extension in ipairs(extensions) do
-    wanted[extension:lower()] = true
+    managed_extensions[extension:lower()] = true
     patterns[index] = any_case(extension)
   end
 
@@ -199,8 +188,7 @@ function M.apply(extensions)
     callback = color.define_groups,
   })
 
-  -- A `BufReadCmd` replaces nvim's own read, so a file this matches never reaches
-  -- the buffer as text.
+  -- A `BufReadCmd` replaces nvim's own read
   vim.api.nvim_create_autocmd("BufReadCmd", {
     group = augroup,
     pattern = patterns,
@@ -285,11 +273,11 @@ function M.apply(extensions)
   -- claims included, so each one gets it back. A claim on a wiped buffer is the only
   -- one with nothing to go back to.
   buffer().rebind_all()
-  for bufnr in pairs(claimed) do
+  for bufnr in pairs(managed_buffers) do
     if vim.api.nvim_buf_is_valid(bufnr) then
       M.claim(bufnr)
     else
-      claimed[bufnr] = nil
+      managed_buffers[bufnr] = nil
     end
   end
 end
