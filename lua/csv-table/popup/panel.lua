@@ -174,7 +174,7 @@ end
 function M.info(view)
   local query = view.buffer.query
   query.reader:stats(query, nil, function(stats)
-    local pages = math.max(math.ceil(query.row_count / query.limit), 1)
+    local pages = query:last_page() + 1
     local lines = {
       "  " .. query.file.path,
       string.format(

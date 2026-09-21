@@ -207,15 +207,17 @@ function M.clear(bufnr)
   vim.api.nvim_buf_clear_namespace(bufnr, flash_namespace, 0, -1)
 end
 
---- Draw the marks again, after the marks or the page under them changed.
+--- Draw the marks again, after the marks or the page under them changed. A flash
+--- still running named cells of the page being replaced, so it goes too.
 ---@param buf csv.Buffer
 function M.redraw(buf)
   vim.api.nvim_buf_clear_namespace(buf.bufnr, marks_namespace, 0, -1)
+  vim.api.nvim_buf_clear_namespace(buf.bufnr, flash_namespace, 0, -1)
   draw_marks(buf)
 end
 
---- Highlight one column on every row for `FLASH_MILLISECONDS`. A page redraw
---- replaces the text under the extmarks, so it ends the flash early.
+--- Highlight one column on every row for `FLASH_MILLISECONDS`, or until a redraw
+--- replaces the page the flashed cells belong to.
 ---@param buf csv.Buffer
 ---@param column csv.Column
 function M.flash_column(buf, column)
