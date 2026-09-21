@@ -75,14 +75,14 @@ end
 ---@param text string The cell as it is drawn, padding included.
 ---@return string|nil
 local function group_of(kind, text)
-  local first = text:match("^%s*(%S)")
-  if not first then
+  local first_character = text:match("^%s*(%S)")
+  if not first_character then
     return nil
   end
   if kind == "date" then
     return "CsvDate"
   end
-  return first == "-" and "CsvNumberNegative" or "CsvNumberPositive"
+  return first_character == "-" and "CsvNumberNegative" or "CsvNumberPositive"
 end
 
 ---@param bufnr integer
@@ -121,7 +121,7 @@ end
 --- The page and the column kinds for the window nvim is drawing. `on_win` fills
 --- it once and every `on_line` for that window reads it.
 ---@type { page: csv.Page, kinds: table<integer, "number"|"date"> }|nil
-local current_window = nil
+local drawing_state = nil
 
 ---@param bufnr integer
 ---@return boolean whether this window holds a table to color.
@@ -129,24 +129,24 @@ local function on_win(_, _, bufnr)
   -- Required here because `csv-table.buffer` requires this module to redraw.
   local buf = require("csv-table.buffer").get(bufnr)
   if not buf then
-    current_window = nil
+    drawing_state = nil
     return false
   end
-  current_window = { page = buf.page, kinds = cell_kinds(buf) }
+  drawing_state = { page = buf.page, kinds = cell_kinds(buf) }
   return true
 end
 
 ---@param bufnr integer
 ---@param row integer 0-based.
 local function on_line(_, _, bufnr, row)
-  -- `on_win` already decided this window has a table, so `current_window` is set.
+  -- `on_win` already decided this window has a table, so `drawing_state` is set.
   -- The guard is here because nvim drops a provider that raises, which would end
   -- coloring for the session.
-  if not current_window then
+  if not drawing_state then
     return
   end
 
-  local page = current_window.page
+  local page = drawing_state.page
   local index = row + 1
   local line = page.lines[index]
   if not line then
@@ -167,7 +167,7 @@ local function on_line(_, _, bufnr, row)
     if header then
       group = "CsvHeader"
     else
-      local kind = current_window.kinds[column_number]
+      local kind = drawing_state.kinds[column_number]
       group = kind and group_of(kind, line:sub(range.from + 1, range.to))
     end
     if group then

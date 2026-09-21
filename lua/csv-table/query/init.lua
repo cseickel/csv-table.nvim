@@ -93,16 +93,16 @@ end
 ---@param on_changed fun()
 ---@return csv.Query
 function M.new(file, reader, on_changed)
-  local display = {}
+  local columns = {}
   for index, column in ipairs(file.columns) do
-    display[index] = column
+    columns[index] = column
   end
 
   return setmetatable({
     file = file,
     reader = reader,
     on_changed = on_changed,
-    columns = display,
+    columns = columns,
     filters = {},
     sort_keys = {},
     clipboard = {},

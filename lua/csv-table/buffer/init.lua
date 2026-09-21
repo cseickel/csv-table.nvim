@@ -49,10 +49,10 @@ function M.get(bufnr)
   return buffers[bufnr]
 end
 
----@param winnr integer
+---@param window integer
 ---@return csv.Buffer|nil
-function M.for_window(winnr)
-  local bufnr = vim.api.nvim_win_get_buf(winnr)
+function M.for_window(window)
+  local bufnr = vim.api.nvim_win_get_buf(window)
   return M.get(bufnr)
 end
 
@@ -77,10 +77,10 @@ end
 ---@param buffer csv.Buffer
 ---@return csv.View|nil
 local function source_view(buffer)
-  local previous = vim.fn.win_getid(vim.fn.winnr("#"))
-  for _, held in ipairs(buffer.views) do
-    if held.window == previous then
-      return held
+  local previous_window = vim.fn.win_getid(vim.fn.winnr("#"))
+  for _, candidate in ipairs(buffer.views) do
+    if candidate.window == previous_window then
+      return candidate
     end
   end
   return buffer.views[1]
@@ -97,36 +97,36 @@ function Buffer:view(window)
     window = vim.api.nvim_get_current_win()
   end
 
-  for _, view in ipairs(self.views) do
-    if view.window == window then
-      return view
+  for _, candidate in ipairs(self.views) do
+    if candidate.window == window then
+      return candidate
     end
   end
 
-  for _, view in ipairs(self.views) do
-    if not vim.api.nvim_win_is_valid(view.window) then
-      view.window = window
-      return view
+  for _, candidate in ipairs(self.views) do
+    if not vim.api.nvim_win_is_valid(candidate.window) then
+      candidate.window = window
+      return candidate
     end
   end
 
-  for _, view in ipairs(self.views) do
-    if not view:on_screen() then
-      view.window = window
-      return view
+  for _, candidate in ipairs(self.views) do
+    if not candidate:on_screen() then
+      candidate.window = window
+      return candidate
     end
   end
 
   local source = source_view(self)
-  local made = source and source:clone(window) or view.new(self, window)
-  table.insert(self.views, made)
-  return made
+  local new_view = source and source:clone(window) or view.new(self, window)
+  table.insert(self.views, new_view)
+  return new_view
 end
 
 --- Run the query and draw the page it returns.
 ---@param on_rendered fun()|nil Runs once the new text is in the buffer.
 function Buffer:render(on_rendered)
-  self.query.reader:page(self.query, function(drawn)
+  self.query.reader:page(self.query, function(new_page)
     if not vim.api.nvim_buf_is_valid(self.bufnr) then
       return
     end
@@ -134,32 +134,32 @@ function Buffer:render(on_rendered)
     -- A page past the first that came back empty is a page past the end, which
     -- happens when the rows divide evenly into pages. Step back and draw the page
     -- that does have rows, so the user sees the view stay where it was.
-    if drawn:row_count() < 1 and self.query.page_number > 0 then
+    if new_page:row_count() < 1 and self.query.page_number > 0 then
       self.query:turn_page(-1)
       return self:render(on_rendered)
     end
 
-    self.page = drawn
-    local moved
-    self.read_state, moved = self.query:after_read(self.read_state, drawn)
-    replace_lines(self.bufnr, drawn.lines)
+    self.page = new_page
+    local page_moved
+    self.read_state, page_moved = self.query:after_read(self.read_state, new_page)
+    replace_lines(self.bufnr, new_page.lines)
     color.redraw(self)
     -- Nothing here reads this. A winbar can pin the header line while the buffer is
     -- scrolled past it, and this is where it finds which line that is.
-    vim.b[self.bufnr].table_header = drawn.header_line
+    vim.b[self.bufnr].table_header = new_page.header_line
 
     -- Every view, since a page that moved leaves the ends of a selection naming
     -- rows nobody picked, and a window that stepped away comes back to this view.
-    if moved then
-      for _, held in ipairs(self.views) do
-        held:clear_selection()
+    if page_moved then
+      for _, window_view in ipairs(self.views) do
+        window_view:clear_selection()
       end
     end
 
     for _, window in ipairs(vim.fn.win_findbuf(self.bufnr)) do
-      local shown = self:view(window)
-      shown:restore()
-      shown:draw()
+      local window_view = self:view(window)
+      window_view:restore()
+      window_view:draw()
     end
 
     if on_rendered then
@@ -195,12 +195,12 @@ function Buffer:load(sheet, on_ready)
   local buffer_reader = self.query.reader
   local path = self.query.file.path
 
-  file.open(buffer_reader, path, sheet, function(opened)
+  file.open(buffer_reader, path, sheet, function(opened_file)
     if not vim.api.nvim_buf_is_valid(self.bufnr) then
       return
     end
 
-    self.query = query.new(opened, buffer_reader, function()
+    self.query = query.new(opened_file, buffer_reader, function()
       vim.cmd.redrawstatus()
     end)
     self.read_state = self.query:state(page.empty())
@@ -237,7 +237,7 @@ local WINDOW_OPTIONS = {
 --- the column the cursor is parked in. `number` comes after `relativenumber`,
 --- because nvim puts `number` back to a value it remembers when `relativenumber`
 --- goes off, so a window with `number` on would lose it.
-local RESTORED = {
+local RESTORED_WINDOW_OPTIONS = {
   "sidescrolloff",
   "wrap",
   "signcolumn",
@@ -250,17 +250,17 @@ local RESTORED = {
 --- not here. These three are ours to put back.
 local BUFFER_OPTIONS = { "buftype", "swapfile", "modifiable" }
 
---- Put `held` back on `window`. `vim.wo[window][0]` is the window's value for the
---- buffer it shows, which is the one `dress_windows` read and wrote over, so the
---- window has to be showing that buffer still.
+--- Put `saved_options` back on `window`. `vim.wo[window][0]` is the window's value
+--- for the buffer it shows, which is the one `dress_windows` read and wrote over, so
+--- the window has to be showing that buffer still.
 ---@param window integer
----@param held table<string, any>
-local function restore_window(window, held)
+---@param saved_options table<string, any>
+local function restore_window(window, saved_options)
   if not vim.api.nvim_win_is_valid(window) then
     return
   end
-  for _, name in ipairs(RESTORED) do
-    vim.wo[window][0][name] = held[name]
+  for _, name in ipairs(RESTORED_WINDOW_OPTIONS) do
+    vim.wo[window][0][name] = saved_options[name]
   end
 end
 
@@ -270,11 +270,11 @@ end
 function Buffer:dress_windows()
   for _, window in ipairs(vim.fn.win_findbuf(self.bufnr)) do
     if not self.window_options[window] then
-      local held = {}
-      for _, name in ipairs(RESTORED) do
-        held[name] = vim.wo[window][0][name]
+      local saved_options = {}
+      for _, name in ipairs(RESTORED_WINDOW_OPTIONS) do
+        saved_options[name] = vim.wo[window][0][name]
       end
-      self.window_options[window] = held
+      self.window_options[window] = saved_options
     end
 
     for name, value in pairs(WINDOW_OPTIONS) do
@@ -283,15 +283,14 @@ function Buffer:dress_windows()
   end
 end
 
-
 --- Put every option back the way this buffer and the windows still on it had it. A
 --- window that moved to another buffer is left alone, since the value read there
 --- belongs to the pair it made with this one.
 function Buffer:undress()
   for _, window in ipairs(vim.fn.win_findbuf(self.bufnr)) do
-    local held = self.window_options[window]
-    if held then
-      restore_window(window, held)
+    local saved_options = self.window_options[window]
+    if saved_options then
+      restore_window(window, saved_options)
     end
   end
   self.window_options = {}
@@ -311,8 +310,9 @@ function M.rebind(bufnr)
   -- `:bdelete` drops the buffer from `buffers` and leaves these registered, so a
   -- buffer opened again would have two of each. The three are registered together,
   -- and any one of them says so.
-  local held = vim.api.nvim_get_autocmds({ event = "CursorMoved", buffer = bufnr, group = group })
-  if #held > 0 then
+  local already_bound =
+    vim.api.nvim_get_autocmds({ event = "CursorMoved", buffer = bufnr, group = group })
+  if #already_bound > 0 then
     return
   end
 
@@ -340,9 +340,9 @@ function M.rebind(bufnr)
       if not buffer then
         return
       end
-      local shown = buffer:view(0)
-      shown:follow_cursor()
-      shown:remember()
+      local current_view = buffer:view(0)
+      current_view:follow_cursor()
+      current_view:remember()
     end,
   })
 
@@ -365,27 +365,27 @@ end
 ---@param path string
 ---@return csv.Buffer
 local function record(bufnr, path)
-  local held = {}
+  local saved_options = {}
   for _, name in ipairs(BUFFER_OPTIONS) do
-    held[name] = vim.bo[bufnr][name]
+    saved_options[name] = vim.bo[bufnr][name]
   end
 
   vim.bo[bufnr].buftype = "nowrite"
   vim.bo[bufnr].swapfile = false
   vim.bo[bufnr].modifiable = false
 
-  local empty = page.empty()
+  local empty_page = page.empty()
   local buffer = setmetatable({
     bufnr = bufnr,
     query = query.new(file.empty(path), reader.new(), function()
       vim.cmd.redrawstatus()
     end),
-    page = empty,
+    page = empty_page,
     views = {},
-    buffer_options = held,
+    buffer_options = saved_options,
     window_options = {},
   }, Buffer)
-  buffer.read_state = buffer.query:state(empty)
+  buffer.read_state = buffer.query:state(empty_page)
   buffers[bufnr] = buffer
 
   buffer:dress_windows()
@@ -404,7 +404,7 @@ end
 ---@param bufnr integer
 ---@return boolean whether the file is in the buffer.
 local function read_as_text(bufnr)
-  local ignored, reload = vim.o.eventignore, vim.o.undoreload
+  local saved_eventignore, saved_undoreload = vim.o.eventignore, vim.o.undoreload
   -- Appended rather than assigned, because another plugin may be part way through
   -- its own bookkeeping with `eventignore` set.
   vim.opt.eventignore:append("BufReadCmd")
@@ -414,7 +414,7 @@ local function read_as_text(bufnr)
     vim.cmd.edit()
   end)
 
-  vim.o.eventignore, vim.o.undoreload = ignored, reload
+  vim.o.eventignore, vim.o.undoreload = saved_eventignore, saved_undoreload
   if not ok then
     report.error(tostring(err))
   end
@@ -449,7 +449,7 @@ function M.detach(bufnr)
     vim.bo[bufnr].buftype = "nowrite"
     vim.bo[bufnr].modifiable = false
   end
-  guicursor.update_guicursor(M.for_window(0))
+  guicursor.update(M.for_window(0))
 end
 
 --- Take over `bufnr`, whose read command has left the whole read to this plugin.
@@ -471,9 +471,9 @@ function M.attach(bufnr, on_ready)
     -- nvim empties the buffer before this runs, so the text has to go back whatever
     -- happens. When the file is the one the page was read from, the lines already in
     -- hand are that text, and xan has nothing to add.
-    local drawn = buffer.page
-    if #drawn.lines > 0 and buffer.query.file:version() == drawn.file_version then
-      replace_lines(bufnr, drawn.lines)
+    local current_page = buffer.page
+    if #current_page.lines > 0 and buffer.query.file:version() == current_page.file_version then
+      replace_lines(bufnr, current_page.lines)
       color.redraw(buffer)
 
       -- Every view names rows of this page, which is the one still in hand, so each

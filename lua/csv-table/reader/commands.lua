@@ -57,9 +57,9 @@ end
 ---@param stages string The pipeline, already joined.
 ---@return string[]
 local function run(path, sheet, stages)
-  local from = source_stage(path, sheet)
-  if from then
-    stages = from .. " | " .. stages
+  local source = source_stage(path, sheet)
+  if source then
+    stages = source .. " | " .. stages
   end
   return { "xan", "run", stages, path }
 end
@@ -152,9 +152,9 @@ end
 --- returns them in file order whatever order it was asked in, so every row looks
 --- its own id up in a map of row id to screen position and the sort reads that.
 ---@param row_ids integer[]
----@param kept integer How many columns the export keeps.
+---@param kept_count integer How many columns the export keeps.
 ---@return string[]
-local function ordering_stages(row_ids, kept)
+local function ordering_stages(row_ids, kept_count)
   local positions = {}
   for position, row_id in ipairs(row_ids) do
     positions[position] = string.format('"%d": %d', row_id, position)
@@ -167,9 +167,9 @@ local function ordering_stages(row_ids, kept)
   )
   return {
     "map " .. pipeline.quote(order),
-    -- The row id sits at 0 and the kept columns run to `kept`, so `map` appends
-    -- this one just past them.
-    string.format("sort -s %d -N", kept + 1),
+    -- The row id sits at 0 and the kept columns run to `kept_count`, so `map`
+    -- appends this one just past them.
+    string.format("sort -s %d -N", kept_count + 1),
   }
 end
 
@@ -191,22 +191,23 @@ local WRITERS = {
 ---@param format string
 ---@return string
 local function keeping_stage(block, format)
-  local kept = {}
-  local named = format == "json" or format == "markdown"
+  local selectors = {}
+  local by_label = format == "json" or format == "markdown"
 
   for index, column in ipairs(block.columns) do
     -- The row id leads the stream, so the first exported column sits at 1.
-    if named then
-      kept[index] = string.format("col(%d) as %s", index, expression.string_literal(column.label))
+    if by_label then
+      selectors[index] =
+        string.format("col(%d) as %s", index, expression.string_literal(column.label))
     else
-      kept[index] = index
+      selectors[index] = index
     end
   end
 
-  if named then
-    return "select -e " .. pipeline.quote(table.concat(kept, ", "))
+  if by_label then
+    return "select -e " .. pipeline.quote(table.concat(selectors, ", "))
   end
-  return "select " .. pipeline.quote(table.concat(kept, ","))
+  return "select " .. pipeline.quote(table.concat(selectors, ","))
 end
 
 --- The argv writing the block. Naming the rows by id is what keeps the filter and
@@ -261,14 +262,14 @@ function M.sheets(path)
   return { "xan", "from", "--list-sheets", path }
 end
 
---- Run `stage` over the rows the current filters leave. `wanted` names the
+--- Run `stage` over the rows the current filters leave. `columns` names the
 --- columns `stage` addresses, so the opening `select` takes those columns.
 ---@param query csv.Query
----@param wanted csv.Column[]
+---@param columns csv.Column[]
 ---@param stage fun(positions: table<integer, integer>): string
 ---@return string[]
-local function narrowed_argv(query, wanted, stage)
-  local stages, positions = pipeline.narrowing_stages(query, wanted)
+local function narrowed_argv(query, columns, stage)
+  local stages, positions = pipeline.narrowing_stages(query, columns)
   table.insert(stages, stage(positions))
   return run_query(query, table.concat(stages, " | "))
 end
@@ -299,8 +300,8 @@ end
 ---@param column csv.Column|nil
 ---@return string[]
 function M.stats(query, column)
-  local wanted = column and { column } or query.file.columns
-  return narrowed_argv(query, wanted, function(positions)
+  local columns = column and { column } or query.file.columns
+  return narrowed_argv(query, columns, function(positions)
     local stage = "stats -A"
     if column then
       stage = stage .. " -s " .. positions[column.column_id]

@@ -46,8 +46,8 @@ function M.cut_column(self, column, append)
   if not append then
     self.clipboard = {}
   end
-  for _, held in ipairs(self.clipboard) do
-    if held.column_id == column.column_id then
+  for _, cut in ipairs(self.clipboard) do
+    if cut.column_id == column.column_id then
       column.hidden = true
       return
     end
@@ -56,7 +56,7 @@ function M.cut_column(self, column, append)
   column.hidden = true
 end
 
---- Put the held columns back, beside `column`, in the order they were cut.
+--- Put the cut columns back, beside `column`, in the order they were cut.
 ---@param column csv.Column|nil Paste at the end when absent.
 ---@param before boolean
 ---@return boolean pasted
@@ -65,22 +65,22 @@ function M.paste_columns(self, column, before)
     return false
   end
 
-  for _, held in ipairs(self.clipboard) do
-    local from = index_of(self, held)
+  for _, cut in ipairs(self.clipboard) do
+    local from = index_of(self, cut)
     if from then
       table.remove(self.columns, from)
     end
   end
 
-  local at = #self.columns + 1
+  local insert_at = #self.columns + 1
   local position = column and index_of(self, column)
   if position then
-    at = before and position or position + 1
+    insert_at = before and position or position + 1
   end
 
-  for offset, held in ipairs(self.clipboard) do
-    held.hidden = false
-    table.insert(self.columns, at + offset - 1, held)
+  for offset, cut in ipairs(self.clipboard) do
+    cut.hidden = false
+    table.insert(self.columns, insert_at + offset - 1, cut)
   end
   self.clipboard = {}
   return true
@@ -131,14 +131,14 @@ function M.show_marked_columns_only(self)
     return M.show_all_columns(self)
   end
 
-  local any = false
+  local has_marked_column = false
   for _, column in ipairs(self.columns) do
     if self.marked_columns[column.column_id] then
-      any = true
+      has_marked_column = true
       break
     end
   end
-  if not any then
+  if not has_marked_column then
     return
   end
 

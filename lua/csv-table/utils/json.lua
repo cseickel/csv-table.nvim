@@ -16,8 +16,8 @@ local INDENT = "  "
 ---@param value string
 ---@return boolean
 function M.is_json(value)
-  local first = value:match("^%s*(.)")
-  if first ~= "{" and first ~= "[" then
+  local first_character = value:match("^%s*(.)")
+  if first_character ~= "{" and first_character ~= "[" then
     return false
   end
   return (pcall(vim.json.decode, value))
@@ -29,18 +29,18 @@ end
 ---@return string[]
 function M.indent(value)
   local lines = {}
-  local current = {}
+  local line_parts = {}
   local depth = 0
   local in_string = false
   local escaped = false
 
   local function push(text)
-    current[#current + 1] = text
+    line_parts[#line_parts + 1] = text
   end
 
   local function newline()
-    lines[#lines + 1] = table.concat(current)
-    current = { string.rep(INDENT, depth) }
+    lines[#lines + 1] = table.concat(line_parts)
+    line_parts = { string.rep(INDENT, depth) }
   end
 
   local index = 1
@@ -86,7 +86,7 @@ function M.indent(value)
     index = index + 1
   end
 
-  lines[#lines + 1] = table.concat(current)
+  lines[#lines + 1] = table.concat(line_parts)
   return lines
 end
 

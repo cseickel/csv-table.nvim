@@ -4,10 +4,10 @@ local page = require("csv-table.page")
 --- An empty page read at `version`, which is all `after_read` looks at.
 ---@param version string
 ---@return csv.Page
-local function drawn(version)
-  local read = page.empty()
-  read.file_version = version
-  return read
+local function page_at(version)
+  local empty_page = page.empty()
+  empty_page.file_version = version
+  return empty_page
 end
 
 --- Settle the query against one read, then read again after `change`, so the
@@ -16,16 +16,16 @@ end
 ---@param reader table
 ---@param change fun()
 local function read_again(query, reader, change)
-  local state = query:after_read(query:state(page.empty()), drawn("first"))
+  local state = query:after_read(query:state(page.empty()), page_at("first"))
   reader.counts = 0
   change()
-  query:after_read(state, drawn("first"))
+  query:after_read(state, page_at("first"))
 end
 
 describe("query:after_read", function()
   it("counts on the first read, where the file version arrives", function()
     local query, _, reader = fixture.duplicated_headers()
-    query:after_read(query:state(page.empty()), drawn("first"))
+    query:after_read(query:state(page.empty()), page_at("first"))
     equals(reader.counts, 1)
   end)
 
@@ -37,10 +37,10 @@ describe("query:after_read", function()
 
   it("counts when the file changed under the query", function()
     local query, _, reader = fixture.duplicated_headers()
-    local state = query:after_read(query:state(page.empty()), drawn("first"))
+    local state = query:after_read(query:state(page.empty()), page_at("first"))
     reader.counts = 0
 
-    query:after_read(state, drawn("second"))
+    query:after_read(state, page_at("second"))
     equals(reader.counts, 1)
   end)
 
@@ -97,7 +97,7 @@ describe("query:after_read", function()
   it("holds what the reader answered", function()
     local query, _, reader = fixture.duplicated_headers()
     reader.answer = 500
-    query:after_read(query:state(page.empty()), drawn("first"))
+    query:after_read(query:state(page.empty()), page_at("first"))
     equals(query.row_count, 500)
   end)
 end)
@@ -107,9 +107,9 @@ end)
 ---@param change fun()
 ---@return boolean
 local function moved_by(query, change)
-  local state = query:after_read(query:state(page.empty()), drawn("first"))
+  local state = query:after_read(query:state(page.empty()), page_at("first"))
   change()
-  local _, moved = query:after_read(state, drawn("first"))
+  local _, moved = query:after_read(state, page_at("first"))
   return moved
 end
 

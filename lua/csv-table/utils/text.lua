@@ -27,14 +27,14 @@ function M.truncate(value, length)
     return "…"
   end
 
-  local kept = {}
+  local characters = {}
   for character in value:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
-    if #kept + 1 >= length then
+    if #characters + 1 >= length then
       break
     end
-    kept[#kept + 1] = character
+    characters[#characters + 1] = character
   end
-  return table.concat(kept) .. "…"
+  return table.concat(characters) .. "…"
 end
 
 return M

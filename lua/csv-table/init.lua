@@ -3,7 +3,7 @@ The entry point, the module a user's config requires and calls `setup` on.
 
 - `setup` takes `keymaps`, `extensions` and `page_size`, then hands the extensions
   to `csv-table.autocmds`, which registers the read command over them
-- the `CsvTable` command opens any file as a table, whatever its name, by claiming
+- the `CsvTable` command opens any file as a table, whatever its name, by capturing
   its buffer through `csv-table.autocmds`
 - `status` is the statusline: the sheet, the rows on the page, the filters, the
   marks, the sort and the cut columns
@@ -110,8 +110,8 @@ local DISABLE = "--disable"
 --- Read the current buffer's file as text instead of as a table.
 ---
 --- A later `:edit` goes through the read command registered over `extensions`, which
---- is why a name `extensions` covers comes back as a table while a name `:CsvTable`
---- claimed stays text: the claim went with the table.
+--- is why a name `extensions` captures comes back as a table while a name `:CsvTable`
+--- captured stays text: the capture went with the table.
 local function disable_current()
   local bufnr = vim.api.nvim_get_current_buf()
   if not buffer.get(bufnr) then
@@ -192,7 +192,7 @@ function M.setup(opts)
 
     local bufnr = vim.fn.bufadd(full)
     -- Reading the file again is what draws the table, and nvim refuses to read over
-    -- unsaved changes. Refusing here leaves the buffer as it was, where claiming it
+    -- unsaved changes. Refusing here leaves the buffer as it was, where capturing it
     -- first would leave it half taken over.
     if vim.bo[bufnr].modified then
       return vim.notify(
@@ -206,8 +206,8 @@ function M.setup(opts)
     -- `bufadd` leaves a buffer off the buffer list, where `:ls`, `:bnext` and every
     -- picker that reads the list would miss it.
     vim.bo[bufnr].buflisted = true
-    if not autocmds.covers(full) then
-      autocmds.claim(bufnr)
+    if not autocmds.is_captured_by_extension(full) then
+      autocmds.capture(bufnr)
     end
 
     -- Loading an unloaded buffer fires the read command on its own. A buffer

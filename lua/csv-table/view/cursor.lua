@@ -36,25 +36,25 @@ end
 --- cursor set inside a multi-byte character to the start of that character.
 ---@param cell csv.Cell
 local function park(self, cell)
-  local drawn = self.buffer.page
-  local column_number = drawn:column_number(cell.column)
+  local current_page = self.buffer.page
+  local column_number = current_page:column_number(cell.column)
   if not column_number then
     return
   end
-  local range = drawn:cell_ranges(cell.row.buffer_line)[column_number]
+  local range = current_page:cell_ranges(cell.row.buffer_line)[column_number]
   if not range then
     return
   end
 
   -- The column alone, so a render that drops the row still keeps the end the
   -- cursor was parked at.
-  local previous = self.active and drawn:column_by_id(self.active.column_id)
-  local was = previous and drawn:column_number(previous)
+  local previous_column = self.active and current_page:column_by_id(self.active.column_id)
+  local previous_number = previous_column and current_page:column_number(previous_column)
 
   local edge = "left"
-  if was and column_number > was then
+  if previous_number and column_number > previous_number then
     edge = "right"
-  elseif was == column_number then
+  elseif previous_number == column_number then
     edge = self.edge
   end
   self.edge = edge
@@ -101,20 +101,20 @@ end
 --- reaches the border line above and `cell_at` brings it back.
 ---@return csv.Cell|nil
 function M.moved_cell(self)
-  local landed = self:physical_cell()
-  if not landed or not self.active then
-    return landed
+  local cursor_cell = self:physical_cell()
+  if not cursor_cell or not self.active then
+    return cursor_cell
   end
 
-  local stayed = landed.row.row_id == self.active.row_id
-    and landed.column.column_id == self.active.column_id
+  local same_cell = cursor_cell.row.row_id == self.active.row_id
+    and cursor_cell.column.column_id == self.active.column_id
   local byte = vim.api.nvim_win_get_cursor(self.window)[2]
-  if not stayed or byte == self.position[2] then
-    return landed
+  if not same_cell or byte == self.position[2] then
+    return cursor_cell
   end
 
   local columns = byte > self.position[2] and 1 or -1
-  return self.buffer.page:step_cell(landed, { rows = 0, columns = columns })
+  return self.buffer.page:step_cell(cursor_cell, { rows = 0, columns = columns })
 end
 
 --- Make `cell` active and park the real cursor in it.

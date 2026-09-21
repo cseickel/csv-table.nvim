@@ -23,12 +23,12 @@ local augroup
 
 -- The extensions the read command was registered over, lowercased.
 ---@type table<string, true>
-local managed_extensions = {}
+local captured_by_extension = {}
 
 -- This is a record of every buffer that we are managing, which means we
 -- interrupt the normal nvim read and replace it with our own read via xan.
 ---@type table<integer, true>
-local managed_buffers = {}
+local captured_by_command = {}
 
 local function buffer()
   return require("csv-table.buffer")
@@ -91,9 +91,9 @@ end
 --- the cursor keeps what the window before it decided. The second read catches that
 --- once the window has finished opening.
 local function follow_current_window()
-  guicursor.update_guicursor(buffer().for_window(0))
+  guicursor.update(buffer().for_window(0))
   vim.defer_fn(function()
-    guicursor.update_guicursor(buffer().for_window(0))
+    guicursor.update(buffer().for_window(0))
   end, 100)
 end
 
@@ -104,7 +104,7 @@ function M.group()
   return augroup
 end
 
---- Whether the read command `apply` registered already takes `path`. A claim on a
+--- Whether the read command `apply` registered already takes `path`. Capturing a
 --- path it takes would be a second autocommand on the same read.
 ---
 --- An extension holds periods of its own, so this asks what the pattern asks: does
@@ -112,9 +112,9 @@ end
 --- not, since `*.test.ps1` has nothing for the `*` to match in `test.ps1`.
 ---@param path string
 ---@return boolean
-function M.covers(path)
+function M.is_captured_by_extension(path)
   local name = vim.fn.fnamemodify(path, ":t"):lower()
-  for extension in pairs(managed_extensions) do
+  for extension in pairs(captured_by_extension) do
     if name:sub(-#extension - 1) == "." .. extension then
       return true
     end
@@ -124,17 +124,17 @@ end
 
 --- Read `bufnr` as a table from here on, regardless of extension.
 ---@param bufnr integer
-function M.claim(bufnr)
-  managed_buffers[bufnr] = true
+function M.capture(bufnr)
+  captured_by_command[bufnr] = true
 
   -- nvim runs every autocommand matching a read, so a second one of ours here would
   -- read the file twice.
-  local already_claimed = vim.api.nvim_get_autocmds({
+  local already_captured = vim.api.nvim_get_autocmds({
     event = "BufReadCmd",
     buffer = bufnr,
     group = augroup,
   })
-  if #already_claimed > 0 then
+  if #already_captured > 0 then
     return
   end
 
@@ -147,12 +147,12 @@ function M.claim(bufnr)
   })
 end
 
---- Drop everything this buffer holds from this plugin, the claim included, so nvim
+--- Drop everything this buffer holds from this plugin, the capture included, so nvim
 --- reads it as a plain file from here on. Only meaningful when the file was not
 --- an extension we are configured to handle automatically.
 ---@param bufnr integer
 function M.release(bufnr)
-  managed_buffers[bufnr] = nil
+  captured_by_command[bufnr] = nil
   vim.api.nvim_clear_autocmds({ buffer = bufnr, group = augroup })
   clear_keymaps(bufnr)
 end
@@ -174,10 +174,10 @@ end
 function M.apply(extensions)
   augroup = vim.api.nvim_create_augroup("csv-table", { clear = true })
 
-  managed_extensions = {}
+  captured_by_extension = {}
   local patterns = {}
   for index, extension in ipairs(extensions) do
-    managed_extensions[extension:lower()] = true
+    captured_by_extension[extension:lower()] = true
     patterns[index] = any_case(extension)
   end
 
@@ -270,14 +270,14 @@ function M.apply(extensions)
   })
 
   -- Creating the group cleared what every open table had registered for itself,
-  -- claims included, so each one gets it back. A claim on a wiped buffer is the only
-  -- one with nothing to go back to.
+  -- captures included, so each one gets it back. A capture on a wiped buffer is the
+  -- only one with nothing to go back to.
   buffer().rebind_all()
-  for bufnr in pairs(managed_buffers) do
+  for bufnr in pairs(captured_by_command) do
     if vim.api.nvim_buf_is_valid(bufnr) then
-      M.claim(bufnr)
+      M.capture(bufnr)
     else
-      managed_buffers[bufnr] = nil
+      captured_by_command[bufnr] = nil
     end
   end
 end

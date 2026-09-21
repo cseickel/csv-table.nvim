@@ -62,14 +62,14 @@ function M.row(view)
   query.reader:row_values(query, cell.row.row_id, function(values)
     -- Every column of the file, in file order, so a column hidden from the table is
     -- still answered for.
-    local named = {}
+    local fields = {}
     local width = 0
     for index, column in ipairs(query.file.columns) do
-      named[index] = { name = column.label, value = values[column.column_id] or "" }
+      fields[index] = { name = column.label, value = values[column.column_id] or "" }
       width = math.max(width, text.length(column.label))
     end
 
-    picker.choose(named, {
+    picker.choose(fields, {
       prompt = "row " .. cell.row.row_number,
       format_item = function(field)
         local padding = string.rep(" ", width - text.length(field.name))

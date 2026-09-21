@@ -88,7 +88,7 @@ end
 ---@param values string[]
 ---@return csv.Format
 function M.analyze_column(values)
-  local decimals = {}
+  local decimal_counts = {}
   local numeric = true
   local all_dates = true
   local has_values = false
@@ -99,7 +99,7 @@ function M.analyze_column(values)
       if numeric then
         local count = M.decimals(value)
         if count then
-          table.insert(decimals, count)
+          table.insert(decimal_counts, count)
         else
           numeric = false
         end
@@ -118,12 +118,12 @@ function M.analyze_column(values)
     return M.plain()
   end
 
-  table.sort(decimals)
+  table.sort(decimal_counts)
   -- The last few values of a float32 column can need more decimals than the
   -- rest, so the high percentile keeps one row in six hundred from widening
   -- every row. Under a hundred values it resolves to the maximum, so a small
   -- file formats to whatever its widest value needs.
-  local precision = percentile(decimals, 0.99)
+  local precision = percentile(decimal_counts, 0.99)
   if precision == 0 then
     return { kind = "int", precision = 0 }
   end

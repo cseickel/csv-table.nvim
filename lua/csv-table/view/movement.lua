@@ -21,7 +21,7 @@ local function kind_of_mode()
 end
 
 --- Draw the selection and leave it in the two marks.
-local function drawn(self)
+local function redraw(self)
   self:mark_selection()
   self:draw()
 end
@@ -33,7 +33,7 @@ end
 local function take_head(self, cell)
   self:take_visual()
   self:extend_selection(cell)
-  drawn(self)
+  redraw(self)
 end
 
 --- `go_to` and `step` end here. In a visual mode the head follows `cell`, and in
@@ -43,7 +43,7 @@ end
 --- selected is a cursor move nvim made on its way in, `gv` putting the cursor on a
 --- corner before `start_extending` has read that corner.
 ---@param cell csv.Cell|nil Where the cell landed, absent when it could not move.
-local function moved(self, cell)
+local function after_move(self, cell)
   if cell and mode.in_visual() and self:has_selection() then
     take_head(self, cell)
   end
@@ -68,14 +68,14 @@ end
 --- Move the active cell to `cell`.
 ---@param cell csv.Cell|nil
 function M.go_to(self, cell)
-  moved(self, self:move_to(cell))
+  after_move(self, self:move_to(cell))
 end
 
 --- Move the active cell `rows` rows and `columns` columns from where it is.
 ---@param rows integer
 ---@param columns integer
 function M.step(self, rows, columns)
-  moved(self, self:move_by(rows, columns))
+  after_move(self, self:move_by(rows, columns))
 end
 
 --- A click in this window is about to move the cursor, and lands exactly where the
@@ -143,23 +143,23 @@ end
 --- reselected out of `'<` and `'>`, which hold the cells this module last wrote
 --- there, so the old block comes back.
 function M.start_extending(self)
-  local standing = self:active_cell()
-  if self:has_selection() and standing then
-    self:extend_selection(standing)
+  local active_cell = self:active_cell()
+  if self:has_selection() and active_cell then
+    self:extend_selection(active_cell)
     self:set_kind(kind_of_mode())
     self:set_visual()
-    return drawn(self)
+    return redraw(self)
   end
 
-  local other = vim.fn.getpos("v")
-  local anchor = self.buffer.page:cell_at(other[2], other[3] - 1)
+  local anchor_position = vim.fn.getpos("v")
+  local anchor = self.buffer.page:cell_at(anchor_position[2], anchor_position[3] - 1)
   local head = self:physical_cell()
   if anchor and head then
     self:select_cells(anchor, head, kind_of_mode())
     -- `gv` moves the cursor to a corner, and the active cell has to come along,
     -- because every move from here takes the head with it.
     self:move_to(head)
-    drawn(self)
+    redraw(self)
   end
 end
 
@@ -168,7 +168,7 @@ end
 --- from here on, the way it does in a buffer of text.
 function M.change_kind(self)
   self:set_kind(kind_of_mode())
-  drawn(self)
+  redraw(self)
 end
 
 --- Swap which end of the selection moves, and take the active cell to it. This is
@@ -181,7 +181,7 @@ function M.swap_ends(self)
   self.anchor, self.head = self.head, self.anchor
   self:move_to(self.buffer.page:cell_of(self.head))
   self:set_visual()
-  drawn(self)
+  redraw(self)
 end
 
 --- Pick out the block `kind` covers around the active cell, leaving the cell where
@@ -193,7 +193,7 @@ function M.select_kind(self, kind)
     return
   end
   self:select_cells(cell, cell, kind)
-  drawn(self)
+  redraw(self)
 end
 
 --- Drop the selection, leaving the block it was in the two marks, so `gv` brings it

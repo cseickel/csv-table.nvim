@@ -141,8 +141,8 @@ function M.page(output, opts)
   local rows_by_number, rows_by_id, rows_by_line = {}, {}, {}
   for buffer_line = first_line, last_line do
     local line = lines[buffer_line]
-    local cell = scan(line)[1]
-    local row_id = cell and tonumber(trim(line:sub(cell.from + 1, cell.to)))
+    local id_range = scan(line)[1]
+    local row_id = id_range and tonumber(trim(line:sub(id_range.from + 1, id_range.to)))
     if row_id then
       local row = {
         row_id = row_id,

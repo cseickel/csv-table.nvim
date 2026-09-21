@@ -12,8 +12,12 @@ local M = {}
 ---@param column csv.Column
 ---@param direction "asc"|"desc"
 function M.sort_by(self, column, direction)
-  local only = #self.sort_keys == 1 and self.sort_keys[1]
-  if only and only.column.column_id == column.column_id and only.direction == direction then
+  local sole_key = #self.sort_keys == 1 and self.sort_keys[1]
+  if
+    sole_key
+    and sole_key.column.column_id == column.column_id
+    and sole_key.direction == direction
+  then
     self.sort_keys = {}
   else
     self.sort_keys = {

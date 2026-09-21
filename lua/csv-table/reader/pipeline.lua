@@ -2,7 +2,7 @@
 Builds the argument for `xan run '<pipeline>' <file>`, the one process that draws
 a page.
 
-The opening `select | enum` fixes the shape: the row id at 0 and each carried
+The opening `select | enum` fixes the shape: the row id at 0 and each stream
 column at its place in the list, so every stage below names a column by that
 number. Pure Lua, so it runs without nvim.
 ]]
@@ -20,22 +20,22 @@ function M.quote(value)
 end
 
 --- The columns the run carries, and where each one sits once the row id is
---- prepended. `wanted` leads, and any column a sort key or a filter names joins
+--- prepended. `columns` leads, and any column a sort key or a filter names joins
 --- the end, so the expressions have something to address.
 ---@param query csv.Query
----@param wanted csv.Column[]
----@return csv.Column[] carried
+---@param columns csv.Column[]
+---@return csv.Column[] stream_columns
 ---@return table<integer, integer> position_by_column_id
-function M.carried_columns(query, wanted)
-  local carried, seen = {}, {}
+function M.stream_columns(query, columns)
+  local stream_columns, seen = {}, {}
   local function add(column)
     if column and not seen[column.column_id] then
       seen[column.column_id] = true
-      table.insert(carried, column)
+      table.insert(stream_columns, column)
     end
   end
 
-  for _, column in ipairs(wanted) do
+  for _, column in ipairs(columns) do
     add(column)
   end
   for _, key in ipairs(query.sort_keys) do
@@ -46,21 +46,21 @@ function M.carried_columns(query, wanted)
   end
 
   local positions = {}
-  for index, column in ipairs(carried) do
+  for index, column in ipairs(stream_columns) do
     positions[column.column_id] = index
   end
-  return carried, positions
+  return stream_columns, positions
 end
 
---- The two stages that fix the shape: take the carried columns out of the file by
+--- The two stages that fix the shape: take the stream columns out of the file by
 --- their file positions, then prepend the row id, which is the row's position in
 --- the file and survives every filter and sort below.
 ---@param query csv.Query
----@param carried csv.Column[]
+---@param stream_columns csv.Column[]
 ---@return string[]
-local function opening_stages(query, carried)
+local function opening_stages(query, stream_columns)
   local ids = {}
-  for index, column in ipairs(carried) do
+  for index, column in ipairs(stream_columns) do
     ids[index] = column.column_id
   end
 
@@ -184,12 +184,12 @@ end
 --- The stages that leave exactly the rows the filters allow. `count`, `stats` and
 --- `frequency` open with these, so they report on the rows the buffer is showing.
 ---@param query csv.Query
----@param wanted csv.Column[] Columns the caller needs to address afterwards.
+---@param columns csv.Column[] Columns the caller needs to address afterwards.
 ---@return string[] stages
 ---@return table<integer, integer> position_by_column_id
-function M.narrowing_stages(query, wanted)
-  local carried, positions = M.carried_columns(query, wanted)
-  local stages = opening_stages(query, carried)
+function M.narrowing_stages(query, columns)
+  local stream_columns, positions = M.stream_columns(query, columns)
+  local stages = opening_stages(query, stream_columns)
 
   local filters = query:effective_filters()
   if #filters > 0 then
@@ -247,15 +247,15 @@ function M.build(query, display_columns)
   -- terminal
   -- `-t table` is named, since `XAN_VIEW_ARGS` can change the default theme and
   -- the syntax file is written for this one
-  local view = string.format(
+  local view_stage = string.format(
     "view --color never -M -I --repeat-headers never -e -A -t table --cols %d",
     view_cols(query, display_columns)
   )
-  local aligned = right_aligned(query, display_columns)
-  if aligned then
-    view = view .. " -r " .. M.quote(aligned)
+  local right_aligned_positions = right_aligned(query, display_columns)
+  if right_aligned_positions then
+    view_stage = view_stage .. " -r " .. M.quote(right_aligned_positions)
   end
-  table.insert(stages, view)
+  table.insert(stages, view_stage)
 
   return table.concat(stages, " | ")
 end

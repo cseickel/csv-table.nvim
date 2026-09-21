@@ -36,11 +36,11 @@ end
 
 ---@param value any
 ---@return string
-local function shown(value)
+local function describe_value(value)
   if type(value) == "table" then
     local parts = {}
     for _, item in ipairs(value) do
-      table.insert(parts, shown(item))
+      table.insert(parts, describe_value(item))
     end
     return "{" .. table.concat(parts, ", ") .. "}"
   end
@@ -51,14 +51,14 @@ end
 ---@param expected any
 function M.equals(actual, expected)
   if actual ~= expected then
-    error(string.format("expected %s, got %s", shown(expected), shown(actual)), 2)
+    error(string.format("expected %s, got %s", describe_value(expected), describe_value(actual)), 2)
   end
 end
 
 ---@param value any
 function M.truthy(value)
   if not value then
-    error("expected a value, got " .. shown(value), 2)
+    error("expected a value, got " .. describe_value(value), 2)
   end
 end
 

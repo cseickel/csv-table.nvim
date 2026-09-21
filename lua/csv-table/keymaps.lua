@@ -143,15 +143,15 @@ local function keycodes(key)
   return vim.api.nvim_replace_termcodes(key, true, true, true)
 end
 
---- Whether binding `key` inside a table buffer would spoil one of `bound`. A
+--- Whether binding `key` inside a table buffer would spoil one of `bound_keys`. A
 --- key that starts another one, `s` against `sa`, leaves both waiting on
 --- `timeoutlen` and one of them out of reach.
----@param key string In keycodes, as the members of `bound` are.
----@param bound string[]
+---@param key string In keycodes, as the members of `bound_keys` are.
+---@param bound_keys string[]
 ---@return boolean
-local function collides(key, bound)
-  for _, taken in ipairs(bound) do
-    if key:sub(1, #taken) == taken or taken:sub(1, #key) == key then
+local function collides(key, bound_keys)
+  for _, bound_key in ipairs(bound_keys) do
+    if key:sub(1, #bound_key) == bound_key or bound_key:sub(1, #key) == key then
       return true
     end
   end
@@ -166,6 +166,12 @@ function M.built_in(value)
   return value:match("^" .. BUILT_IN .. "(.+)$")
 end
 
+---@class csv.Binding
+---@field key string
+---@field action string|nil Names an action in `csv-table.actions`.
+---@field command string|nil An nvim command to run in its place.
+---@field stays_visual boolean Whether the action leaves nvim in its visual mode.
+
 --- Every key to bind and what it runs, an action name or an nvim command, with
 --- each `BUILT_IN_` key turned into the keys that run that command in this
 --- user's config.
@@ -175,68 +181,62 @@ end
 --- left alone, since the plugin that defined it is the only thing meant to run
 --- it. A mapping written as a Lua function has no key sequence to read, so a
 --- user who wrapped `l` in one is taken to have kept `l` for themselves.
----@class csv.Binding
----@field key string
----@field action string|nil Names an action in `csv-table.actions`.
----@field command string|nil An nvim command to run in its place.
----@field stays_visual boolean Whether the action leaves nvim in its visual mode.
-
 ---@return csv.Binding[]
 function M.resolve()
-  local stays = {}
+  local visual_actions = {}
   for _, action in ipairs(M.stays_visual) do
-    stays[action] = true
+    visual_actions[action] = true
   end
 
   local bindings = {}
-  local literal = {}
-  local commands = {}
+  local literal_keys = {}
+  local built_in_by_key = {}
 
   ---@param key string
-  ---@param entry csv.Binding
-  local function bind(key, entry)
+  ---@param binding csv.Binding
+  local function bind(key, binding)
     table.insert(bindings, {
       key = key,
-      action = entry.action,
-      command = entry.command,
-      stays_visual = entry.stays_visual,
+      action = binding.action,
+      command = binding.command,
+      stays_visual = binding.stays_visual,
     })
   end
 
-  for key, runs in pairs(M.map) do
-    if runs then
-      local command = M.built_in(runs)
-      local entry = {
+  for key, target in pairs(M.map) do
+    if target then
+      local command = M.built_in(target)
+      local binding = {
         key = key,
-        action = command == nil and runs or nil,
+        action = command == nil and target or nil,
         command = command,
-        stays_visual = stays[runs] == true,
+        stays_visual = visual_actions[target] == true,
       }
 
-      local named = M.built_in(key)
-      if named then
-        commands[keycodes(named)] = { key = named, entry = entry }
+      local command_name = M.built_in(key)
+      if command_name then
+        built_in_by_key[keycodes(command_name)] = { key = command_name, binding = binding }
       else
-        table.insert(literal, keycodes(key))
-        bind(key, entry)
+        table.insert(literal_keys, keycodes(key))
+        bind(key, binding)
       end
     end
   end
 
-  local claimed = {}
+  local user_mapped = {}
   for _, mapping in ipairs(vim.api.nvim_get_keymap("n")) do
     local lhs = keycodes(mapping.lhs)
-    claimed[lhs] = true
+    user_mapped[lhs] = true
 
-    local wanted = mapping.rhs and mapping.noremap == 1 and commands[keycodes(mapping.rhs)]
-    if wanted and not mapping.lhs:find("^<Plug>") and not collides(lhs, literal) then
-      bind(mapping.lhs, wanted.entry)
+    local match = mapping.rhs and mapping.noremap == 1 and built_in_by_key[keycodes(mapping.rhs)]
+    if match and not mapping.lhs:find("^<Plug>") and not collides(lhs, literal_keys) then
+      bind(mapping.lhs, match.binding)
     end
   end
 
-  for named, wanted in pairs(commands) do
-    if not claimed[named] then
-      bind(wanted.key, wanted.entry)
+  for command_key, built_in in pairs(built_in_by_key) do
+    if not user_mapped[command_key] then
+      bind(built_in.key, built_in.binding)
     end
   end
 

@@ -42,20 +42,20 @@ local STAT_FIELDS = {
 function M.bindings()
   local actions = require("csv-table.actions")
 
-  local keys = {}
+  local keys_by_action = {}
   for _, binding in ipairs(keymaps.resolve()) do
     if binding.action then
-      keys[binding.action] = keys[binding.action] or {}
-      table.insert(keys[binding.action], binding.key)
+      keys_by_action[binding.action] = keys_by_action[binding.action] or {}
+      table.insert(keys_by_action[binding.action], binding.key)
     end
   end
 
   local bindings = {}
   for name, action in pairs(actions.get_all_actions()) do
-    local bound = keys[name] or {}
-    table.sort(bound)
+    local bound_keys = keys_by_action[name] or {}
+    table.sort(bound_keys)
     table.insert(bindings, {
-      key = table.concat(bound, " "),
+      key = table.concat(bound_keys, " "),
       name = name,
       description = action.description,
     })

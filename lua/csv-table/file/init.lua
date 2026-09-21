@@ -36,9 +36,9 @@ File.__index = File
 ---@param names string[]
 ---@return csv.Column[]
 function M.columns_from_names(names)
-  local totals = {}
+  local name_counts = {}
   for _, name in ipairs(names) do
-    totals[name] = (totals[name] or 0) + 1
+    name_counts[name] = (name_counts[name] or 0) + 1
   end
 
   local seen = {}
@@ -48,7 +48,7 @@ function M.columns_from_names(names)
     seen[name] = nth + 1
     columns[index] = {
       name = name,
-      label = totals[name] > 1 and (name .. "[" .. nth .. "]") or name,
+      label = name_counts[name] > 1 and (name .. "[" .. nth .. "]") or name,
       column_id = index - 1,
       hidden = false,
     }
@@ -185,12 +185,12 @@ end
 ---@param column csv.Column
 ---@return csv.Format
 function File:format_of(column)
-  local existing = self.formats[column.column_id]
-  if not existing then
-    existing = format.plain()
-    self.formats[column.column_id] = existing
+  local column_format = self.formats[column.column_id]
+  if not column_format then
+    column_format = format.plain()
+    self.formats[column.column_id] = column_format
   end
-  return existing
+  return column_format
 end
 
 ---@param column csv.Column
@@ -207,8 +207,8 @@ end
 ---@param drawn_width integer
 ---@return integer
 function File:working_width(column, drawn_width)
-  local existing = self.formats[column.column_id]
-  return existing and existing.width or drawn_width
+  local column_format = self.formats[column.column_id]
+  return column_format and column_format.width or drawn_width
 end
 
 --- Show more or fewer decimals. Asking for decimals on a column that is not a
@@ -216,9 +216,10 @@ end
 ---@param column csv.Column
 ---@param delta integer
 function File:adjust_precision(column, delta)
-  local existing = self:format_of(column)
-  existing.precision = math.max(0, math.min(existing.precision + delta, format.MAX_PRECISION))
-  existing.kind = existing.precision > 0 and "float" or "int"
+  local column_format = self:format_of(column)
+  column_format.precision =
+    math.max(0, math.min(column_format.precision + delta, format.MAX_PRECISION))
+  column_format.kind = column_format.precision > 0 and "float" or "int"
 end
 
 --- Use a printf specification instead of every other formatting rule. An empty
@@ -235,9 +236,9 @@ end
 ---@param column csv.Column
 ---@param opts { width: integer, align: "left"|"center"|"right"|nil }
 function File:set_padding(column, opts)
-  local existing = self:format_of(column)
-  existing.width = math.max(1, opts.width)
-  existing.align = opts.align or existing.align or format.natural_align(existing)
+  local column_format = self:format_of(column)
+  column_format.width = math.max(1, opts.width)
+  column_format.align = opts.align or column_format.align or format.natural_align(column_format)
 end
 
 return M

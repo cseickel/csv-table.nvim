@@ -67,15 +67,15 @@ end
 ---@param window integer
 ---@return csv.View
 function View:clone(window)
-  local made = M.new(self.buffer, window)
-  made.active = self.active and vim.deepcopy(self.active)
-  made.position = vim.deepcopy(self.position)
-  made.edge = self.edge
-  made.anchor = self.anchor and vim.deepcopy(self.anchor)
-  made.head = self.head and vim.deepcopy(self.head)
-  made.kind = self.kind
-  made.viewport = self.viewport and vim.deepcopy(self.viewport)
-  return made
+  local copy = M.new(self.buffer, window)
+  copy.active = self.active and vim.deepcopy(self.active)
+  copy.position = vim.deepcopy(self.position)
+  copy.edge = self.edge
+  copy.anchor = self.anchor and vim.deepcopy(self.anchor)
+  copy.head = self.head and vim.deepcopy(self.head)
+  copy.kind = self.kind
+  copy.viewport = self.viewport and vim.deepcopy(self.viewport)
+  return copy
 end
 
 --- Whether the window still shows this table, which is what says the view is
@@ -105,7 +105,9 @@ function View:column()
 end
 
 ---@param cell csv.Cell
-local function extmark(self, cell, group, priority)
+---@param group string
+---@param priority integer
+local function draw_cell(self, cell, group, priority)
   local page = self.buffer.page
   local column_number = page:column_number(cell.column)
   if not column_number then
@@ -133,8 +135,8 @@ function View:draw()
   local bounds = self:bounds()
   if bounds then
     for line = bounds.top, bounds.bottom do
-      local cells = self.buffer.page:cell_ranges(line)
-      local first, last = cells[bounds.left], cells[bounds.right]
+      local ranges = self.buffer.page:cell_ranges(line)
+      local first, last = ranges[bounds.left], ranges[bounds.right]
       if first and last then
         vim.api.nvim_buf_set_extmark(self.buffer.bufnr, namespace, line - 1, first.from, {
           end_col = last.to,
@@ -147,7 +149,7 @@ function View:draw()
 
   local cell = self:active_cell()
   if cell then
-    extmark(self, cell, "CsvActiveCell", CELL_PRIORITY)
+    draw_cell(self, cell, "CsvActiveCell", CELL_PRIORITY)
   end
 end
 

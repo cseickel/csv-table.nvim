@@ -12,7 +12,7 @@ local M = {}
 
 -- The modes a table buffer is read in. The command line keeps its cursor, so `:`,
 -- `/` and every `vim.ui.input` prompt can be typed into.
-local HIDDEN = "n-v-o:CsvHiddenCursor"
+local HIDDEN_CURSOR_ENTRY = "n-v-o:CsvHiddenCursor"
 
 --- Rebuild `guicursor` with this plugin's entry either in or out, leaving every
 --- other entry as the plugin that wrote it left it.
@@ -20,24 +20,24 @@ local HIDDEN = "n-v-o:CsvHiddenCursor"
 local function set_guicursor(setting)
   local entries = {}
   for _, entry in ipairs(vim.split(vim.o.guicursor, ",", { plain = true })) do
-    if entry ~= HIDDEN then
+    if entry ~= HIDDEN_CURSOR_ENTRY then
       entries[#entries + 1] = entry
     end
   end
   if setting == "hidden" then
-    table.insert(entries, HIDDEN)
+    table.insert(entries, HIDDEN_CURSOR_ENTRY)
   end
 
-  local desired = table.concat(entries, ",")
-  if vim.o.guicursor ~= desired then
-    vim.o.guicursor = desired
+  local new_value = table.concat(entries, ",")
+  if vim.o.guicursor ~= new_value then
+    vim.o.guicursor = new_value
   end
 end
 
 --- Hide the real cursor while the user is in a table, and show it again anywhere
 --- else.
 ---@param buffer csv.Buffer|nil The table the current window holds, if it holds one.
-function M.update_guicursor(buffer)
+function M.update(buffer)
   set_guicursor(buffer and "hidden" or "normal")
 end
 

@@ -22,11 +22,11 @@ end
 ---@param bounds csv.Bounds
 ---@return csv.Block|nil
 local function block_of(self, bounds)
-  local drawn = self.buffer.page
+  local current_page = self.buffer.page
 
   local columns = {}
   for column_number = bounds.left, bounds.right do
-    local column = drawn:column_at(column_number)
+    local column = current_page:column_at(column_number)
     if not column then
       return nil
     end
@@ -35,7 +35,7 @@ local function block_of(self, bounds)
 
   local row_ids = {}
   for buffer_line = bounds.top, bounds.bottom do
-    local row = drawn:row_at_line(buffer_line)
+    local row = current_page:row_at_line(buffer_line)
     if not row then
       return nil
     end
@@ -54,20 +54,20 @@ end
 ---@param headers boolean
 ---@return string
 local function drawn_text(self, bounds, headers)
-  local drawn = self.buffer.page
+  local current_page = self.buffer.page
   local lines = {}
 
   ---@param buffer_line integer
   local function cut(buffer_line)
-    local cells = drawn:cell_ranges(buffer_line)
-    local first, last = cells[bounds.left], cells[bounds.right]
+    local ranges = current_page:cell_ranges(buffer_line)
+    local first, last = ranges[bounds.left], ranges[bounds.right]
     if first and last then
-      table.insert(lines, drawn.lines[buffer_line]:sub(first.from + 1, last.to))
+      table.insert(lines, current_page.lines[buffer_line]:sub(first.from + 1, last.to))
     end
   end
 
   if headers then
-    cut(drawn.header_line)
+    cut(current_page.header_line)
   end
   for buffer_line = bounds.top, bounds.bottom do
     cut(buffer_line)
@@ -84,9 +84,9 @@ function M.yank(self, opts)
   end
 
   local rows = bounds.bottom - bounds.top + 1
-  local wide = bounds.right - bounds.left + 1
+  local columns = bounds.right - bounds.left + 1
   local function done()
-    vim.notify(string.format("csv-table: yanked %d rows by %d columns", rows, wide))
+    vim.notify(string.format("csv-table: yanked %d rows by %d columns", rows, columns))
   end
 
   if opts.format == "display" then

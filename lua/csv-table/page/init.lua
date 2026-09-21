@@ -214,10 +214,10 @@ function Page:step_cell(cell, delta)
     math.max(cell.row.buffer_line + delta.rows, self.first_line),
     self.last_line
   )
-  local number = math.min(math.max(column_number + delta.columns, 1), self:column_count())
+  local target_number = math.min(math.max(column_number + delta.columns, 1), self:column_count())
 
   local row = self:row_at_line(line)
-  local column = self:column_at(number)
+  local column = self:column_at(target_number)
   if not row or not column then
     return nil
   end

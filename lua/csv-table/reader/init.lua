@@ -118,18 +118,18 @@ function Reader:page(query, on_page)
   local version = query.file:version()
 
   self:run(commands.render(query, display_columns), function(stdout)
-    local drawn, err = parse.page(vim.split(stdout, "\n", { plain = true }), {
+    local new_page, err = parse.page(vim.split(stdout, "\n", { plain = true }), {
       columns = display_columns,
       first_row_number = first_row_number,
       file_version = version,
     })
-    if not drawn then
+    if not new_page then
       return report.error(err)
     end
 
     -- The file has just been read, so whatever was read from it before is old.
     self.row = nil
-    on_page(drawn)
+    on_page(new_page)
   end)
 end
 

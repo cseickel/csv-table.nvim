@@ -15,8 +15,8 @@ M.EXPRESSION = "%!v:lua.require'csv-table.buffer.statuscolumn'.text()"
 ---@param buf csv.Buffer
 ---@return integer
 local function width(buf)
-  local last = buf.page:row_at_line(buf.page.last_line)
-  return last and #tostring(last.row_number) or 1
+  local last_row = buf.page:row_at_line(buf.page.last_line)
+  return last_row and #tostring(last_row.row_number) or 1
 end
 
 --- The gutter text for the line nvim is drawing, which it hands over in `v:lnum`.
@@ -39,12 +39,12 @@ function M.text()
     return ""
   end
 
-  local room = width(buf)
+  local number_width = width(buf)
   local row = buf.page:row_at_line(vim.v.lnum)
   if not row then
-    return string.rep(" ", room + 1)
+    return string.rep(" ", number_width + 1)
   end
-  return string.format("%%#CsvRowNumber#%" .. room .. "d ", row.row_number)
+  return string.format("%%#CsvRowNumber#%" .. number_width .. "d ", row.row_number)
 end
 
 return M

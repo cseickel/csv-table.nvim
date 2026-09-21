@@ -22,18 +22,18 @@ local M = {}
 ---@param toward csv.Cell
 ---@return integer[]|nil A line and a byte, as nvim takes a cursor.
 local function outer_edge(self, cell, toward)
-  local drawn = self.buffer.page
-  local column_number = drawn:column_number(cell.column)
-  local other = drawn:column_number(toward.column)
-  if not column_number or not other then
+  local current_page = self.buffer.page
+  local column_number = current_page:column_number(cell.column)
+  local toward_number = current_page:column_number(toward.column)
+  if not column_number or not toward_number then
     return nil
   end
 
-  local from, to = drawn:cell_bounds(cell.row.buffer_line, column_number)
+  local from, to = current_page:cell_bounds(cell.row.buffer_line, column_number)
   if not from then
     return nil
   end
-  return { cell.row.buffer_line, column_number > other and to - 1 or from }
+  return { cell.row.buffer_line, column_number > toward_number and to - 1 or from }
 end
 
 --- Put nvim's anchor on the anchor cell, so nvim's visual region covers the block
@@ -47,9 +47,9 @@ function M.set_visual(self)
     return
   end
 
-  local drawn = self.buffer.page
-  local anchor = drawn:cell_of(self.anchor)
-  local head = drawn:cell_of(self.head)
+  local current_page = self.buffer.page
+  local anchor = current_page:cell_of(self.anchor)
+  local head = current_page:cell_of(self.head)
   local at = anchor and head and outer_edge(self, anchor, head)
   -- `normal! o` cannot be undone once it has run, so the line is checked here
   -- rather than left to the cursor call to throw. A render empties the buffer
@@ -60,14 +60,14 @@ function M.set_visual(self)
 
   -- Appended rather than assigned, because another plugin may be part way through
   -- its own window bookkeeping with `eventignore` set to `all`.
-  local ignored = vim.o.eventignore
+  local saved_eventignore = vim.o.eventignore
   vim.opt.eventignore:append("CursorMoved")
   pcall(function()
     vim.api.nvim_win_set_cursor(self.window, at)
     vim.cmd("normal! o")
     vim.api.nvim_win_set_cursor(self.window, self.position)
   end)
-  vim.o.eventignore = ignored
+  vim.o.eventignore = saved_eventignore
 end
 
 --- Take the anchor from the one nvim holds, so a mapping of the user's that moved

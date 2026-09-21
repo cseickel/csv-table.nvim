@@ -15,7 +15,7 @@ classes: {
 }
 
 source: "The file\na,b,c" {class: shape_after}
-select: "select 0,2\nthe carried columns, by file position" {class: stage}
+select: "select 0,2\nthe stream columns, by file position" {class: stage}
 enum: "enum -c id\nprepends the row id" {class: stage}
 fixed: "id,a,c\nthe shape is now fixed" {class: shape_after}
 filter: "filter <expression>\nthe effective filters ANDed, as moonblade" {class: stage}

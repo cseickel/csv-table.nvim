@@ -69,7 +69,7 @@ end
 
 ---@param delta integer
 ---@return fun(view: csv.View)
-local function precision(delta)
+local function precision_action(delta)
   return function(view)
     utils.on_column(view, function(column)
       view.buffer.query.file:adjust_precision(column, delta)
@@ -79,10 +79,10 @@ end
 
 ---@param delta integer
 ---@return fun(view: csv.View)
-local function width(delta)
+local function width_action(delta)
   return function(view)
-    on_padding(view, function(column, current)
-      view.buffer.query.file:set_padding(column, { width = current + delta })
+    on_padding(view, function(column, width)
+      view.buffer.query.file:set_padding(column, { width = width + delta })
     end)
   end
 end
@@ -150,10 +150,18 @@ utils.register_action("align_left", "Align this column left", align_action("left
 utils.register_action("align_center", "Align this column center", align_action("center"))
 utils.register_action("align_right", "Align this column right", align_action("right"))
 
-utils.register_action("increase_precision", "Show one more decimal in this column", precision(1))
-utils.register_action("decrease_precision", "Show one fewer decimal in this column", precision(-1))
-utils.register_action("increase_width", "Widen this column by one", width(1))
-utils.register_action("decrease_width", "Narrow this column by one", width(-1))
+utils.register_action(
+  "increase_precision",
+  "Show one more decimal in this column",
+  precision_action(1)
+)
+utils.register_action(
+  "decrease_precision",
+  "Show one fewer decimal in this column",
+  precision_action(-1)
+)
+utils.register_action("increase_width", "Widen this column by one", width_action(1))
+utils.register_action("decrease_width", "Narrow this column by one", width_action(-1))
 
 utils.register_action("set_format", "Give this column a printf format", function(view)
   local column = view:column()
@@ -162,8 +170,9 @@ utils.register_action("set_format", "Give this column a printf format", function
   end
 
   local file = view.buffer.query.file
-  local current = file.formats[column.column_id]
-  vim.ui.input({ prompt = "printf format: ", default = current and current.spec or "" }, function(spec)
+  local column_format = file.formats[column.column_id]
+  local opts = { prompt = "printf format: ", default = column_format and column_format.spec or "" }
+  vim.ui.input(opts, function(spec)
     if spec == nil then
       return
     end

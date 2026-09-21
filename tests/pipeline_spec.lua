@@ -6,7 +6,7 @@ local pipeline = require("csv-table.reader.pipeline")
 --- The pipeline string for the current query, with every column on display.
 ---@param query csv.Query
 ---@return string
-local function built(query)
+local function pipeline_for(query)
   return pipeline.build(query, query:display_columns())
 end
 
@@ -14,16 +14,16 @@ end
 ---@param query csv.Query
 ---@return string
 local function filters_of(query)
-  local _, positions = pipeline.carried_columns(query, query:display_columns())
+  local _, positions = pipeline.stream_columns(query, query:display_columns())
   return expression.all_filters(query:effective_filters(), positions)
 end
 
-describe("pipeline.carried_columns", function()
+describe("pipeline.stream_columns", function()
   it("lands the row id at zero and each column at its place in the list", function()
     local query = fixture.duplicated_headers()
-    local carried, positions = pipeline.carried_columns(query, query:display_columns())
+    local columns, positions = pipeline.stream_columns(query, query:display_columns())
 
-    equals(#carried, 3)
+    equals(#columns, 3)
     equals(positions[0], 1)
     equals(positions[1], 2)
     equals(positions[2], 3)
@@ -34,9 +34,9 @@ describe("pipeline.carried_columns", function()
     query:hide_column(source[3])
     query:sort_by(source[3], "desc")
 
-    local carried = pipeline.carried_columns(query, query:display_columns())
-    equals(#carried, 3)
-    equals(carried[3].column_id, 2)
+    local columns = pipeline.stream_columns(query, query:display_columns())
+    equals(#columns, 3)
+    equals(columns[3].column_id, 2)
   end)
 
   it("carries a hidden column that a filter names", function()
@@ -49,29 +49,29 @@ describe("pipeline.carried_columns", function()
       value = "x",
     })
 
-    local carried = pipeline.carried_columns(query, query:display_columns())
-    equals(#carried, 3)
-    equals(carried[3].column_id, 1)
+    local columns = pipeline.stream_columns(query, query:display_columns())
+    equals(#columns, 3)
+    equals(columns[3].column_id, 1)
   end)
 end)
 
 describe("pipeline.build", function()
   it("opens by selecting the carried columns and prepending the row id", function()
     local query = fixture.duplicated_headers()
-    matches(built(query), "^select '0,1,2' | enum %-c 'id'")
+    matches(pipeline_for(query), "^select '0,1,2' | enum %-c 'id'")
   end)
 
   it("sorts by the position the opening select fixed", function()
     local query, source = fixture.duplicated_headers()
     query:sort_by(source[3], "desc")
-    matches(built(query), "sort %-s 3 %-R")
+    matches(pipeline_for(query), "sort %-s 3 %-R")
   end)
 
   it("sorts numerically when the column holds numbers", function()
     local query, source = fixture.duplicated_headers()
     query.file.formats[source[1].column_id] = { kind = "int", precision = 0 }
     query:sort_by(source[1], "asc")
-    matches(built(query), "sort %-s 1 %-N")
+    matches(pipeline_for(query), "sort %-s 1 %-N")
   end)
 
   it("applies the sort keys least significant first", function()
@@ -79,7 +79,7 @@ describe("pipeline.build", function()
     query:sort_by(source[1], "asc")
     query:add_sort_key(source[3], "asc")
 
-    local pipeline_string = built(query)
+    local pipeline_string = pipeline_for(query)
     local significant = pipeline_string:find("sort %-s 1")
     local minor = pipeline_string:find("sort %-s 3")
     truthy(minor < significant)
@@ -89,13 +89,13 @@ describe("pipeline.build", function()
     local query = fixture.duplicated_headers()
     query.page_number = 2
     query.limit = 100
-    matches(built(query), "slice %-s 200 %-l 100")
+    matches(pipeline_for(query), "slice %-s 200 %-l 100")
   end)
 
   it("closes by naming the row id and each displayed column", function()
     local query = fixture.duplicated_headers()
-    matches(built(query), 'select %-e \'col%(0%) as "id"')
-    matches(built(query), 'col%(1%) || " " as "a%[0%]"')
+    matches(pipeline_for(query), 'select %-e \'col%(0%) as "id"')
+    matches(pipeline_for(query), 'col%(1%) || " " as "a%[0%]"')
   end)
 
   it("leaves a hidden column out of the closing select", function()
@@ -103,7 +103,7 @@ describe("pipeline.build", function()
     query:hide_column(source[3])
     query:sort_by(source[3], "desc")
 
-    local pipeline_string = built(query)
+    local pipeline_string = pipeline_for(query)
     matches(pipeline_string, "sort %-s 3")
     lacks(pipeline_string, 'as "a%[1%]')
   end)
@@ -111,7 +111,7 @@ describe("pipeline.build", function()
   it("marks a sorted column in its header", function()
     local query, source = fixture.duplicated_headers()
     query:sort_by(source[1], "asc")
-    matches(built(query), 'as "a%[0%] ▲"')
+    matches(pipeline_for(query), 'as "a%[0%] ▲"')
   end)
 
   it("numbers the arrows when several keys are in play", function()
@@ -119,7 +119,7 @@ describe("pipeline.build", function()
     query:sort_by(source[1], "asc")
     query:add_sort_key(source[3], "desc")
 
-    local pipeline_string = built(query)
+    local pipeline_string = pipeline_for(query)
     matches(pipeline_string, 'as "a%[0%] ▲1"')
     matches(pipeline_string, 'as "a%[1%] ▼2"')
   end)
@@ -132,18 +132,18 @@ describe("pipeline.build", function()
       width = 3,
       align = "left",
     }
-    matches(built(query), 'as "a%[…"')
+    matches(pipeline_for(query), 'as "a%[…"')
   end)
 
   it("right aligns the numeric columns by their drawn position", function()
     local query, source = fixture.duplicated_headers()
     query.file.formats[source[2].column_id] = { kind = "float", precision = 2 }
-    matches(built(query), "%-r '2'")
+    matches(pipeline_for(query), "%-r '2'")
   end)
 
   it("caps a column nobody pinned at 200 characters", function()
     local query = fixture.duplicated_headers()
-    matches(built(query), "%-%-cols 267")
+    matches(pipeline_for(query), "%-%-cols 267")
   end)
 
   it("gives a pinned column the width to be drawn whole", function()
@@ -154,7 +154,7 @@ describe("pipeline.build", function()
       width = 900,
       align = "left",
     }
-    matches(built(query), "%-%-cols 1200")
+    matches(pipeline_for(query), "%-%-cols 1200")
   end)
 
   it("takes the widest pin, since the cap is per column", function()
@@ -171,7 +171,7 @@ describe("pipeline.build", function()
       width = 300,
       align = "left",
     }
-    matches(built(query), "%-%-cols 1200")
+    matches(pipeline_for(query), "%-%-cols 1200")
   end)
 end)
 

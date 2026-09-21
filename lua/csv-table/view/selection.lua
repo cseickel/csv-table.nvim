@@ -22,12 +22,12 @@ local M = {}
 ---@field left integer   Leftmost column number.
 ---@field right integer  Rightmost column number.
 
----@param drawn csv.Page
+---@param current_page csv.Page
 ---@param ref csv.CellRef
 ---@return integer|nil
-local function column_number_of(drawn, ref)
-  local column = drawn:column_by_id(ref.column_id)
-  return column and drawn:column_number(column) or nil
+local function column_number_of(current_page, ref)
+  local column = current_page:column_by_id(ref.column_id)
+  return column and current_page:column_number(column) or nil
 end
 
 --- Pick out the block `kind` makes of two cells. One cell is picked by naming it
@@ -82,17 +82,17 @@ function M.bounds(self)
     return nil
   end
 
-  local drawn = self.buffer.page
+  local current_page = self.buffer.page
   local bounds = {
-    top = drawn.first_line,
-    bottom = drawn.last_line,
+    top = current_page.first_line,
+    bottom = current_page.last_line,
     left = 1,
-    right = drawn:column_count(),
+    right = current_page:column_count(),
   }
 
   if self.kind == "cell" or self.kind == "row" then
-    local anchor = drawn:row_by_id(self.anchor.row_id)
-    local head = drawn:row_by_id(self.head.row_id)
+    local anchor = current_page:row_by_id(self.anchor.row_id)
+    local head = current_page:row_by_id(self.head.row_id)
     if not anchor or not head then
       return nil
     end
@@ -101,8 +101,8 @@ function M.bounds(self)
   end
 
   if self.kind == "cell" or self.kind == "column" then
-    local left = column_number_of(drawn, self.anchor)
-    local right = column_number_of(drawn, self.head)
+    local left = column_number_of(current_page, self.anchor)
+    local right = column_number_of(current_page, self.head)
     if not left or not right then
       return nil
     end
@@ -151,9 +151,9 @@ function M.mark_selection(self)
     return
   end
 
-  local drawn = self.buffer.page
-  local first = drawn:cell_ranges(bounds.top)[bounds.left]
-  local last = drawn:cell_ranges(bounds.bottom)[bounds.right]
+  local current_page = self.buffer.page
+  local first = current_page:cell_ranges(bounds.top)[bounds.left]
+  local last = current_page:cell_ranges(bounds.bottom)[bounds.right]
   if first and last then
     vim.fn.setpos("'<", { self.buffer.bufnr, bounds.top, first.from + 1, 0 })
     vim.fn.setpos("'>", { self.buffer.bufnr, bounds.bottom, last.to, 0 })
