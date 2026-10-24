@@ -66,12 +66,7 @@ utils.register_action(
 )
 
 utils.register_action("extend_to_click", "Take the selection out to the click", function(view)
-  local position = vim.fn.getmousepos()
-  if position.winid ~= view.window or position.column == 0 then
-    return
-  end
-
-  local cell = view.buffer.page:cell_at(position.line, position.column - 1)
+  local cell = view:mouse_cell(vim.fn.getmousepos())
   if cell then
     view:extend_to(cell)
   end

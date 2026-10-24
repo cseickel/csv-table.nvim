@@ -29,12 +29,14 @@ local CELL_PRIORITY = 4300
 ---@field head csv.CellRef|nil Where the active cell was at the last extend.
 ---@field kind csv.SelectionKind
 ---@field viewport table|nil What `winsaveview` last gave for this window.
----@field clicked boolean Whether the move being handled came from the mouse.
+---@field dragging boolean Whether a press on the cells started a drag not yet released.
+---@field scroll csv.AutoScroll|nil The timer stepping the selection while a drag is outside the cells.
 local View = {}
 View.__index = View
 
 for _, part in ipairs({
   "csv-table.view.cursor",
+  "csv-table.view.drag",
   "csv-table.view.export",
   "csv-table.view.movement",
   "csv-table.view.selection",
@@ -58,7 +60,7 @@ function M.new(buffer, window)
     position = { 1, 0 },
     edge = "left",
     kind = "cell",
-    clicked = false,
+    dragging = false,
   }, View)
 end
 

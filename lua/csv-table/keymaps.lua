@@ -9,8 +9,10 @@ is how `v` starts a blockwise selection.
 
 A movement key is bound only where a count has to mean something in table terms:
 `5l` is five cells and `5G` is the row the gutter numbers 5. Every other motion,
-`j`, `w`, `/` and the clicks, stays nvim's, and the cursor is followed to
-whichever cell it reached.
+`j`, `w` and `/`, stays nvim's, and the cursor is followed to whichever cell it
+reached. `<LeftMouse>`, `<LeftDrag>` and `<LeftRelease>` are bound in
+`csv-table.autocmds`, because each one also has to run nvim's own key: the click
+always, and the other two off the cells when no press on the cells started a drag.
 
 Every key is bound in normal and visual modes, because nvim's own visual commands
 are no use over a drawn table: `y` takes the painted text cut to each column's

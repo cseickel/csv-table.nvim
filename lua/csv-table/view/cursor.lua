@@ -85,6 +85,24 @@ function M.physical_cell(self)
   return self.buffer.page:cell_at(position[1], position[2])
 end
 
+--- The fields of `getmousepos()` this plugin reads.
+---@class csv.MousePosition
+---@field winid integer
+---@field line integer      0 off the text: a status line, a separator, a winbar.
+---@field column integer    The byte under the pointer plus one, 0 off the text.
+---@field screenrow integer
+---@field screencol integer
+
+--- The cell under the pointer, nil when the pointer is off this window's text.
+---@param mouse csv.MousePosition
+---@return csv.Cell|nil
+function M.mouse_cell(self, mouse)
+  if mouse.winid ~= self.window or mouse.line == 0 or mouse.column == 0 then
+    return nil
+  end
+  return self.buffer.page:cell_at(mouse.line, mouse.column - 1)
+end
+
 --- The cell a move of the real cursor meant.
 ---
 --- A cursor that landed in another cell names that cell, which is what a click, a

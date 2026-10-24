@@ -73,33 +73,13 @@ function M.step(self, rows, columns)
   after_move(self, self:move_by(rows, columns))
 end
 
---- A click in this window is about to move the cursor, and lands on the cell it
---- pointed at rather than a step away. A click in any other window says nothing
---- about the cell. The flag is dropped on the next tick whatever happens, because
---- a click on the byte the cursor is already parked on moves nothing and never
---- reaches `follow_cursor`.
-function M.click(self)
-  local position = vim.fn.getmousepos()
-  self.clicked = position.winid == self.window and position.line > 0
-  vim.schedule(function()
-    self.clicked = false
-  end)
-end
-
 --- Move the active cell to wherever nvim left the cursor, which is how a motion
 --- this plugin does not map reaches it. A cursor still on the byte it was parked
 --- on has not moved.
 function M.follow_cursor(self)
-  local was_click = self.clicked
-  self.clicked = false
-
-  if not self:cursor_moved() then
-    return
+  if self:cursor_moved() then
+    self:go_to(self:moved_cell())
   end
-  if was_click then
-    return self:go_to(self:physical_cell())
-  end
-  self:go_to(self:moved_cell())
 end
 
 --- Extend the selection by `rows` and `columns`, moving the active cell with it,

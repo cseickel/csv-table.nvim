@@ -35,6 +35,18 @@ local function buffer()
   return require("csv-table.buffer")
 end
 
+--- The keys that run `method` on the current window's view. An expression mapping
+--- returns these rather than calling the method, because nvim puts the cursor back
+--- after an expression runs, and the view moves it.
+---@param method string
+---@return string
+local function view_command(method)
+  return "<Cmd>lua local buf = require('csv-table.buffer').get()"
+    .. " if buf then buf:view(0):"
+    .. method
+    .. "() end<CR>"
+end
+
 ---@param buf csv.Buffer
 local function apply_keymaps(buf)
   local actions = require("csv-table.actions")
@@ -62,14 +74,30 @@ local function apply_keymaps(buf)
     end
   end
 
-  -- A click lands on the cell it pointed at. Every other move that ends in the cell
-  -- it started from was too small to leave that cell, and steps one cell instead, so
-  -- the view has to be told which of the two this is. The expression returns the key
-  -- for nvim to perform the click itself.
-  vim.keymap.set({ "n", "x" }, "<LeftMouse>", function()
-    buf:view(0):click()
-    return "<LeftMouse>"
-  end, { buffer = buf.bufnr, expr = true, desc = "csv-table: follow the click" })
+  -- nvim's own click moves the cursor and the focus, and `press` runs after it in
+  -- whichever window that left current.
+  vim.keymap.set({ "n", "x" }, "<LeftMouse>", "<LeftMouse>" .. view_command("press"), {
+    buffer = buf.bufnr,
+    desc = "csv-table: select the clicked cell and start a drag",
+  })
+
+  --- `key` runs `method` while a press on the cells is being dragged. A drag no such
+  --- press started is dropped over the cells, where nvim's own drag and release
+  --- would enter visual mode, and goes to nvim anywhere else, where it resizes a
+  --- window.
+  ---@param key string
+  ---@param method string
+  local function drag_key(key, method)
+    vim.keymap.set({ "n", "x" }, key, function()
+      local view = buf:view(0)
+      if view.dragging then
+        return view_command(method)
+      end
+      return view:over_text(vim.fn.getmousepos()) and "" or key
+    end, { buffer = buf.bufnr, expr = true, desc = "csv-table: " .. method })
+  end
+  drag_key("<LeftDrag>", "drag_to_mouse")
+  drag_key("<LeftRelease>", "release")
 end
 
 --- Take this plugin's keys off `bufnr`. `apply_keymaps` gives every one of them a
