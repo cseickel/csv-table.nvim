@@ -10,10 +10,10 @@ is the shorter the interval.
 
 local M = {}
 
---- Milliseconds between steps, near the edge and farther out. A row is shorter
+--- Milliseconds between steps, at the slowest and the fastest. A row is shorter
 --- than a column is wide, so rows step faster.
-local ROW_INTERVALS = { near = 150, far = 50 }
-local COLUMN_INTERVALS = { near = 300, far = 100 }
+local ROW_INTERVALS = { slowest = 150, fastest = 25 }
+local COLUMN_INTERVALS = { slowest = 300, fastest = 100 }
 
 ---@class csv.AutoScroll
 ---@field rows integer    The row step each tick takes: -1, 0 or 1.
@@ -47,21 +47,45 @@ local function text_area(self)
   }
 end
 
+--- Returns the row interval for a pointer `distance` rows into a strip `width`
+--- rows tall, falling in a straight line from the slowest on the strip's first row
+--- to the fastest on its last, and staying fastest past the window. With no room
+--- for a line, the first row past the edge is slowest and the rest fastest.
+---@param distance integer 1 on the first row of the strip.
+---@param width integer
+---@return integer
+local function row_interval(distance, width)
+  local slowest, fastest = ROW_INTERVALS.slowest, ROW_INTERVALS.fastest
+  if width < 2 then
+    return distance <= 1 and slowest or fastest
+  end
+  local fraction = math.min(distance - 1, width - 1) / (width - 1)
+  return math.floor(slowest - (slowest - fastest) * fraction + 0.5)
+end
+
+--- Returns the column interval: slowest out to half the strip, or one column when
+--- there is no strip, and fastest beyond.
+---@param distance integer 1 on the first column of the strip.
+---@param width integer
+---@return integer
+local function column_interval(distance, width)
+  local near = distance <= math.max(width / 2, 1)
+  return near and COLUMN_INTERVALS.slowest or COLUMN_INTERVALS.fastest
+end
+
 --- Returns the step on one axis toward a pointer `beyond` screen cells past the
---- edge of the strip where a scroll starts, and the interval for it. A pointer as
---- far as half the strip's width, or one cell when there is no strip, is near.
---- Returns 0 and nil for a pointer short of the strip.
+--- edge of the strip where a scroll starts, and the interval `interval_at` gives
+--- for it. Returns 0 and nil for a pointer short of the strip.
 ---@param beyond integer Positive past the far edge, negative past the near one.
----@param band integer The strip's width.
----@param intervals { near: integer, far: integer }
+---@param width integer The strip's width.
+---@param interval_at fun(distance: integer, width: integer): integer
 ---@return integer step
 ---@return integer|nil interval
-local function axis_step(beyond, band, intervals)
+local function axis_step(beyond, width, interval_at)
   if beyond == 0 then
     return 0, nil
   end
-  local near = math.abs(beyond) <= math.max(band / 2, 1)
-  return beyond > 0 and 1 or -1, near and intervals.near or intervals.far
+  return beyond > 0 and 1 or -1, interval_at(math.abs(beyond), width)
 end
 
 --- How far `value` lies past `low`..`high`, counting the first value past either end
@@ -110,24 +134,24 @@ local function scroll_need(self, mouse)
   local row_strip = strip(self, "scrolloff", area.top, area.bottom)
   local column_strip = strip(self, "sidescrolloff", area.left, area.right)
 
-  local rows, row_interval = axis_step(
+  local rows, rows_every = axis_step(
     past(mouse.screenrow, area.top + row_strip, area.bottom - row_strip),
     row_strip,
-    ROW_INTERVALS
+    row_interval
   )
-  local columns, column_interval = axis_step(
+  local columns, columns_every = axis_step(
     past(mouse.screencol, area.left + column_strip, area.right - column_strip),
     column_strip,
-    COLUMN_INTERVALS
+    column_interval
   )
 
-  if not row_interval and not column_interval then
+  if not rows_every and not columns_every then
     return nil
   end
   return {
     rows = rows,
     columns = columns,
-    interval = math.min(row_interval or math.huge, column_interval or math.huge),
+    interval = math.min(rows_every or math.huge, columns_every or math.huge),
   }
 end
 
