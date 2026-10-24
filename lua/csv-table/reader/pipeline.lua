@@ -200,7 +200,7 @@ end
 
 --- The widest a column is drawn when the user has pinned no width. One long value
 --- would otherwise draw every row of the page at its length.
-local WIDEST_COLUMN = 200
+local WIDEST_COLUMN = 100
 
 --- `xan view -e` draws a column at three quarters of `--cols`, whatever the number
 --- of columns.
