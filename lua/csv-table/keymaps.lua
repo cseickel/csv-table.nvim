@@ -83,6 +83,12 @@ M.map = {
   ["<C-Space>"] = "select_column",
   ["<C-a>"] = "select_page",
   ["<Esc>"] = "clear_selection",
+  -- Most terminals keep shift+click for their own selection, so nvim never sees it
+  -- unless the terminal is told otherwise, in ghostty with `mouse-shift-capture`.
+  -- The plugin could claim it while a table is current by sending XTSHIFTESCAPE,
+  -- `\27[>1s` on entering and `\27[>0s` on leaving and on exit. The TUI runs in its
+  -- own process, so `io.write` may not reach the terminal. The untested candidates
+  -- are `nvim_ui_send` and `nvim_chan_send(vim.v.stderr, ...)`.
   ["<S-LeftMouse>"] = "extend_to_click",
   ["o"] = "swap_selection_ends",
 

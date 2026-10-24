@@ -3,25 +3,69 @@ The `csv.View` methods that select cells by dragging the mouse.
 
 A drag starts with a press on the cells of the window the user is already in. It
 runs apart from nvim's own drag, which would enter visual mode and move the cursor
-on every event. While the pointer is outside the cells a timer keeps stepping the
-selection toward it, and the farther out it is the shorter the interval.
+on every event. While the pointer is past the cells a window can show without
+scrolling, a timer keeps stepping the selection toward it, and the farther out it
+is the shorter the interval.
 ]]
 
 local M = {}
 
---- Milliseconds between steps with the pointer one screen cell outside the cells,
---- and with it two or more cells outside.
-local NEAR_INTERVAL = 300
-local FAR_INTERVAL = 100
+--- Milliseconds between steps, near the edge and farther out. A row is shorter
+--- than a column is wide, so rows step faster.
+local ROW_INTERVALS = { near = 150, far = 50 }
+local COLUMN_INTERVALS = { near = 300, far = 100 }
 
 ---@class csv.AutoScroll
 ---@field rows integer    The row step each tick takes: -1, 0 or 1.
 ---@field columns integer The column step each tick takes: -1, 0 or 1.
 ---@field interval integer
 ---@field timer integer
+---@field mouse csv.MousePosition Where the pointer was at the last drag event.
 
---- How far `value` lies outside `low`..`high`: negative below, positive above, 0
---- inside.
+---@class csv.ScrollNeed
+---@field rows integer
+---@field columns integer
+---@field interval integer
+
+---@class csv.TextArea Screen rows and columns of a window's text, 1-based.
+---@field top integer
+---@field bottom integer
+---@field left integer
+---@field right integer
+
+--- Returns where the window's text is on screen. The winbar and the gutter, where
+--- the row numbers are drawn, lie outside it.
+---@return csv.TextArea
+local function text_area(self)
+  local info = vim.fn.getwininfo(self.window)[1]
+  local top = info.winrow + info.winbar
+  return {
+    top = top,
+    bottom = top + info.height - 1,
+    left = info.wincol + info.textoff,
+    right = info.wincol + info.width - 1,
+  }
+end
+
+--- Returns the step on one axis toward a pointer `beyond` screen cells past the
+--- edge of the strip where a scroll starts, and the interval for it. A pointer as
+--- far as half the strip's width, or one cell when there is no strip, is near.
+--- Returns 0 and nil for a pointer short of the strip.
+---@param beyond integer Positive past the far edge, negative past the near one.
+---@param band integer The strip's width.
+---@param intervals { near: integer, far: integer }
+---@return integer step
+---@return integer|nil interval
+local function axis_step(beyond, band, intervals)
+  if beyond == 0 then
+    return 0, nil
+  end
+  local near = math.abs(beyond) <= math.max(band / 2, 1)
+  return beyond > 0 and 1 or -1, near and intervals.near or intervals.far
+end
+
+--- How far `value` lies past `low`..`high`, counting the first value past either end
+--- as 1: negative below, positive above, 0 inside.
 ---@param value integer
 ---@param low integer
 ---@param high integer
@@ -36,26 +80,37 @@ local function past(value, low, high)
   return 0
 end
 
----@param value integer
----@return integer
-local function sign(value)
-  if value < 0 then
-    return -1
-  end
-  return value > 0 and 1 or 0
-end
-
---- How many screen rows and columns the pointer is outside the window's text,
---- negative above it and to its left. The winbar and the gutter count as outside.
+--- Where the timer has to step for the pointer at `mouse`, and how often, or nil
+--- when the pointer is over cells the window shows without scrolling.
+---
+--- Sideways the strip is the window's `sidescrolloff`, which `csv-table.view.cursor`
+--- fills with a slice of the next column. Reaching that slice scrolls it out of the
+--- strip and puts the slice after it under a pointer that has not moved, so a drag
+--- there would stop until the mouse moved again. A window too narrow for two strips
+--- splits its width between them.
 ---@param mouse csv.MousePosition
----@return integer rows
----@return integer columns
-local function outside_text(self, mouse)
-  local info = vim.fn.getwininfo(self.window)[1]
-  local top = info.winrow + info.winbar
-  local left = info.wincol + info.textoff
-  return past(mouse.screenrow, top, top + info.height - 1),
-    past(mouse.screencol, left, info.wincol + info.width - 1)
+---@return csv.ScrollNeed|nil
+local function scroll_need(self, mouse)
+  local area = text_area(self)
+  local band =
+    math.min(vim.wo[self.window].sidescrolloff, math.floor((area.right - area.left) / 2))
+
+  local rows, row_interval =
+    axis_step(past(mouse.screenrow, area.top, area.bottom), 0, ROW_INTERVALS)
+  local columns, column_interval = axis_step(
+    past(mouse.screencol, area.left + band, area.right - band),
+    band,
+    COLUMN_INTERVALS
+  )
+
+  if not row_interval and not column_interval then
+    return nil
+  end
+  return {
+    rows = rows,
+    columns = columns,
+    interval = math.min(row_interval or math.huge, column_interval or math.huge),
+  }
 end
 
 local function stop_scrolling(self)
@@ -65,45 +120,48 @@ local function stop_scrolling(self)
   end
 end
 
---- Step the selection one cell toward the pointer. A step that moves nothing has
---- reached the edge of the table, so the timer stops there and cannot outlive a
---- release nvim never delivered.
+local scroll_toward
+
+--- Step the selection one cell toward the pointer, then measure the strip again,
+--- since the step can change `sidescrolloff`. A step that moves nothing has reached
+--- the edge of the table, so the timer stops there and cannot outlive a release
+--- nvim never delivered.
 local function step(self)
+  local scroll = self.scroll
   local before = self.active
-  self:extend(self.scroll.rows, self.scroll.columns)
+  self:extend(scroll.rows, scroll.columns)
   if vim.deep_equal(before, self.active) then
+    return stop_scrolling(self)
+  end
+
+  local need = scroll_need(self, scroll.mouse)
+  if need then
+    scroll_toward(self, need, scroll.mouse)
+  else
     stop_scrolling(self)
   end
 end
 
---- Keep stepping toward a pointer `rows` and `columns` outside the cells. A pointer
---- that has just left the cells takes its first step at once.
----@param rows integer
----@param columns integer
-local function scroll_toward(self, rows, columns)
-  local distance = math.max(math.abs(rows), math.abs(columns))
-  local interval = distance >= 2 and FAR_INTERVAL or NEAR_INTERVAL
-  local just_left = self.scroll == nil
-
-  if self.scroll and self.scroll.interval ~= interval then
+--- Run the timer at the interval and in the direction `need` asks for.
+---@param need csv.ScrollNeed
+---@param mouse csv.MousePosition
+function scroll_toward(self, need, mouse)
+  if self.scroll and self.scroll.interval ~= need.interval then
     stop_scrolling(self)
   end
   if self.scroll then
-    self.scroll.rows, self.scroll.columns = sign(rows), sign(columns)
-  else
-    self.scroll = {
-      rows = sign(rows),
-      columns = sign(columns),
-      interval = interval,
-      timer = vim.fn.timer_start(interval, function()
-        step(self)
-      end, { ["repeat"] = -1 }),
-    }
+    self.scroll.rows, self.scroll.columns, self.scroll.mouse = need.rows, need.columns, mouse
+    return
   end
-
-  if just_left then
-    step(self)
-  end
+  self.scroll = {
+    rows = need.rows,
+    columns = need.columns,
+    interval = need.interval,
+    mouse = mouse,
+    timer = vim.fn.timer_start(need.interval, function()
+      step(self)
+    end, { ["repeat"] = -1 }),
+  }
 end
 
 --- Start a drag on the cell under the pointer, once nvim's own click has moved the
@@ -120,19 +178,42 @@ function M.press(self)
   self.dragging = true
 end
 
---- Take the selection to the cell under the pointer, or toward the pointer on a
---- timer while it is outside the cells.
+--- Take the selection to the cell under the pointer, and keep stepping it toward
+--- the pointer on a timer while the pointer is in the strip or past the window.
+---
+--- The selection reaches the cell under the pointer first, so a fast swipe into the
+--- strip lands where it points rather than one cell along. Reaching that cell can
+--- change `sidescrolloff`, which is 0 on the last column, so the strip is measured
+--- again after. Once a scroll is under way the timer owns the axis it steps, and
+--- only the other axis follows the pointer. A pointer past the window has no cell
+--- under it and takes its first step at once.
 function M.drag_to_mouse(self)
   local mouse = vim.fn.getmousepos()
-  local rows, columns = outside_text(self, mouse)
-  if rows ~= 0 or columns ~= 0 then
-    return scroll_toward(self, rows, columns)
+  local cell = self:mouse_cell(mouse)
+  local need = scroll_need(self, mouse)
+  local head = self:active_cell()
+
+  if need and self.scroll then
+    if cell and head then
+      self:extend_to({
+        row = need.rows == 0 and cell.row or head.row,
+        column = need.columns == 0 and cell.column or head.column,
+      })
+    end
+  else
+    if cell then
+      self:extend_to(cell)
+    end
+    need = scroll_need(self, mouse)
+  end
+  if not need then
+    return stop_scrolling(self)
   end
 
-  stop_scrolling(self)
-  local cell = self:mouse_cell(mouse)
-  if cell then
-    self:extend_to(cell)
+  local starting = self.scroll == nil
+  scroll_toward(self, need, mouse)
+  if starting and not cell then
+    step(self)
   end
 end
 
@@ -145,8 +226,9 @@ end
 ---@param mouse csv.MousePosition
 ---@return boolean
 function M.over_text(self, mouse)
-  local rows, columns = outside_text(self, mouse)
-  return rows == 0 and columns == 0
+  local area = text_area(self)
+  return past(mouse.screenrow, area.top, area.bottom) == 0
+    and past(mouse.screencol, area.left, area.right) == 0
 end
 
 return M
