@@ -239,7 +239,9 @@ Some mappings are passed over in that reading. `nmap <M-l> l` runs whatever you 
 
 `<Tab>` and `<S-Tab>` are plain keys and always bound. The nvim command on `<Tab>` is `<C-i>`, the jumplist jump, and `next_column` does not stand in for it.
 
-Every other motion is nvim's own: `j`, `k`, `<Up>`, `<Down>`, `0`, `$`, `<Home>`, `<End>`, `w`, `b`, `}`, `%`, `/`, `n`, `H`, `M`, `L`, `<C-d>`, `<C-u>`, mouse clicks and the scroll keys. After any of them the plugin follows the cursor. A cursor that landed in another cell makes that cell active. A cursor still inside the cell it started in, which is what `l` does in a cell drawn twenty wide and `w` does in a long value, moves one cell in the direction it went.
+Every other motion is nvim's own: `j`, `k`, `<Up>`, `<Down>`, `0`, `$`, `<Home>`, `<End>`, `w`, `b`, `}`, `%`, `/`, `n`, `H`, `M`, `L`, `<C-d>`, `<C-u>` and the scroll keys. After any of them the plugin follows the cursor. A cursor that landed in another cell makes that cell active. A cursor still inside the cell it started in, which is what `l` does in a cell drawn twenty wide and `w` does in a long value, moves one cell in the direction it went.
+
+A click on a cell makes that cell active and clears the selection. Selecting with the mouse is covered under Selecting.
 
 `next_row`, `prev_row`, `first_column` and `last_column` are actions you can bind. None is bound by default, because `j` and `0` already land on the right cell.
 
@@ -275,18 +277,20 @@ Sorted columns get an arrow in the header. Sort on several and the arrows are nu
 
 ### Columns
 
-| Key   | Action                 | Does                                   |
-|-------|------------------------|----------------------------------------|
-| `\|`  | `hide_column`          | Hide this column                       |
-| `c\|` | `show_all_columns`     | Show every column again                |
-| `x`   | `cut_column`           | Cut this column, keeping it to paste   |
-| `X`   | `cut_append_column`    | Add this column to the cut  |
+| Key   | Action                 | Does                                  |
+|-------|------------------------|---------------------------------------|
+| `\|`  | `hide_column`          | Hide this column                      |
+| `c\|` | `show_all_columns`     | Show every column again               |
+| `x`   | `cut_column`           | Cut this column, keeping it to paste  |
+| `X`   | `cut_append_column`    | Add this column to the cut            |
 | `p`   | `paste_columns_after`  | Paste the cut columns after this one  |
 | `P`   | `paste_columns_before` | Paste the cut columns before this one |
-| `<`   | `move_column_left`     | Move this column one place left        |
-| `>`   | `move_column_right`    | Move this column one place right       |
-| `+`   | `increase_width`       | Widen this column by one               |
-| `_`   | `decrease_width`       | Narrow this column by one              |
+| `<`   | `move_column_left`     | Move this column one place left       |
+| `>`   | `move_column_right`    | Move this column one place right      |
+| `+`   | `increase_width`       | Widen this column by one              |
+| `_`   | `decrease_width`       | Narrow this column by one             |
+
+A column you have not resized with `+` or `_` is drawn at most 100 characters wide, and a longer value is cut. `+` widens a column past that, and `<enter>` shows one value whole.
 
 ### Formatting
 
@@ -382,7 +386,30 @@ The selection survives leaving visual mode, so `y` from normal mode still yanks 
 
 A move without shift moves the active cell and leaves the selection where it was, so you can walk away, look at something, and come back. The next shifted move extends from the same anchor to wherever you are now. The shifted arrows and the `<C-S-Arrow>` set extend the selection and walk the active cell along, in visual mode or out of it, and with nothing selected they start from the active cell. `<S-LeftMouse>` takes the selection out to the cell you clicked and moves the active cell there. A selection stops at the edges of the page. It clears when the rows on the page change or the columns are reordered, so a sort, a filter, a page turn and a hidden column all lose it. Changing how a column is drawn keeps it, and so does marking a row, unless a filter is showing the marked rows only.
 
-Every yank writes the selected cells to the `+` register and the unnamed register, so `p` pastes them inside nvim and the clipboard has them outside it. `y` yanks them as tab separated values under a header row, which pastes into a spreadsheet as cells. `Y` opens a picker over every format. With nothing selected, every yank takes the active cell alone.
+The Excel keys, `<C-Space>` and the `<C-S-Arrow>` set, need a terminal that implements the kitty keyboard protocol, which ghostty, kitty and wezterm do.
+
+#### Selecting with the mouse
+
+Press on a cell and drag to select the block from that cell to the cell under the pointer. The table window has to have focus already: a press that moves focus into it from a window showing anything else only focuses it, and the drag after that press does nothing. A drag that starts on a statusline or a window separator resizes windows the way it always does.
+
+Hold the pointer near an edge of the window, or past it, and the selection keeps stepping that way on its own, scrolling the window as it goes. Near the top or bottom edge means inside the rows your `scrolloff` keeps above and below the cursor. Near the left or right edge means inside the 8 columns the table keeps in view beside the active cell, where it draws a slice of the next column. The farther out the pointer is, the faster the steps come:
+
+| Direction      | Pointer                                   | One step every                  |
+|----------------|-------------------------------------------|---------------------------------|
+| Up and down    | the `scrolloff` rows, from inner to outer | 150 ms, falling evenly to 25 ms |
+| Up and down    | past the window                           | 25 ms                           |
+| Left and right | the inner 4 of the 8 columns              | 300 ms                          |
+| Left and right | the outer 4, or past the window           | 100 ms                          |
+
+With `scrolloff` at 0 or 1 there are too few rows to fall evenly across, so the first row past the edge steps every 150 ms and every row beyond it every 25 ms. On the last column the table keeps no columns beside the active cell, and there is nothing further right to step to.
+
+`<S-LeftMouse>` needs a terminal that passes shift+click through to nvim, and many keep it for their own text selection. In ghostty, set `mouse-shift-capture = true`.
+
+#### Yanking
+
+Every yank writes the selected cells to the `+` register and the unnamed register, so `p` pastes them inside nvim and the clipboard has them outside it. `y` yanks them as tab separated values under a header row, which pastes into a spreadsheet as cells. `Y` opens a picker over every format. With nothing selected, every yank takes the active cell.
+
+A single cell, selected or active, is yanked as its bare value, trimmed and without a header, in every format. `display` gives the text drawn in the cell, and every other format gives the value the file holds.
 
 | Action                    | Does                                                        |
 | ------------------------- | ----------------------------------------------------------- |
@@ -400,8 +427,6 @@ Only `yank_tsv` and `yank_picker` have keys. Any of the others can be bound in `
 `display` is the text on screen. It cuts the selected columns out of the lines the table drew, header line first, so a value drawn cut is yanked cut and the yank matches what you see. Every other format reads the values from the file, so a column too narrow to show its values still yanks them whole, and a value holding a tab or a newline comes out quoted.
 
 `tsv` and `csv` keep the header text as the file spells it. `json` and `markdown` name each column by its label, which is the header text with `[n]` appended where a name repeats, because a JSON object and a markdown header both need one name per column.
-
-The Excel keys, `<C-Space>` and the `<C-S-Arrow>` set, need a terminal that implements the kitty keyboard protocol, which ghostty, kitty and wezterm do.
 
 ## License
 
