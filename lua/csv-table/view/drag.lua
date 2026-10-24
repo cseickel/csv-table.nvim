@@ -80,26 +80,44 @@ local function past(value, low, high)
   return 0
 end
 
+--- The width of the strip `option` keeps at each end of `low`..`high`. A window
+--- too small for two strips splits its size between them.
+---@param option "scrolloff"|"sidescrolloff"
+---@param low integer
+---@param high integer
+---@return integer
+local function strip(self, option, low, high)
+  -- Both options are global-local, and a window with no value of its own reports -1.
+  local width = vim.wo[self.window][option]
+  if width < 0 then
+    width = vim.go[option]
+  end
+  return math.min(width, math.floor((high - low) / 2))
+end
+
 --- Where the timer has to step for the pointer at `mouse`, and how often, or nil
 --- when the pointer is over cells the window shows without scrolling.
 ---
---- Sideways the strip is the window's `sidescrolloff`, which `csv-table.view.cursor`
---- fills with a slice of the next column. Reaching that slice scrolls it out of the
---- strip and puts the slice after it under a pointer that has not moved, so a drag
---- there would stop until the mouse moved again. A window too narrow for two strips
---- splits its width between them.
+--- The strips are the rows `scrolloff` keeps in view above and below the cursor,
+--- and the columns `sidescrolloff` keeps beside it, which `csv-table.view.cursor`
+--- fills with a slice of the next column. Reaching a cell in a strip scrolls it out
+--- and puts another under a pointer that has not moved, so a drag there would stop
+--- until the mouse moved again.
 ---@param mouse csv.MousePosition
 ---@return csv.ScrollNeed|nil
 local function scroll_need(self, mouse)
   local area = text_area(self)
-  local band =
-    math.min(vim.wo[self.window].sidescrolloff, math.floor((area.right - area.left) / 2))
+  local row_strip = strip(self, "scrolloff", area.top, area.bottom)
+  local column_strip = strip(self, "sidescrolloff", area.left, area.right)
 
-  local rows, row_interval =
-    axis_step(past(mouse.screenrow, area.top, area.bottom), 0, ROW_INTERVALS)
+  local rows, row_interval = axis_step(
+    past(mouse.screenrow, area.top + row_strip, area.bottom - row_strip),
+    row_strip,
+    ROW_INTERVALS
+  )
   local columns, column_interval = axis_step(
-    past(mouse.screencol, area.left + band, area.right - band),
-    band,
+    past(mouse.screencol, area.left + column_strip, area.right - column_strip),
+    column_strip,
     COLUMN_INTERVALS
   )
 
