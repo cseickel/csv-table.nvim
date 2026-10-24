@@ -75,7 +75,9 @@ local function drawn_text(self, bounds, headers)
   return table.concat(lines, "\n")
 end
 
---- Copy the selected cells, or the active cell when nothing is selected.
+--- Copy the selected cells, or the active cell when nothing is selected. One cell
+--- is copied as its bare value, trimmed, whatever the format: `display` gives the
+--- text drawn and every other format the value the file holds.
 ---@param opts { format: "tsv"|"csv"|"json"|"markdown"|"display", headers: boolean }
 function M.yank(self, opts)
   local bounds = self:bounds() or self:active_bounds()
@@ -89,8 +91,13 @@ function M.yank(self, opts)
     vim.notify(string.format("csv-table: yanked %d rows by %d columns", rows, columns))
   end
 
+  local one_cell = rows == 1 and columns == 1
   if opts.format == "display" then
-    to_registers(drawn_text(self, bounds, opts.headers))
+    if one_cell then
+      to_registers(vim.trim(drawn_text(self, bounds, false)))
+    else
+      to_registers(drawn_text(self, bounds, opts.headers))
+    end
     return done()
   end
 
@@ -99,7 +106,16 @@ function M.yank(self, opts)
     return report.error("the selected cells are no longer on display")
   end
 
-  self.buffer.query.reader:export(self.buffer.query, {
+  local query = self.buffer.query
+  if one_cell then
+    local ref = { row_id = block.row_ids[1], column_id = block.columns[1].column_id }
+    return query.reader:cell(query, ref, function(value)
+      to_registers(vim.trim(value))
+      done()
+    end)
+  end
+
+  query.reader:export(query, {
     block = block,
     format = opts.format,
     headers = opts.headers,
