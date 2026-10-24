@@ -240,6 +240,22 @@ function M.apply(extensions)
     end,
   })
 
+  -- Leaving insert mode moves the cursor one character left, and nvim fires this
+  -- before `CursorMoved`. A table window is only in insert mode when a picker opened
+  -- from it hands focus back, so the cursor goes back to the active cell before
+  -- `follow_cursor` takes that move for a step.
+  vim.api.nvim_create_autocmd("ModeChanged", {
+    group = augroup,
+    pattern = "i*:*",
+    callback = function()
+      local buf = buffer().get()
+      if buf then
+        local current_view = buf:view(0)
+        current_view:move_to(current_view:active_cell())
+      end
+    end,
+  })
+
   -- One namespace on the buffer draws the active cell and the selection, so the
   -- window entered takes them from the window left.
   vim.api.nvim_create_autocmd("WinEnter", {
