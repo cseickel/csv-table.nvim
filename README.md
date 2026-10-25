@@ -391,6 +391,8 @@ Marks survive filtering and sorting.
 
 ### Selecting
 
+Selecting is a mix of Excel and vim. You can use Excel's keys and the mouse, or nvim's visual modes. Both make the same selection, so you can start it one way and finish it the other.
+
 | Key             | Action                   | Does                                             |
 | --------------- | ------------------------ | ------------------------------------------------ |
 | `<C-Space>`     | `select_column`          | Select this whole column                         |
@@ -409,44 +411,34 @@ Marks survive filtering and sorting.
 | `y`             | `yank_tsv`               | Yank the selected cells as tab separated values  |
 | `Y`             | `yank_picker`            | Choose a format and yank the selected cells      |
 
-Nvim's own visual modes are how you tell the plugin you are selecting, so a remapped `<C-v>` works too. `v` runs `<C-v>` in a table buffer, since charwise visual covers whole lines between its two ends, so it starts a blockwise selection and pressing it again ends visual mode, the same as `<C-v>` does. `V` selects whole rows. While you are in visual mode, every move takes the far end of the selection with it.
+To select a range of cells, hold shift and use the arrow keys.
 
-Nvim's visual region and the plugin's selection cover the same cells. Entering visual mode with cells already selected keeps the anchor and takes the other end to the cell you are on, so `<S-Right>` a few times, `<S-Down>`, a plain move or two and then `v` gives you a block from the original anchor to where you are standing. Nvim's region has no way to hold every row of a column, so a column or page selection and a visual mode cannot both be running. `v` over a `<C-Space>` or `<C-a>` selection turns it into a cell block from the anchor to the cell you are on, and `V` turns it into whole rows. `<C-Space>` or `<C-a>` pressed inside visual mode ends the mode and then selects the column or the page. Since nvim's region covers the same block, a visual mode mapping of your own, or one from another plugin, acts on the cells the table has picked out.
+The selection stays until you press `<Esc>`, even after you yank it or move without shift. The next shifted move extends it from where it started to where you are now.
 
-Every key in this README works inside visual mode. A key that moves the active cell and takes the selection with it leaves you in visual mode: `l`, `h`, `<Left>`, `<Right>`, `<Tab>`, `<S-Tab>`, `gg`, `G`, `o`, `<S-LeftMouse>`, the shifted arrows and the `<C-S-Arrow>` set. Every other key ends visual mode before it runs, the way nvim's own `y` does, and the cells stay selected, so `y` over a selection yanks it and leaves you in normal mode with the cells still drawn.
+To select whole rows, press `V` and move up or down.
 
-The selection survives leaving visual mode, so `y` from normal mode still yanks those cells. `<Esc>` clears the selection, and in visual mode it ends the mode in the same press. The block it cleared stays in the `'<` and `'>` marks.
+To select whole columns, press `<C-Space>`, then hold shift and move left or right to add more.
 
-`gv` is nvim's own and it brings the block back, cleared or not. Every change to the selection is written to `'<` and `'>`, and entering visual mode with nothing selected reads those two marks back as cells, so what nvim reselects is what the plugin then draws. Inside a table buffer those two marks hold the cell block rather than the last text you selected.
+To select a block of cells with vim motions, press `<C-v>` and move.
 
-`o` is the plugin's rather than nvim's, because a selection outlives the visual mode it was made in, and once the mode has ended nvim's `o` has no region left to swap.
-
-A move without shift moves the active cell and leaves the selection where it was, so you can walk away, look at something, and come back. The next shifted move extends from the same anchor to wherever you are now. The shifted arrows and the `<C-S-Arrow>` set extend the selection and walk the active cell along, in visual mode or out of it, and with nothing selected they start from the active cell. `<S-LeftMouse>` takes the selection out to the cell you clicked and moves the active cell there. A selection stops at the edges of the page. It clears when the rows on the page change or the columns are reordered, so a sort, a filter, a page turn and a hidden column all lose it. Changing how a column is drawn keeps it, and so does marking a row, unless a filter is showing the marked rows only.
-
-The Excel keys, `<C-Space>` and the `<C-S-Arrow>` set, need a terminal that implements the kitty keyboard protocol, which ghostty, kitty and wezterm do.
+`v` selects a block too, the same as `<C-v>`. A normal `v` selection would run from the end of one row into the start of the next. That's never what you want in a table.
 
 #### Selecting with the mouse
 
-Press on a cell and drag to select the block from that cell to the cell under the pointer. The table window has to have focus already: a press that moves focus into it from a window showing anything else only focuses it, and the drag after that press does nothing. A drag that starts on a statusline or a window separator resizes windows the way it always does.
+Click and drag to select. If you're coming from another window, click the table once to focus it first.
 
-Hold the pointer near an edge of the window, or past it, and the selection keeps stepping that way on its own, scrolling the window as it goes. Near the top or bottom edge means inside the rows your `scrolloff` keeps above and below the cursor. Near the left or right edge means inside the 8 columns the table keeps in view beside the active cell, where it draws a slice of the next column. The farther out the pointer is, the faster the steps come:
+Dragging near or past an edge scrolls the table. The farther out the pointer is, the faster it scrolls:
 
-| Direction      | Pointer                                   | One step every                  |
-|----------------|-------------------------------------------|---------------------------------|
-| Up and down    | the `scrolloff` rows, from inner to outer | 150 ms, falling evenly to 25 ms |
-| Up and down    | past the window                           | 25 ms                           |
-| Left and right | the inner 4 of the 8 columns              | 300 ms                          |
-| Left and right | the outer 4, or past the window           | 100 ms                          |
-
-With `scrolloff` at 0 or 1 there are too few rows to fall evenly across, so the first row past the edge steps every 150 ms and every row beyond it every 25 ms. On the last column the table keeps no columns beside the active cell, and there is nothing further right to step to.
-
-`<S-LeftMouse>` needs a terminal that passes shift+click through to nvim, and many keep it for their own text selection. In ghostty, set `mouse-shift-capture = true`.
+| Direction      | Pointer                                         | Moves one cell every                     |
+|----------------|-------------------------------------------------|------------------------------------------|
+| Up and down    | in the `scrolloff` rows next to the edge        | 150 ms, speeding up to 25 ms at the edge |
+| Up and down    | past the edge                                   | 25 ms                                    |
+| Left and right | 5 to 8 characters from the edge                 | 300 ms                                   |
+| Left and right | 4 or fewer characters from the edge, or past it | 100 ms                                   |
 
 #### Yanking
 
-Every yank writes the selected cells to the `+` register and the unnamed register, so `p` pastes them inside nvim and the clipboard has them outside it. `y` yanks them as tab separated values under a header row, which pastes into a spreadsheet as cells. `Y` opens a picker over every format. With nothing selected, every yank takes the active cell.
-
-A single cell, selected or active, is yanked as its bare value, trimmed and without a header, in every format. `display` gives the text drawn in the cell, and every other format gives the value the file holds.
+`y` copies the selection to the clipboard as tab separated values with a header row, so it pastes into Excel as cells. `Y` lets you pick the format.
 
 | Action                    | Does                                                        |
 | ------------------------- | ----------------------------------------------------------- |
@@ -459,11 +451,9 @@ A single cell, selected or active, is yanked as its bare value, trimmed and with
 | `yank_json`               | Yank as JSON                                                |
 | `yank_markdown`           | Yank as a markdown table                                    |
 
-Only `yank_tsv` and `yank_picker` have keys. Any of the others can be bound in `keymaps`.
+Every format except `display` copies the values from the file. They ignore your number formats and include any text the table cut off.
 
-`display` is the text on screen. It cuts the selected columns out of the lines the table drew, header line first, so a value drawn cut is yanked cut and the yank matches what you see. Every other format reads the values from the file, so a column too narrow to show its values still yanks them whole, and a value holding a tab or a newline comes out quoted.
-
-`tsv` and `csv` keep the header text as the file spells it. `json` and `markdown` name each column by its label, which is the header text with `[n]` appended where a name repeats, because a JSON object and a markdown header both need one name per column.
+Bind any of these in `keymaps` to give a format its own key.
 
 ## License
 
