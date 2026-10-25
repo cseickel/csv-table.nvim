@@ -26,16 +26,15 @@ With [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ## Options
 
-These are the defaults. Anything you pass to `setup()` merges into them and overrides what it names.
+All options shown below are the defaults. Anything you set will be merged into these. Anything not specified will use the default values shown below.
 
 ```lua
 require("csv-table").setup({
-  -- The file extensions that open as a table on `:edit`, written bare, with
-  -- no leading dot and no `*`. Case is ignored, so `csv` opens `FOO.CSV` too.
-  -- A list you pass replaces this one. Any format xan reads can go here, and
-  -- `:CsvTable` opens one file in any of those formats without listing it.
-  -- Parquet has partial support, but I would not recommend it because it is
-  -- not as optimized and not all column types are supported.
+  -- The file extensions that automatically open as a table. Case is ignored,
+  -- Any format xan reads can go here. You can still manually open a file with
+  -- `:CsvTable` without having to list it here. Parquet has partial support,
+  -- but I would not recommend it because it is not as optimized and not all
+  -- column types are supported.
   extensions = { "csv", "tsv", "xls", "xlsx", "xlsb", "ods" },
 
   -- How many rows a page holds. `[]` changes it for one buffer.
@@ -128,35 +127,19 @@ require("csv-table").setup({
 })
 ```
 
-`extensions` replaces the `patterns` option. A config that still passes `patterns` gets a warning from `setup()` and the value is ignored, so the defaults apply until you rename it.
+Setting a key to `false` prevents the default bind without setting a new one.
 
-An entry is letters and digits, in parts separated by single periods, and `setup()` raises on anything else. So `"csv"` is right, `"*.csv"` and `".csv"` are errors, and `"test.csv"` is a valid entry that opens `report.test.csv` and leaves a file named `test.csv` alone.
+The special keys `BUILT_IN_` refer to the native vim command for that key, so if you have mapped something else to that action, then that is what actually triggers the action. This is needed because we need to override some basic things like movement and visual selection to work in cells and not characters. So if you have mapped "move left" to `a` instead of `l`, then `a` moves you one cell left, and `5a` moves 5 cells to the left.
 
-A key you write is bound exactly as written, so `["<C-n>"] = "next_column"` puts the action on `<C-n>` whatever else `<C-n>` does in your config. Setting a key to `false` prevents the default bind without setting a new one, and `["BUILT_IN_l"] = false` binds `next_column` to nothing at all, on `l` or on any key mapped to it.
-
-A value written `BUILT_IN_<C-v>` runs that nvim command instead of an action, which is how `v` starts a block: whatever key runs nvim's `v` is bound to run nvim's `<C-v>`, because charwise visual covers whole lines between its two ends and a table selection is a block of cells.
-
-```lua
-keymaps = {
-  ["<C-n>"] = "next_column",
-  ["<Tab>"] = false,
-  ["BUILT_IN_l"] = false,
-}
-```
+The other special situation is visual mode. `v` for visual selection does not actually work correctly in a table, but it is naturally to use as a block selection so we remap is to `<C-v>` instead which does work well. The `["BUILT_IN_v"] = "BUILT_IN_<C-v>"` syntax allows us to specify that behavior as configuration.
 
 ## Command
 
-`:CsvTable [path]` opens `path`, or the current buffer's file, as a table whatever its extension is. The plugin reads a file as a table by taking over nvim's read of it, so the text never lands in the buffer. `setup()` takes over every file whose extension is in `extensions`, and `:CsvTable` takes over the one buffer. That buffer stays a table through every later `:edit` and through another `setup()`, until it is wiped. A path that does not exist is reported and nothing opens, and so is a buffer holding unsaved changes, since drawing the table means reading the file again.
+`:CsvTable [path]` opens `path` as a table. This is only needed if the file's extension is not listed in the extensions config, which would make it open as a table automatically. That buffer stays a table through every later `:edit` until it is wiped. **Any file opened as a table is not editable.**
 
-The file goes to `xan`, which tells formats apart by extension. Beside the csv, tsv and workbook formats in the default `extensions`, it reads json, jsonl and ndjson, toml, txt, npy, tar and md. A json object nested in a record flattens to dotted column names, so `{"c": {"d": 2}}` becomes a column `c.d`, and an array arrives as its json text, `[1,2]`. `xan` picks the columns of a json or jsonl file from its first 64 records, so a key that first appears after them is dropped.
+`:CsvTable --disable` gives the buffer back and reads the file as text. If the file was listed in the extensions for automatic handling, then it becomes a table again every time you `:edit` it. If not, it stays as text until you run `:CsvTable` again.
 
-`:CsvTable --disable` gives the buffer back and reads the file as text. What happens on your next `:edit` depends on why the buffer was a table: a name in `extensions` comes back as a table, and a name you opened with `:CsvTable` stays text, because `--disable` dropped the takeover this command made.
-
-A format you open often belongs in `extensions` instead, so `:edit` opens it as a table:
-
-```lua
-extensions = { "csv", "tsv", "xls", "xlsx", "xlsb", "ods", "jsonl" }
-```
+When a file is read as a table, it goes to `xan`, which tells formats apart by extension. Beside the csv, tsv and workbook formats in the default `extensions`, it can also read json, jsonl and ndjson, toml, txt, npy, tar and md. A json object nested in a record flattens to dotted column names, so `{"c": {"d": 2}}` becomes a column `c.d`, and an array arrives as its json text, `[1,2]`. `xan` picks the columns of a json or jsonl file from its first 64 records, so a key that first appears after them is dropped.
 
 ## Statusline
 
@@ -183,7 +166,70 @@ vim.o.statusline = "%{%v:lua.csv_table_status()%}"
 
 ## Winbar
 
-`b:table_header` holds the buffer line the header row is drawn on, set again on every render. A winbar can read it to keep the header on screen once the table has scrolled past it. Nothing inside the plugin reads it.
+`b:table_header` holds the buffer line the header row is drawn on. A winbar can read it to keep the header on screen once the table has scrolled past it. The plugin does not set any winbar for you. 
+
+Here is what I use to keep the headers locked to the top on scroll:
+
+```lua
+-- ~/.config/nvim/lua/status.lua
+local M = {}
+
+M.get_header = function()
+	local header_line = vim.b.table_header or 1
+	-- Sets the winbar to the header line of the buffer, but only if the buffer is
+	-- scrolled down so that the header is not visible.
+	local view = vim.fn.winsaveview()
+	if view.topline <= header_line then
+		return nil
+	else
+		-- get the gutter width
+		local winid = vim.api.nvim_get_current_win()
+		local wininfo = vim.fn.getwininfo(winid)
+		if #wininfo == 0 then
+			return nil
+		end
+		local textoff = wininfo[1].textoff
+		local gutter = string.rep(" ", textoff)
+
+    local text = vim.fn.getline(header_line)
+    -- Cut to the portion of the header that's visible
+    local width = vim.api.nvim_win_get_width(winid) - textoff
+    text = vim.fn.strcharpart(text, view.leftcol, width)
+    -- Escape any % in the header text
+    text = text:gsub("%%", "%%%%")
+    -- replace all │ with bars wrapped in CsvBorder highlight group
+    text = text:gsub("│", "%%#CsvBorder#│%%#WinBarHeader#")
+		-- add textoff to the beginning of the text
+		-- ensure the text is left aligned
+		return gutter .. "%#WinBarHeader#" .. text .. "%*%<"
+	end
+end
+
+M.get_winbar = function()
+	-- floating window
+	local cfg = vim.api.nvim_win_get_config(0)
+	if cfg.relative > "" or cfg.external then
+		return ""
+	end
+
+	if vim.b.table_header then
+		local header = M.get_header()
+		if header then
+			return header
+		end
+	end
+end
+
+vim.cmd([[
+  highlight WinBar           guibg=None guifg=#BBBBBB gui=bold
+  highlight WinBarHeader     guibg=None guifg=#BBBBBB gui=bold,underline
+]])
+
+_G.status = M
+vim.o.winbar = "%{%v:lua.status.get_winbar()%}"
+
+return M
+```
 
 ## Highlights
 
@@ -208,9 +254,13 @@ The following highlight groups are defined by the plugin:
 
 Columns are color coded by data type. The type comes from a 600-row sample: numeric when every value parses as a number, date when every value matches a date or time, and text otherwise. In a numeric column, `CsvNumberNegative` applies to the values starting with a minus sign and `CsvNumberPositive` to the rest.
 
+## Row Numbers
+
+The status column shows the row number, meaning the row's position in the table as filtered and sorted, counted from 1. It is a position in the view rather than a line of the file, so after a sort the first row on screen is row 1 whichever line of the file it came from. Numbering runs on across pages, so with a page size of 1000 the second page starts at 1001.
+
 ## Keys
 
-All mappings are buffer-local in a csv-table buffer, and every one of them works in normal mode and in nvim's visual modes. Hit `?` to open a list of all actions and run one.
+All mappings created by this plugin are buffer-local in a csv-table buffer. Hit `?` to open a list of all actions and run one.
 
 ### Moving
 
@@ -225,21 +275,8 @@ All mappings are buffer-local in a csv-table buffer, and every one of them works
 | `gg`      | `first_row`   | Move to the top of the page, or to row N    |
 | `G`       | `last_row`    | Move to the bottom of the page, or to row N |
 
-Column one is the row number: the row's position in the table as filtered and sorted, counted from 1. It is a position in the view rather than a line of the file, so after a sort the first row on screen is row 1 whichever line of the file it came from. Numbering runs on across pages, so with a page size of 1000 the second page starts at 1001.
 
-The table has an active cell, the way a spreadsheet does. It is drawn with `CsvActiveCell` and the real cursor is hidden while a table buffer is current. The active cell is always a data cell, never a border, the row number, the header, or past the table.
-
-Open the same table in two windows and each window keeps its own active cell and its own selection. Only the window you are in draws them. A split starts on the cell the window it came from was on, and a window you come back to is on the cell you left it on.
-
-The keys above are the only motions the plugin maps, because they are the ones where a count has to be counted in cells. `5l` is five cells, and `5gg` and `5G` go to the row numbered 5, which is the number drawn in column one. A number belonging to another page stops at the near end of this one. A count means the same in visual mode, so `3l` in a selection takes the head three cells right.
-
-The six keys `l`, `h`, `<Left>`, `<Right>`, `gg` and `G` are written `BUILT_IN_l` and so on in `keymaps`, which names the nvim command rather than the key. When a table buffer opens, the plugin reads every normal mode mapping and binds `next_column` to `l` only while no mapping has `l` on its left hand side, and to every key whose right hand side is `l`, so `nnoremap <M-l> l` gets `next_column` on `<M-l>` too. A mapping that gives `l` some other job, say moving between windows, has decided what `l` means, and `next_column` stays off it. A mapping whose right hand side is a Lua function names no key to read, so `l` wrapped in one counts as kept for yourself.
-
-Some mappings are passed over in that reading. `nmap <M-l> l` runs whatever you have made `l` mean rather than nvim's own `l`, so only a `noremap` mapping is followed. A `<Plug>` name belongs to the plugin that defined it. A key that would spoil one this plugin already binds, either by starting one of ours or by being started by one, is left out too, because `s` bound beside `sa` leaves both waiting on `timeoutlen`.
-
-`<Tab>` and `<S-Tab>` are plain keys and always bound. The nvim command on `<Tab>` is `<C-i>`, the jumplist jump, and `next_column` does not stand in for it.
-
-Every other motion is nvim's own: `j`, `k`, `<Up>`, `<Down>`, `0`, `$`, `<Home>`, `<End>`, `w`, `b`, `}`, `%`, `/`, `n`, `H`, `M`, `L`, `<C-d>`, `<C-u>` and the scroll keys. After any of them the plugin follows the cursor. A cursor that landed in another cell makes that cell active. A cursor still inside the cell it started in, which is what `l` does in a cell drawn twenty wide and `w` does in a long value, moves one cell in the direction it went.
+The table has an active cell, the way a spreadsheet does. It is drawn with `CsvActiveCell` and the real cursor is hidden while a table buffer is current. Movements work with your normal bindings, but horizontal movements are converted from character movements to cell movements. So `5l` moves 5 cells to the right.
 
 A click on a cell makes that cell active and clears the selection. Selecting with the mouse is covered under Selecting.
 
@@ -255,7 +292,7 @@ Hiding the cursor needs `termguicolors` and a terminal that supports cursor styl
 | `<BS>` | `pop_filter`    | Drop the filter added last |
 | `cf`   | `clear_filters` | Drop every filter          |
 
-`f` opens a dialog with comparisons that make sense for the column. Numeric columns get `>`, `>=`, `<`, `<=`, `==` and `!=`. Text columns get equals, not equals, contains, starts with, ends with and regex. Every column gets `v` and `e` as well.
+`f` opens a filter dialog with comparisons that make sense for the column. Numeric columns get `>`, `>=`, `<`, `<=`, `==` and `!=`. Text columns get equals, not equals, contains, starts with, ends with and regex. Every column gets `v` and `e` as well.
 
 - `v` shows the column's distinct values with counts, as a checklist. `<Space>` toggles, `<CR>` applies.
 - `e` lets you write a [moonblade](https://github.com/medialab/xan) expression by hand.
